@@ -142,6 +142,7 @@ import { manaPreferenceOf } from './mana-preference.js';
 // by every scorer that can choose an activation, so a mana ability the pilot must
 // not repeat cannot be refused on one path and taken on another.
 import { manaExchangeIsNoOp, manaExchangeIsNoOpOnceFunded } from './mana-exchange.js';
+import { activationCostValue } from './activation-cost.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 // poison family (§3.105): the two lethal clocks, kept apart.
@@ -1325,14 +1326,19 @@ function bestOfferedActivation(
     // predict. An exchange that leaves it identical is the runaway.
     if (manaExchangeIsNoOp(ability, source!.def, view.players[me].manaPool)) continue;
     cards ??= cardValueContext(view as GameState, index);
-    const score = valueOfEffects(ability.effects, {
-      state: view as GameState,
-      player: me,
-      targets: action.targets ?? [],
-      weights,
-      cards,
-      index,
-    });
+    // NET of the non-mana cost (`activation-cost.ts`): the counters, the
+    // sacrifice or the life the offer would spend, priced in the body's units.
+    // Without it "Remove a +1/+1 counter from ~: You gain 2 life" was worth
+    // 2 life and nothing else, and a Spike Feeder stripped itself dead.
+    const score =
+      valueOfEffects(ability.effects, {
+        state: view as GameState,
+        player: me,
+        targets: action.targets ?? [],
+        weights,
+        cards,
+        index,
+      }) + activationCostValue(ability.cost, source!, { state: view as GameState, player: me, weights, index });
     if (score <= weights.passScore) continue;
     if (best !== undefined && score <= best.score) continue;
     best = { action, score, label: ctx.trace ? `activate ${ability.label}` : NO_REASON };
@@ -1455,7 +1461,15 @@ function bestFundedActivation(
       const restriction = restrictionOfEffects(ability.effects);
       let targets: readonly (InstanceId | PlayerId)[] = [];
       if (restriction !== undefined) {
-        const options = legalTargetsFor(view as GameState, restriction, me, perm.def);
+        // "ANOTHER target …" — the engine will not offer the source to itself,
+        // so an aim planned here without the exclusion could never be taken.
+        const options = legalTargetsFor(
+          view as GameState,
+          restriction,
+          me,
+          perm.def,
+          ability.targetsExcludeSelf === true ? perm.instanceId : undefined,
+        );
         if (options.length === 0) continue; // nothing to aim at — not a play
         cards ??= cardValueContext(view as GameState, index);
         // Score each aim and take the best, the same way the loyalty path does.
@@ -1476,14 +1490,18 @@ function bestFundedActivation(
       }
 
       cards ??= cardValueContext(view as GameState, index);
-      const score = valueOfEffects(ability.effects, {
-        state: view as GameState,
-        player: me,
-        targets: [...targets],
-        weights,
-        cards,
-        index,
-      });
+      // Net of the non-mana cost, as `bestOfferedActivation` prices it: "{2},
+      // Remove a +1/+1 counter from ~: Put a +1/+1 counter on target creature"
+      // moves a counter, it does not make one.
+      const score =
+        valueOfEffects(ability.effects, {
+          state: view as GameState,
+          player: me,
+          targets: [...targets],
+          weights,
+          cards,
+          index,
+        }) + activationCostValue(ability.cost, perm, { state: view as GameState, player: me, weights, index });
       // Not worth the mana — and this is the line that keeps the change honest:
       // an ability the ruler cannot price scores 0 and is still never used.
       if (score <= weights.passScore) continue;

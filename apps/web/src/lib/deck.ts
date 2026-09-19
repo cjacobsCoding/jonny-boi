@@ -67,6 +67,26 @@ export interface UnresolvedCard {
   readonly count: number;
 }
 
+/**
+ * A NOTE left on a deck when the app added cards to it on his behalf — one of
+ * his transcribed decks receiving a dated, add-only revision he asked for
+ * (§3.162: "add 2 of them to Thune's Life deck"). It is what makes the addition
+ * VISIBLE in the deck builder rather than silently present; he dismisses it
+ * when he has read it, and the cards stay.
+ *
+ * Provenance, not identity: nothing reads it to decide what the deck is.
+ */
+export interface AppliedRevision {
+  /** The revision's ledger id, e.g. `thunes-life#2026-09-18-his-six`. */
+  readonly id: string;
+  /** ISO timestamp of the application. */
+  readonly appliedAt: string;
+  /** What the app tells him, in his own terms. */
+  readonly note: string;
+  /** What was added — including names that went onto the wish-list. */
+  readonly added: readonly UnresolvedCard[];
+}
+
 /** A saved deck. `id` is a local UUID; `cardId`s reference the card pool. */
 export interface Deck {
   id: string;
@@ -92,6 +112,13 @@ export interface Deck {
    * built badly, rather than as a deck the app could not fully supply.
    */
   unresolved?: UnresolvedCard[];
+  /**
+   * Notes for the revisions the app has applied to this deck at his request and
+   * he has not yet dismissed (see {@link AppliedRevision}). Absent on every deck
+   * that never received one, which is what every deck saved before this field
+   * existed says — so old decks need no migration.
+   */
+  revisions?: AppliedRevision[];
   /**
    * For a deck made by copying a BUILT-IN gauntlet deck: that deck's name.
    * Absent on decks built from scratch or imported, which is what every deck
@@ -198,6 +225,21 @@ export function removeCard(deck: Deck, cardId: string): Deck {
  * Returns the same deck unchanged when the name is not on the list, so a
  * double-click cannot bump `updatedAt` on a deck nothing happened to.
  */
+/**
+ * Dismiss one applied-revision note. The CARDS stay — the note is only the
+ * message that they arrived. Returns the same deck when the id is not on it.
+ */
+export function dismissRevisionNote(deck: Deck, id: string): Deck {
+  const notes = deck.revisions ?? [];
+  const remaining = notes.filter((note) => note.id !== id);
+  if (remaining.length === notes.length) return deck;
+  const next: Deck = { ...deck };
+  if (remaining.length > 0) next.revisions = remaining;
+  // Deleted rather than left as `[]`, for the reason `removeUnresolved` gives.
+  else delete next.revisions;
+  return next;
+}
+
 export function removeUnresolved(deck: Deck, name: string): Deck {
   const missing = deck.unresolved ?? [];
   const remaining = missing.filter((entry) => entry.name !== name);

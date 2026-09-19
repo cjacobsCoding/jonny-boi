@@ -1749,6 +1749,25 @@ export interface ActivationCost {
   /** How many to sacrifice ("Sacrifice TWO artifacts" — Sai). Default 1. */
   readonly sacrificeCount?: number;
   /**
+   * "**Remove a +1/+1 counter from this creature**: You gain 2 life" (Spike
+   * Feeder), "Remove a charge counter from ~: …" (Umezawa's Jitte), "Remove
+   * three spore counters from ~: …" (Thorn Thallid) — counters of ONE kind,
+   * taken off the source itself as the cost is paid (CR 602.2b), so they are
+   * gone before the ability is on the stack and are never refunded.
+   *
+   * Payable only while the source carries at least `count` of `kind` — you
+   * cannot remove a counter that is not there (CR 122.5). Removing the last
+   * +1/+1 counter from a 0/0 is legal and lethal: the toughness-zero
+   * state-based action runs after the activation settles, exactly as paying
+   * life to zero does. The kind is the same string every counter site uses
+   * (`PLUS_ONE_COUNTER`, the inert kinds), so "a +1/+1 counter" here is the
+   * same object "put a +1/+1 counter on it" created.
+   *
+   * The read half of a printed family whose write half already compiled: 176
+   * cards on the 32,341-card corpus print this cost (measured 2026-09-18).
+   */
+  readonly removeCounters?: { readonly kind: string; readonly count: number };
+  /**
    * A LOYALTY cost — the `[+N]` / `[−N]` / `[0]` printed on a planeswalker's
    * abilities, SIGNED: `+1` adds a loyalty counter as the cost is paid, `-2`
    * removes two, `0` changes nothing (CR 606.5, 602.5b). Paying a negative cost
@@ -1799,6 +1818,18 @@ export interface ActivatedAbility {
    * Absent ⇒ no restriction, which is every ability written before this existed.
    */
   readonly activateOnly?: ActivationRestriction;
+  /**
+   * "**Another** target creature gains lifelink until end of turn" (Heliod,
+   * Sun-Crowned; Torch Courier, Gravity Negator — 7 cards print the shape on an
+   * activated ability): the ability's own source is not a legal target.
+   *
+   * The same flag, with the same reasoning, as `TriggeredAbility.targetsExcludeSelf`:
+   * "another" modifies any restriction, so it is a flag beside the noun rather
+   * than a member per adjective. Read by the offer loop and the apply path
+   * through the one `excludeInstanceId` the targeting helpers already take, so
+   * an aim the menu never offers is also an aim the engine never accepts.
+   */
+  readonly targetsExcludeSelf?: boolean;
 }
 
 /**

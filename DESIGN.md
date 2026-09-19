@@ -10375,6 +10375,109 @@ express. Measured 2026-09-19 on the 32,341-card corpus: **72 cards print "Add {C
 "Add X mana", 32 "…in any combination of colors" — none playable.** That is the next family, and it
 is a family, not a card (Priest of Titania, Gaea's Cradle, Elvish Archdruid sit in it).
 
+### 3.162 Thune's Life, revised at his request — four of the six cards live, and a deck he owns can be ADDED TO — ✅ done (Heliod and Selvala follow in §3.163/§3.164)
+
+> "Add the card Skyclave Apparition and the mechanics to make it work then add 2 of them to Thune's
+> Life deck" — "And Tyvar's Stand" — "And Spike Feeder" — "And Voice of the Blessed" — "Also add
+> Heliod, Sun-Crowned and all required mechanics" — "And Selvala, Explorer Returned"
+
+Six cards, two copies each, into the deck he owns. Every one of them was measured on the 32,341-card
+corpus first and each missing piece was built as the FAMILY it belongs to, never as the card
+(`probe-src`, `measure-thune-families.cjs`; all numbers from the corpus, 2026-09-18):
+
+**Spike Feeder — the `removeCounters` activation cost (176 cards print it).** The read half of the
+counter family whose write half already compiled: `ActivationCost.removeCounters { kind, count }`,
+payable only while the source carries that many (CR 122.5), paid at activation and never refunded
+(CR 602.2b), emitting the same negative `counterAdded` the upkeep-cost primitives emit. The last
++1/+1 counter off a 0/0 is lethal and the body still resolves. The compiler reads
+"Remove a/N <kind> counters from ~" through the ONE counter-kind alternation (`COUNTER_KIND_TOKEN`:
+the two P/T kinds by their constants plus every inert kind); "Remove X counters" is refused because
+nothing enumerates that X yet. Spike Feeder, Spike Weaver and Spike Colony compile whole. **The
+pilot prices the debit side now** (`ai/activation-cost.ts`): counters that leave, the body they
+were keeping alive, a sacrificed source, life paid — in the units the body is priced in, at both
+`bestOfferedActivation` and `bestFundedActivation`. Without it a Spike Feeder stripped itself dead
+for four life at twenty; `activation-cost.test.ts` drives the real pilot on that board and it passes
+with both counters on. `sacrificeAnother` is deliberately NOT priced yet and the file says so.
+
+**Voice of the Blessed — a counter THRESHOLD on a self-only static (5 cards).** `StaticAffects.
+hasCounterMin` beside `hasCounterKind` (absent = one, so every existing row is byte-identical);
+"As long as ~ has N or more <kind> counters on it, it has KEYWORD[ and KEYWORD]" compiles to the same
+`onlySource` static shape unleash uses. Flying and vigilance at the fourth counter and not the
+third, indestructible at the tenth, the static reaching nothing but itself — all played.
+
+**Tyvar's Stand — a keyword LIST on a pump, and the "creature you control" pump noun.**
+`KEYWORD_LIST_TOKEN` ("hexproof and indestructible", "flying, first strike, and lifelink") with every
+word required to be an engine keyword or the line reports; `keywordFlags` beside `keywordFlag`. The
+first cut of the token bound its repetition to the LAST alternative only — caught by the probe, not
+by a test that had never seen a two-keyword line; the rule-match test now exists.
+
+**Skyclave Apparition — four rows, one of them a correction to §3.150.** (1) `nonlandPermanentAn
+OpponentControls` (58 cards print "target nonland permanent an opponent controls / you don't
+control" — one member for both spellings because this engine seats two players; all five homes,
+and the §3.49 invariant swept it). (2) `TargetBound.nontoken` (39 cards), read off the CR 111.1
+stamp. (3) The bound pre-pass reads the adjective, ANDs several bounds on ONE selector ("nonland,
+nontoken … with mana value 4 or less"; refuses when the clause has two "target" words), lets the
+noun carry an apostrophe, and narrows a WHOLE-TRIGGER rule's aim (`applyTargetBoundToContribution`)
+— the linked-exile rule builds its trigger itself, so every bounded O-Ring noun had been reporting.
+(4) `tokenForExiledByThis`: the third thing a linked exile can do when its exiler leaves — an X/X
+token for the exiled card's OWNER, X its mana value (CR 202.3), colour and name through the one
+token-descriptor reader; the card stays exiled. "Up to one" rides as a 0..1 `targetCount`. Played:
+the menu offers the 2-drop and NOT the token, the land, the 5-drop or your own board; declining is
+legal; Doom Blade on the Apparition leaves the Bears in exile and gives B a 2/2 blue Illusion.
+
+**The §3.150 correction.** `restrictionParam`, the one reader every primitive's resolution-time
+legality re-check uses, returned a BARE restriction and handed a bounded spec back as the
+unrestricted default: "destroy target creature with power 4 or greater" re-checked as "any target",
+so a 4/4 shrunk to 3/4 in response still died where the printed spell fizzles (CR 608.2b). It returns
+the whole `TargetSpec` now; `bounded-target-resolution.test.ts` runs the same board twice, with and
+without the shrink.
+
+**Heliod's two target rows landed early.** `creatureOrEnchantmentYouControl` (all five homes) and
+"**another** target creature" on an ACTIVATED ability — `ActivatedAbility.targetsExcludeSelf`, read
+by the offer loop, the apply path and the pilot's funded-activation planner through the one
+`excludeInstanceId` the targeting helpers already took; Torch Courier and the other six print it.
+Heliod compiles to exactly ONE reported clause now — "As long as your devotion to white is less than
+five, Heliod isn't a creature" — which is a type LAYER (61 cards print "isn't a creature"), and
+Selvala's parley is a board-derived mana AMOUNT (the family Axebane Guardian is in). Both are next,
+each as its family; neither is approximated here.
+
+**A deck he owns can be added to — the seed REVISION.** Seeding is add-only and once per profile
+(§3.157): after the first mint his copy is the deck and the registry never reaches back into it, so
+editing the transcription would have honoured "add 2 of them to Thune's Life deck" on a machine he
+does not use. A revision is the same request as data: a `// revision <id> — <note>` block of
+`+N Name` lines in `docs/decks/thunes-life.txt` (still the source of truth; `owner-decks.test.ts`
+re-reads it and pins the add-only property over every registered revision), mirrored as
+`DeckRevision` in the sim registry, and applied by the web seeder ONCE per profile to his copy —
+found by its stable seed id through a rename, or by name when he transcribed the deck himself —
+never resurrecting a deck he deleted (`deck-absent`), never lowering a count, settling in the same
+ledger as the seeds, with the deck's own note as a second belt for a lost ledger. A fresh profile
+mints the deck with every revision in and settles them together. Each application leaves an
+`AppliedRevision` note on the deck that the deck builder shows — "Added to this deck for you", the
+six names, a *Got it* — so twelve cards never arrive silently; the note survives a reload through
+`normalizeDeck` like `unresolved` does. Thune's Life today: **77 cards asked for, 73 in the pool**;
+Heliod ×2 and Selvala ×2 ride the wish-list and fold in the moment their sections land, with no
+edit to the deck.
+
+**Numbers.** Pool 7,010 → **7,102** at this lane's regeneration (+92: the four cards and their
+families — Spike Weaver, Spike Colony, Torch Courier, the nontoken and "nonland permanent an opponent
+controls" aims), **7,103** merged with §3.161; index 7,135/7,135 resolved, `--check` clean. Full suite
+locally: **492 files / 27,839 tests, 3 failed** — the two closed tables that go red for an unclassified
+primitive (the library-safety scan, the price ledger) and the stubborn-pilot runaway row, all three
+fixed and re-run green (below); CI's Verify runs the whole again on the PR. Red-then-green on the
+counter cost (offer refused, then paid), the static threshold (three vs four), the nontoken bound (a
+token on the menu vs not), the resolution re-check (the Angel dying vs living), and the pilot
+(stripping vs passing) — each pinned by a test that fails without its half.
+
+**The runaway row that moved, and why that is the pilot getting better.** `loop-runaway.test.ts`
+replays seed 113343071's pinned decks under a pilot that will not stop copying, and asserts the soak
+reports the mirror. Under the priced pilot it did not — traced action by action against the old
+heuristic, the two games part at turn 11 where the OLD pilot **sacrificed Crystal Vein in its own
+upkeep for two colourless it could not spend**, and the priced pilot keeps its land. That is the
+improvement `activation-cost.ts` exists for, and the row's own comment predicts a pilot improvement
+moving the trajectory. The decks are what the row is about, so the decks stay and the SHUFFLE moves:
+600 shuffles of the same two lists replayed under the fixture pilot, first hit 113390585/A — 662
+copies, no other violation, clean under the shipped pilot — pinned in all three tables.
+
 ### 3.165 The Lab's A/B pickers — type to find one card, a copies menu that follows the line, an Apply that says it applied — ✅ done
 
 > "the dropdowns in Lab -> A/B Test are awful to use. Anytime we have a card selector dropdown like
@@ -10430,7 +10533,6 @@ waiting to happen: two comboboxes and no native card `<select>`; a 1-of leaves o
 a finished verdict renders a LIVE apply button (no `disabled` attribute — matched as an attribute,
 since a false `aria-disabled` would still contain the word, which is how the first draft of this
 test failed against a button that was live).
-
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

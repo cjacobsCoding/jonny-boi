@@ -5,10 +5,12 @@ import {
   addCard as addCardToDeck,
   removeCard as removeCardFromDeck,
   removeUnresolved as removeUnresolvedFromDeck,
+  dismissRevisionNote as dismissRevisionNoteOnDeck,
   createDeck,
 } from './deck.js';
 import {
   loadSettledSeeds,
+  planRevisions,
   planSeeding,
   recordSettledSeeds,
   reconcileUnresolved,
@@ -46,6 +48,11 @@ export interface DecksApi {
    * he could never clear, which is not "editable like any other deck".
    */
   removeUnresolvedCard: (name: string) => void;
+  /**
+   * Dismiss the note that the app added cards to the active deck at his
+   * request (§3.162). The cards stay; only the message goes.
+   */
+  dismissRevisionNote: (id: string) => void;
   /**
    * Choose the Scryfall printing this slot of the active deck uses, or pass
    * `null` to go back to the pool's default art. Art only — the card's identity
@@ -110,9 +117,13 @@ export function useDecks(): DecksApi {
 
     // His transcribed paper decks join the ONE collection here, as ordinary
     // decks of his own — add-only, name-collision-safe, once per profile.
-    const plan = planSeeding(loaded, loadSettledSeeds());
-    const reconciled = reconcileUnresolved(plan.decks);
-    pendingSeedRecord.current = plan.settled;
+    const settledBefore = loadSettledSeeds();
+    const plan = planSeeding(loaded, settledBefore);
+    // §3.162 — the additions he asked for, applied once to his copy of a deck
+    // seeded earlier (a fresh mint above already holds them).
+    const revised = planRevisions(plan.decks, new Set([...settledBefore, ...plan.settled.map((s) => s.id)]));
+    const reconciled = reconcileUnresolved(revised.decks);
+    pendingSeedRecord.current = [...plan.settled, ...revised.settled];
 
     if (reconciled.length === 0) {
       const starter = createDeck(DEFAULT_DECK_NAME);
@@ -196,6 +207,11 @@ export function useDecks(): DecksApi {
     [updateActive],
   );
 
+  const dismissRevisionNote = useCallback(
+    (id: string) => updateActive((deck) => dismissRevisionNoteOnDeck(deck, id)),
+    [updateActive],
+  );
+
   const setEntryPrinting = useCallback(
     (cardId: string, printing: EntryPrinting | null) =>
       updateActive((deck) =>
@@ -230,6 +246,7 @@ export function useDecks(): DecksApi {
     addCard,
     removeCard,
     removeUnresolvedCard,
+    dismissRevisionNote,
     setEntryPrinting,
     replaceActive,
     importDeck,

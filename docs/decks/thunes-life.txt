@@ -27,3 +27,14 @@
 4 Temple Garden
 7 Forest
 6 Plains
+
+// revision 2026-09-18-his-six — "Add the card Skyclave Apparition and the mechanics to make it work then add 2 of them to Thune's Life deck" — "And Tyvar's Stand" — "And Spike Feeder" — "And Voice of the Blessed" — "Also add Heliod, Sun-Crowned and all required mechanics" — "And Selvala, Explorer Returned"
+// A revision is ADD-ONLY: "+N Name" lines under a "// revision <id> — <note>" header. The seeder
+// applies each revision once per profile to his copy of the deck (or to a fresh mint), never
+// removing or recounting anything he has. See packages/sim/data/owner-decks/index.ts.
++2 Skyclave Apparition          // ✅ compiles — §3.162 (nontoken bound, "you don't control", token for the exiled card)
++2 Tyvar's Stand                // ✅ compiles — §3.162 (keyword list on a pump)
++2 Spike Feeder                 // ✅ compiles — §3.162 (remove-counters cost)
++2 Voice of the Blessed         // ✅ compiles — §3.162 (counter-threshold static)
++2 Heliod, Sun-Crowned          // ✗ "isn't a creature" while devotion < 5 is a type layer — §3.163; rides the deck's wish-list until then
++2 Selvala, Explorer Returned   // ✗ parley's mana AMOUNT is board-derived (the Axebane Guardian family) — §3.164; wish-list until then

@@ -67,11 +67,32 @@ Checked against the real compiled pool, not assumed. The campaign is closing thi
 
 | deck | distinct names | cards | blocked when transcribed | blocked now |
 | --- | --- | --- | --- | --- |
-| Thune's Life | 22 | 65 | 8 | **0** ✅ |
-| Tamiyo + Jace Surge | 17 | 49 | 9 | **5** (in the shipped pool) |
+| Thune's Life | 22 (+6 revised) | 65 (+12 revised) | 8 | **2** — Heliod, Sun-Crowned and Selvala, Explorer Returned, both from the 2026-09-18 revision (§3.162) |
+| Tamiyo + Jace Surge | 17 | 49 | 9 | **1** — Axebane Guardian (§3.161) |
 
-✅ **THUNE'S LIFE COMPILES END TO END** — every name in it resolves, and it seeds at its full 65
-cards.
+✅ **THUNE'S LIFE AS TRANSCRIBED COMPILES END TO END** — every one of its 22 names resolves. The
+**2026-09-18 revision** (the `// revision` block at the foot of `thunes-life.txt`) adds the six cards
+he asked for by name, two of each: four of them compile and are in the deck (Skyclave Apparition,
+Tyvar's Stand, Spike Feeder, Voice of the Blessed — §3.162), and Heliod, Sun-Crowned and Selvala,
+Explorer Returned ride the deck's wish-list until their families land (§3.163, §3.164).
+
+## A revision is how a seeded deck is added to
+
+Seeding is once per profile and add-only, so a correction to the plain list reaches a profile that
+already has the deck only through his own editing. A **revision** is different: a dated, add-only
+block in the `.txt` —
+
+```
+// revision <date>-<slug> — <his words>
++2 Card Name
+```
+
+— mirrored as `DeckRevision` data in `packages/sim/data/owner-decks/`, applied by the web seeder
+ONCE per profile to his copy of the deck (found by its stable seed id through a rename, or by name
+when he transcribed the deck himself), never resurrecting a deck he deleted and never lowering a
+count. The deck builder shows a note — *Added to this deck for you* — until he dismisses it. A fresh
+profile mints the deck with every revision already in. `owner-decks.test.ts` re-reads the block and
+fails on any drift, exactly as it does for the plain list.
 
 ⚠️ **TAMIYO + JACE SURGE IS 49 CARDS AS TRANSCRIBED, WHICH IS SHORT OF 60, AND THAT IS NOT A BUG.**
 The names are read off the physical cards and the counts are inferred from sleeve depth (see

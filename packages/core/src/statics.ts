@@ -121,6 +121,15 @@ export interface StaticAffects extends CardFilter {
    */
   readonly hasCounterKind?: string;
   /**
+   * The printed THRESHOLD on {@link hasCounterKind} — "as long as this creature
+   * has **four or more** +1/+1 counters on it, it has flying and vigilance"
+   * (Voice of the Blessed; Pelt Collector and Angelic Cub print three). Absent
+   * means one: the plain "with a +1/+1 counter on it" every existing row means.
+   * Read against the same instance state, so it is loop-safe for the same
+   * reason the kind is.
+   */
+  readonly hasCounterMin?: number;
+  /**
    * Set for the printed words "**of the chosen type**" — "creatures you control
    * of the chosen type get +1/+1" (Adaptive Automaton, Patchwork Banner, Icon of
    * Ancestry). The static reaches only permanents carrying the subtype its own
@@ -288,7 +297,10 @@ export function staticAppliesTo(ability: StaticAbility, source: CardInstance, ca
   } else if (scope === 'opponent') {
     if (candidate.controller === source.controller) return false;
   }
-  if (affects.hasCounterKind !== undefined && (candidate.counters[affects.hasCounterKind] ?? 0) <= 0) {
+  if (
+    affects.hasCounterKind !== undefined &&
+    (candidate.counters[affects.hasCounterKind] ?? 0) < (affects.hasCounterMin ?? 1)
+  ) {
     return false;
   }
   // "of the chosen type / color" — read off the SOURCE, applied to the candidate.

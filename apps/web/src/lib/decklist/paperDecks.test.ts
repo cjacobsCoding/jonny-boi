@@ -30,17 +30,21 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { OWNER_DECK_ENTRIES } from '@jonny-boi/sim';
 import {
   PAPER_SEEDS,
   mintSeedDeck,
+  planRevisions,
   planSeeding,
   reconcileUnresolved,
+  revisionLedgerId,
   seedDeckId,
 } from './paperDecks.js';
 import { allAvailableCards } from '../cards.js';
 import {
   deckSize,
   describeDeckProblems,
+  dismissRevisionNote,
   removeUnresolved,
   unresolvedCopies,
   validateDeck,
@@ -376,5 +380,135 @@ describe('a missing card is editable too', () => {
   it('is a no-op for a name that is not on the list', () => {
     // So a double-click cannot bump `updatedAt` on a deck nothing happened to.
     expect(removeUnresolved(deck, 'Nothing Like This')).toBe(deck);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3.162 — a REVISION: cards he asked to have added after the deck was seeded
+// ---------------------------------------------------------------------------
+
+/** The Thune's Life seed, which carries the one revision this test exercises. */
+const THUNE = PAPER_SEEDS.find((seed) => seed.id === 'thunes-life')!;
+const THUNE_REVISION = THUNE.revisions[0]!;
+const THUNE_REVISION_ID = revisionLedgerId(THUNE, THUNE_REVISION);
+/** The deck AS TRANSCRIBED — what a profile seeded before the revision holds. */
+const THUNE_BASE = OWNER_DECK_ENTRIES.find((entry) => entry.source.endsWith('thunes-life.txt'))!.deck;
+/** Yesterday's mint: the transcription alone, no revision, no note. */
+const mintedBeforeTheRevision = (): Deck => mintSeedDeck({ ...THUNE, deck: THUNE_BASE, revisions: [] });
+
+/** Cards + wish-list copies — everything a deck is asked to hold. */
+const held = (deck: Deck) => deckSize(deck) + unresolvedCopies(deck);
+
+describe('a revision reaches the deck he already has', () => {
+  it('the seed carries the revision, and the six names he asked for by name', () => {
+    expect(THUNE.revisions).toHaveLength(1);
+    expect(THUNE_REVISION.adds.map((a) => a.cardId)).toEqual([
+      'Skyclave Apparition',
+      "Tyvar's Stand",
+      'Spike Feeder',
+      'Voice of the Blessed',
+      'Heliod, Sun-Crowned',
+      'Selvala, Explorer Returned',
+    ]);
+    expect(THUNE_REVISION.adds.every((a) => a.count === 2)).toBe(true);
+  });
+
+  it('a profile seeded BEFORE the revision receives it once, add-only, with a note', () => {
+    // Yesterday's mint: the seed settled, the revision unknown, his copy holding
+    // exactly the transcription.
+    const base = mintedBeforeTheRevision();
+    const before = held(base);
+    const ledger = new Set([THUNE.id]);
+    const plan = planRevisions([base], ledger);
+    expect(plan.unchanged).toBe(false);
+    expect(plan.settled).toEqual([{ id: THUNE_REVISION_ID, outcome: 'seeded' }]);
+    const [after] = plan.decks;
+    expect(after).not.toBe(base);
+    expect(after!.id, 'the same deck, by id').toBe(base.id);
+    // Twelve more cards held, between the pool and the wish-list.
+    expect(held(after!)).toBe(before + 12);
+    // ADD-ONLY: every card he had is still there at the count he had it.
+    for (const entry of base.cards) {
+      expect(after!.cards.find((c) => c.cardId === entry.cardId)?.count).toBeGreaterThanOrEqual(entry.count);
+    }
+    // The note says what arrived, and it is on the deck for the builder to show.
+    expect(after!.revisions?.map((n) => n.id)).toEqual([THUNE_REVISION_ID]);
+    expect(after!.revisions?.[0]?.added).toHaveLength(6);
+    expect(after!.revisions?.[0]?.note).toContain('Skyclave Apparition');
+  });
+
+  it('is applied ONCE — the second load with the ledger changes nothing', () => {
+    const base = mintedBeforeTheRevision();
+    const first = planRevisions([base], new Set([THUNE.id]));
+    const second = planRevisions(first.decks, new Set([THUNE.id, ...settledIds(first.settled)]));
+    expect(second.unchanged).toBe(true);
+    expect(second.decks[0]).toBe(first.decks[0]);
+    expect(second.settled).toEqual([]);
+  });
+
+  it('follows the deck through a RENAME — the stable id, not the title', () => {
+    const renamed: Deck = { ...mintedBeforeTheRevision(), name: 'Big Life' };
+    const plan = planRevisions([renamed], new Set([THUNE.id]));
+    expect(plan.decks[0]!.name).toBe('Big Life');
+    expect(plan.decks[0]!.revisions?.map((n) => n.id)).toEqual([THUNE_REVISION_ID]);
+  });
+
+  it('reaches HIS OWN transcription of the deck when the seed was skipped for its name', () => {
+    // He had a "Thune's Life" before the seed existed: the seed settled
+    // `name-in-use`, his deck was left alone — and the cards he asked for still
+    // have to land in it, because it IS Thune's Life.
+    const his = hisDeck("thune's  life", 'his-thune');
+    const plan = planRevisions([his], new Set([THUNE.id]));
+    expect(plan.decks[0]!.id).toBe('his-thune');
+    expect(held(plan.decks[0]!)).toBe(held(his) + 12);
+    expect(plan.settled).toEqual([{ id: THUNE_REVISION_ID, outcome: 'seeded' }]);
+  });
+
+  it('NEVER resurrects a deck he deleted — the revision settles as absent', () => {
+    const plan = planRevisions([hisDeck('Something Else')], new Set([THUNE.id]));
+    expect(plan.unchanged).toBe(true);
+    expect(plan.decks).toHaveLength(1);
+    expect(plan.settled).toEqual([{ id: THUNE_REVISION_ID, outcome: 'deck-absent' }]);
+  });
+
+  it('leaves a revision alone while its seed is still unsettled — the mint carries it', () => {
+    // Nothing settled at all: the seed is about to be minted WITH the revision,
+    // and applying it here too would double the six.
+    const plan = planRevisions([], new Set());
+    expect(plan.unchanged).toBe(true);
+    expect(plan.settled).toEqual([]);
+  });
+
+  it('a FRESH mint already holds the revision, notes it, and settles it with the seed', () => {
+    const plan = planSeeding([], new Set());
+    const minted = plan.decks.find((deck) => deck.id === seedDeckId(THUNE))!;
+    const ids = settledIds(plan.settled);
+    expect(ids.has(THUNE.id)).toBe(true);
+    expect(ids.has(THUNE_REVISION_ID), 'settled with the seed, so no second application').toBe(true);
+    expect(held(minted)).toBe(65 + 12);
+    expect(minted.revisions?.map((n) => n.id)).toEqual([THUNE_REVISION_ID]);
+    // And the second pass — seed and revision both in the ledger — is a no-op.
+    const second = planRevisions(plan.decks, ids);
+    expect(second.unchanged).toBe(true);
+  });
+
+  it('the note can be dismissed, and the cards stay', () => {
+    const base = mintedBeforeTheRevision();
+    const [revised] = planRevisions([base], new Set([THUNE.id])).decks;
+    const quiet = dismissRevisionNote(revised!, THUNE_REVISION_ID);
+    expect(quiet.revisions).toBeUndefined();
+    expect(held(quiet)).toBe(held(revised!));
+    expect(dismissRevisionNote(quiet, THUNE_REVISION_ID), 'a no-op for a note that is not there').toBe(quiet);
+  });
+
+  it('does not apply twice when the LEDGER write was the thing that failed — the note is the second belt', () => {
+    const base = mintedBeforeTheRevision();
+    const first = planRevisions([base], new Set([THUNE.id]));
+    // Ledger lost: the seed is remembered (id belt) but the revision is not.
+    const again = planRevisions(first.decks, new Set([THUNE.id]));
+    expect(again.unchanged).toBe(true);
+    expect(again.decks[0]).toBe(first.decks[0]);
+    // …and it repairs the ledger rather than leaving it to happen again.
+    expect(again.settled).toEqual([{ id: THUNE_REVISION_ID, outcome: 'seeded' }]);
   });
 });

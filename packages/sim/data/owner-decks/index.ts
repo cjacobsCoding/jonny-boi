@@ -61,14 +61,22 @@
  */
 
 import type { Deck } from '../../src/deck.js';
-import { THUNES_LIFE } from './thunes-life.js';
+import { THUNES_LIFE, THUNES_LIFE_REVISIONS } from './thunes-life.js';
 import { TAMIYO_JACE_SURGE } from './tamiyo-jace-surge.js';
+import { applyDeckRevisions, type DeckRevision } from './revisions.js';
 
 /** One owner deck plus the transcription it is derived from. */
 export interface OwnerDeckEntry {
+  /** The deck AS TRANSCRIBED — what the `.txt`'s plain lines say. */
   readonly deck: Deck;
   /** Repo-relative path to the `.txt` transcription that is its source of truth. */
   readonly source: string;
+  /**
+   * Dated, add-only additions he asked for after the transcription — the
+   * `// revision` blocks of the same `.txt`, in order. Empty for a deck he has
+   * not asked to change. See {@link applyDeckRevisions} and `revisions.ts`.
+   */
+  readonly revisions: readonly DeckRevision[];
 }
 
 /**
@@ -84,16 +92,26 @@ export interface OwnerDeckEntry {
  * the name comes back.
  */
 export const OWNER_DECK_ENTRIES: readonly OwnerDeckEntry[] = Object.freeze([
-  Object.freeze({ deck: THUNES_LIFE, source: 'docs/decks/thunes-life.txt' }),
-  Object.freeze({ deck: TAMIYO_JACE_SURGE, source: 'docs/decks/tamiyo-jace-surge.txt' }),
+  Object.freeze({ deck: THUNES_LIFE, source: 'docs/decks/thunes-life.txt', revisions: THUNES_LIFE_REVISIONS }),
+  Object.freeze({ deck: TAMIYO_JACE_SURGE, source: 'docs/decks/tamiyo-jace-surge.txt', revisions: [] }),
 ]);
 
-/** The owner's decks, in the order they were scanned in. */
+/** The owner's decks AS TRANSCRIBED, in the order they were scanned in. */
 export const OWNER_DECKS: readonly Deck[] = Object.freeze(OWNER_DECK_ENTRIES.map((e) => e.deck));
+
+/**
+ * An owner deck as it stands TODAY — the transcription with every revision he
+ * has asked for applied. What a fresh profile mints, and what the CLI plays.
+ */
+export function currentOwnerDeck(entry: OwnerDeckEntry): Deck {
+  return applyDeckRevisions(entry.deck, entry.revisions);
+}
 
 /** Total cards a deck is transcribed as holding, before any pool resolution. */
 export function transcribedSize(deck: Deck): number {
   return deck.cards.reduce((total, entry) => total + entry.count, 0);
 }
 
-export { THUNES_LIFE, TAMIYO_JACE_SURGE };
+export { THUNES_LIFE, THUNES_LIFE_REVISIONS, TAMIYO_JACE_SURGE };
+export { applyDeckRevisions } from './revisions.js';
+export type { DeckRevision } from './revisions.js';

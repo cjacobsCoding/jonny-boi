@@ -480,6 +480,14 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     printedBy: (c) =>
       (c as { backFace?: unknown }).backFace !== undefined &&
       (c as { backFaceCastable?: boolean }).backFaceCastable !== true,
+    // §3.162 — a SEQUENCED witness with ONE card printing it: the pool's only
+    // transforming DFC is Delver of Secrets, and its flip needs Delver in play,
+    // an upkeep, an instant or sorcery on top and the pilot accepting the
+    // reveal. The 7,103-card regeneration moved the anchored deck's filler by
+    // one index and the grid's six attempts missed the sequence on CI's seed
+    // lane while firing it locally one card earlier — the token-copy shape,
+    // with the same remedy: the overtime lane, paid only when the grid missed.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
   },
   {
     id: 'modal-cast',
