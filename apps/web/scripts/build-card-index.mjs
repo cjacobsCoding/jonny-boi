@@ -28,6 +28,9 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+// The URL derivation is data-tools' (one place decides, for the app and this
+// projection alike) and is read from its BUILT browser entry — so `npm run
+// verify` builds data-tools before this check runs (root package.json).
 import { imageUrisAreDerivable } from '@jonny-boi/data-tools/pure';
 
 /** Canonical, full-fidelity index produced by `@jonny-boi/data-tools`. */
