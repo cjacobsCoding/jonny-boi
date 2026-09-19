@@ -14,6 +14,15 @@ import {
   MECHANICS_CHANGELOG,
 } from '../../lib/about/changelog.js';
 
+/** Text as React's static markup writes it — every character it escapes, not just the apostrophe. */
+const esc = (s: string): string =>
+  s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+
 describe('the mechanics changelog on the About page', () => {
   const html = renderToStaticMarkup(createElement(MechanicsChangelog));
 
@@ -22,11 +31,10 @@ describe('the mechanics changelog on the About page', () => {
     expect(html).toContain('What came online recently');
     expect(html).toContain(`dateTime="${newest.date}"`);
     expect(html).toContain(CHANGELOG_KIND_LABELS[newest.kind]);
-    expect(html).toContain(newest.title.replace(/'/g, '&#x27;'));
-    for (const name of newest.cards ?? []) expect(html).toContain(name.replace(/'/g, '&#x27;'));
+    expect(html).toContain(esc(newest.title));
+    for (const name of newest.cards ?? []) expect(html).toContain(esc(name));
     // Newest first in the markup, not just in the data.
     const second = MECHANICS_CHANGELOG[1]!;
-    const esc = (s: string): string => s.replace(/'/g, "&#x27;");
     expect(html.indexOf(esc(newest.title))).toBeLessThan(html.indexOf(esc(second.title)));
   });
 
