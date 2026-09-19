@@ -20,12 +20,18 @@ import {
 } from '@jonny-boi/sim';
 import type {
   GauntletRequest,
+  ManabaseRequest,
   MatchRequest,
   SimProgress,
   SimResultPayload,
   SuggestRequest,
   SwapRequest,
 } from '../sim-protocol.js';
+import {
+  finishManabaseRun,
+  variantForCandidateKey,
+  type PairedGameObservation,
+} from '@jonny-boi/sim';
 import {
   DEFAULT_ADAPTIVE_CONFIG,
   DEFAULT_EXPLORATION_WEIGHTS,
@@ -45,6 +51,8 @@ import { resolveOpponentNames } from './opponents.js';
 import {
   planBaseSlotShards,
   planGauntletShards,
+  planManabaseBaseSlotShards,
+  planManabaseVariantSliceShards,
   planPairedShards,
   planVariantSliceShards,
   totalGauntletGames,
@@ -54,6 +62,9 @@ import { mergeGauntlet, mergePairedEvaluation, mergeVariantSlices } from './merg
 import type {
   BaseSlotShardResult,
   GauntletShardResult,
+  ManabaseBaseSlotShardResult,
+  ManabasePlanResult,
+  ManabaseVariantSliceShardResult,
   MatchJobResult,
   PairedShardResult,
   ShardContext,
@@ -702,6 +713,224 @@ function estimatePlannedGames(
   return games;
 }
 
+// --- §3.175 manabase experiments ---------------------------------------------------
+
+/**
+ * THE POOLED DRIVER OF A MANABASE SWEEP — `runSuggest`'s round loop, with the
+ * three watched job kinds and the readings folded in beside the tallies.
+ *
+ * The family is planned on a worker (the pool lives there), the sim's ladder
+ * decides who survives each round, and each round is the same two-phase,
+ * barrier-separated shape a suggestions round is: the shared base games for the
+ * new slots (played under the reliability watch, so each record carries its
+ * reading), then every surviving variant's games over those slots. What comes
+ * back per slot — who won, and what the watch saw — is kept by CANDIDATE KEY and
+ * ABSOLUTE SLOT, so arrival order cannot reach the report. At the end
+ * `finishManabaseRun` does what it does for the inline driver: Holm over the
+ * family, verdicts re-decided, and the paired reliability per variant.
+ */
+export async function runManabase(
+  request: ManabaseRequest,
+  runner: ShardRunner,
+  sink: ProgressSink,
+  progressIntervalSeconds: number,
+): Promise<SimResultPayload> {
+  const opponentNames = opponentsFor(request);
+  const context = contextFor(request, opponentNames);
+  const startedAt = nowSeconds();
+  runner.warmUp?.();
+
+  sink({ type: 'progress', done: 0, total: 0, gamesRun: 0, elapsedSeconds: 0, label: 'enumerating manabases…' });
+  const planned = (await runner.submit(
+    {
+      kind: 'manabase-plan',
+      context,
+      gamesPerVariant: request.gamesPerVariant,
+      sweeps: request.sweeps,
+      radius: request.radius,
+      ...(request.families ? { families: request.families } : {}),
+    },
+    () => {},
+  )) as ManabasePlanResult;
+  const plan = planned.plan;
+  if (plan.roster.length === 0) {
+    throw new Error(
+      plan.manabase.skipped.length > 0
+        ? `no manabase variant can be built for this deck: ${plan.manabase.skipped.map((s) => `${s.label} — ${s.reason}`).join('; ')}`
+        : 'no manabase variant to test — turn a sweep on.',
+    );
+  }
+
+  const tally = new ProgressTally(estimatePlannedGames(plan), sink, progressIntervalSeconds);
+  const baseRecords = new Map<number, PairedBaseRecord>();
+  let armTables: ReadonlyMap<string, PairedTable> = new Map();
+  const armSlots = new Map<string, boolean[]>();
+  /** The watch's reading per arm per ABSOLUTE slot — the reliability half of the report. */
+  const armObserved = new Map<string, (PairedGameObservation | null)[]>();
+  const failures = new Map<string, string>();
+  let variantGamesPlayed = 0;
+  let variantGamesSkipped = 0;
+
+  const driver = driveAdaptiveSearch(plan);
+  let step = driver.next();
+  let label = `round 1 of ${plan.waves.length} · ${workersLabel(runner.workerCount)}`;
+  tally.emit(label, true);
+
+  while (!step.done) {
+    const round = step.value;
+    const live = round.arms.filter((arm) => !failures.has(arm.candidate.key));
+    label =
+      `round ${round.wave} of ${plan.waves.length} · ${live.length} ` +
+      `${live.length === 1 ? 'manabase' : 'manabases'} · ${round.cumulativeGames} games each · ` +
+      workersLabel(runner.workerCount);
+    tally.emit(label, true);
+
+    // --- phase A: the shared, WATCHED base arm for the slots this round adds ---
+    const baseJobs = planManabaseBaseSlotShards(context, plan.runSeed, round.baseSlotStart, round.baseSlotEnd, runner.workerCount);
+    const baseResults = (await Promise.all(
+      baseJobs.map(async (job) => {
+        const result = await runner.submit(job, (games) => {
+          tally.add(games);
+          tally.emit(label);
+        });
+        tally.emit(label);
+        return result as ManabaseBaseSlotShardResult;
+      }),
+    )) as ManabaseBaseSlotShardResult[];
+    for (const result of baseResults) {
+      result.records.forEach((record, i) => baseRecords.set(result.slotStart + i, record));
+    }
+
+    // --- barrier --- phase B needs every base record (and reading) above.
+    const sliceJobs = planManabaseVariantSliceShards(
+      context,
+      plan.runSeed,
+      live.map((arm) => {
+        const variant = variantForCandidateKey(arm.candidate.key, plan.manabase.variants);
+        if (!variant) throw new Error(`the plan names no variant for candidate "${arm.candidate.key}"`);
+        return { candidateKey: arm.candidate.key, variant, fromSlot: arm.fromGames, toSlot: arm.toGames };
+      }),
+      runner.workerCount,
+      (slot) => baseRecords.get(slot) as PairedBaseRecord,
+    );
+
+    const settled = await Promise.all(
+      sliceJobs.map(async (job) => {
+        try {
+          const result = (await runner.submit(job, (games) => {
+            tally.add(games);
+            tally.emit(label);
+          })) as ManabaseVariantSliceShardResult;
+          tally.emit(label);
+          return result;
+        } catch (err) {
+          if (isCancellation(err)) throw err;
+          // One unbuildable variant drops that ARM, never the run.
+          if (!failures.has(job.candidateKey)) {
+            failures.set(job.candidateKey, err instanceof Error ? err.message : String(err));
+          }
+          return null;
+        }
+      }),
+    );
+
+    const usable = settled.filter(
+      (result): result is ManabaseVariantSliceShardResult => result !== null && !failures.has(result.candidateKey),
+    );
+    for (const slice of usable) {
+      variantGamesPlayed += slice.variantGamesPlayed;
+      variantGamesSkipped += slice.variantGamesSkipped;
+      let slots = armSlots.get(slice.candidateKey);
+      if (!slots) {
+        slots = [];
+        armSlots.set(slice.candidateKey, slots);
+      }
+      let observed = armObserved.get(slice.candidateKey);
+      if (!observed) {
+        observed = [];
+        armObserved.set(slice.candidateKey, observed);
+      }
+      // Sparse writes BY ABSOLUTE INDEX, so slices in any order compose into the
+      // arrays a locally-played arm would have built.
+      for (let i = 0; i < slice.variantWonBySlot.length; i++) {
+        slots[slice.slotStart + i] = slice.variantWonBySlot[i] as boolean;
+        observed[slice.slotStart + i] = slice.observedBySlot[i] ?? null;
+      }
+    }
+    for (const key of failures.keys()) {
+      armSlots.delete(key);
+      armObserved.delete(key);
+    }
+    armTables = mergeVariantSlices(dropFailed(armTables, failures), usable);
+
+    step = driver.next({
+      arms: round.arms.map((arm) => {
+        const failure = failures.get(arm.candidate.key);
+        if (failure !== undefined) {
+          return { key: arm.candidate.key, gamesPlayed: 0, paired: EMPTY_TABLE, failure };
+        }
+        const slots = armSlots.get(arm.candidate.key);
+        return {
+          key: arm.candidate.key,
+          gamesPlayed: arm.toGames,
+          paired: armTables.get(arm.candidate.key) ?? EMPTY_TABLE,
+          ...(slots ? { variantWonBySlot: slots } : {}),
+        };
+      }),
+    });
+    tally.setTotal(estimatePlannedGames(plan, tally.gamesDone, step.done ? undefined : step.value));
+  }
+
+  const outcome = step.value;
+  const elapsedSeconds = nowSeconds() - startedAt;
+  const baseGamesPlayed = outcome.baseSlotsPlayed;
+  const baseObserved: (PairedGameObservation | null)[] = [];
+  for (let slot = 0; slot < baseGamesPlayed; slot++) baseObserved.push(baseRecords.get(slot)?.observed ?? null);
+
+  const report = finishManabaseRun({
+    plan,
+    search: {
+      outcomes: outcome.arms.map((arm) => ({
+        candidate: arm.candidate,
+        evaluation: summarizePairedSwap({
+          baseDeckName: plan.baseDeckName,
+          variantDeckName: arm.candidate.variantDeckName,
+          swap: { out: arm.candidate.outId, in: arm.candidate.inId },
+          outName: arm.candidate.outName,
+          inName: arm.candidate.inName,
+          paired: arm.paired,
+          scope: DEFAULT_SWAP_SCOPE,
+          copiesSwapped: arm.candidate.copiesSwapped,
+        }),
+        gamesPlayed: arm.gamesPlayed,
+        ...(arm.elimination ? { elimination: arm.elimination } : {}),
+      })),
+      waves: outcome.waves,
+      usage: {
+        baseGamesPlayed,
+        variantGamesPlayed,
+        variantGamesSkipped,
+        totalGamesPlayed: baseGamesPlayed + variantGamesPlayed,
+        identicalGameSkipEnabled: planned.identicalGameSkipEnabled,
+        ...(planned.identicalGameSkipDisabledReason
+          ? { identicalGameSkipDisabledReason: planned.identicalGameSkipDisabledReason }
+          : {}),
+      },
+      failures: outcome.failures,
+      fixedSchemeGames: outcome.fixedSchemeGames,
+    },
+    baseObserved,
+    variantObserved: armObserved,
+    elapsedSeconds,
+    workersUsed: runner.workerCount,
+    stats: DEFAULT_STATS_CONFIG,
+  });
+
+  tally.setTotal(tally.gamesDone);
+  tally.emit(`${report.results.length} manabases · ${workersLabel(runner.workerCount)}`, true);
+  return { kind: 'manabase', result: report, pilotId: request.pilotId };
+}
+
 // --- single-game replay --------------------------------------------------------
 
 export async function runMatchRequest(
@@ -729,7 +958,7 @@ export async function runMatchRequest(
 
 /** Run any Lab request on a shard runner. The one entry point the hook calls. */
 export async function runSimRequest(
-  request: GauntletRequest | SwapRequest | SuggestRequest | MatchRequest,
+  request: GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | ManabaseRequest,
   runner: ShardRunner,
   sink: ProgressSink,
   progressIntervalSeconds: number,
@@ -743,6 +972,8 @@ export async function runSimRequest(
       return runSuggest(request, runner, sink, progressIntervalSeconds);
     case 'match':
       return runMatchRequest(request, runner, sink);
+    case 'manabase':
+      return runManabase(request, runner, sink, progressIntervalSeconds);
   }
 }
 

@@ -14,6 +14,8 @@ import type { SimWorkerApi } from '../lib/useSimWorker.js';
 import type { LabSelection } from '../lib/useLabSelection.js';
 import {
   GAUNTLET_GAMES,
+  MANABASE_GAMES,
+  MANABASE_SWEEP_RADIUS,
   SWAP_GAMES,
   SUGGEST_GAMES,
   SUGGEST_MAX_CANDIDATES,
@@ -23,13 +25,17 @@ import { GauntletPanel } from '../components/lab/GauntletPanel.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
 import { SwapPanel } from '../components/lab/SwapPanel.js';
 import { SuggestPanel } from '../components/lab/SuggestPanel.js';
+import { ManabasePanel } from '../components/lab/ManabasePanel.js';
+import { applyManabaseToDeck } from '../lib/lab/manabaseApply.js';
+import type { ManabaseVariant } from '@jonny-boi/sim';
 import type { CardOption } from '../components/lab/panel-types.js';
 
-/** The Lab's sub-tabs — the three things you can run against the gauntlet. */
+/** The Lab's sub-tabs — the things you can run against the gauntlet. */
 const LAB_TABS = [
   { id: 'gauntlet', label: 'Gauntlet' },
   { id: 'swap', label: 'A/B Swap Test' },
   { id: 'suggest', label: 'Suggestions' },
+  { id: 'manabase', label: 'Manabase' },
 ] as const;
 
 /**
@@ -107,6 +113,17 @@ export function LabView({
             hero.name,
           ),
         );
+      }
+    : undefined;
+
+  // §3.175 — applying a tested MANABASE: the variant's steps folded over the
+  // saved deck in ONE update (several `onApplySwap` calls would each start from
+  // the same stale hero and keep only the last), through the same apply path.
+  const onApplyManabase = canEditHero
+    ? (variant: ManabaseVariant): void => {
+        const result = applyManabaseToDeck(hero, variant);
+        if (result.applied) decks.updateDeck(result.deck);
+        setApplyNote(result.note);
       }
     : undefined;
 
@@ -211,6 +228,14 @@ export function LabView({
             // §3.136 — the SAME hero card list the A/B tab cuts from, so the two
             // tabs can never offer different cards for the same deck.
             cutOptions={hero ? heroOutOptions(hero) : []}
+          />
+        )}
+        {tab === 'manabase' && (
+          <ManabasePanel
+            {...sharedProps}
+            gamesConfig={MANABASE_GAMES}
+            radiusConfig={MANABASE_SWEEP_RADIUS}
+            onApplyManabase={onApplyManabase}
           />
         )}
       </div>

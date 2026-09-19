@@ -30,11 +30,14 @@ import {
   type PairedBaseRecord,
   type SwapScope,
 } from '@jonny-boi/sim';
+import type { ManabaseVariant } from '@jonny-boi/sim';
 import { MIN_GAMES_PER_SHARD, SHARDS_PER_WORKER } from './pool-config.js';
 import type {
   BaseSlotShardJob,
   GameRange,
   GauntletShardJob,
+  ManabaseBaseSlotShardJob,
+  ManabaseVariantSliceShardJob,
   PairedShardJob,
   ShardContext,
   VariantSliceShardJob,
@@ -309,6 +312,71 @@ export function estimateSuggestionGames(maxCandidates: number, gamesPerCandidate
     arms = Math.min(arms, spec.survivorTarget);
   }
   return games;
+}
+
+// --- §3.175 manabase experiments: one ROUND, cut exactly as a suggestions round ------
+
+/**
+ * PHASE A of a manabase round — `planBaseSlotShards` with the watched kind. The
+ * cut is the same function (slot ranges over the workers); only the job kind
+ * differs, because the worker must build its runner WITH the reliability watch.
+ */
+export function planManabaseBaseSlotShards(
+  context: ShardContext,
+  runSeed: number,
+  slotStart: number,
+  slotEnd: number,
+  workerCount: number,
+): readonly ManabaseBaseSlotShardJob[] {
+  return planBaseSlotShards(context, runSeed, slotStart, slotEnd, workerCount).map((job) => ({
+    kind: 'manabase-base-slot-shard' as const,
+    context: job.context,
+    runSeed: job.runSeed,
+    slotStart: job.slotStart,
+    slotEnd: job.slotEnd,
+  }));
+}
+
+/** One manabase arm's outstanding work in a round. */
+export interface ManabaseArmSlice {
+  readonly candidateKey: string;
+  readonly variant: ManabaseVariant;
+  readonly fromSlot: number;
+  readonly toSlot: number;
+}
+
+/**
+ * PHASE B of a manabase round — every surviving variant's games, cut by slot
+ * range exactly as `planVariantSliceShards` cuts a suggestions round, each shard
+ * self-contained with the (watched) base records for its own slots.
+ */
+export function planManabaseVariantSliceShards(
+  context: ShardContext,
+  runSeed: number,
+  arms: readonly ManabaseArmSlice[],
+  workerCount: number,
+  baseRecordAt: (slot: number) => PairedBaseRecord,
+): readonly ManabaseVariantSliceShardJob[] {
+  const jobs: ManabaseVariantSliceShardJob[] = [];
+  for (const arm of arms) {
+    const outstanding = Math.max(0, arm.toSlot - arm.fromSlot);
+    if (outstanding === 0) continue;
+    const parts = shardsPerGroup(arms.length, outstanding, workerCount);
+    for (const range of splitSlotRange(arm.fromSlot, arm.toSlot, parts)) {
+      const baseRecords: PairedBaseRecord[] = [];
+      for (let slot = range.slotStart; slot < range.slotEnd; slot++) baseRecords.push(baseRecordAt(slot));
+      jobs.push({
+        kind: 'manabase-variant-slice-shard',
+        context,
+        runSeed,
+        candidateKey: arm.candidateKey,
+        variant: arm.variant,
+        ...range,
+        baseRecords,
+      });
+    }
+  }
+  return jobs;
 }
 
 /** Total games a set of gauntlet shards will play (for the progress denominator). */

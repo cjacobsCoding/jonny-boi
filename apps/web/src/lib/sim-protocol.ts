@@ -19,6 +19,7 @@ import type {
   SwapEvaluation,
   SwapScope,
 } from '@jonny-boi/sim';
+import type { DualLandFamilyId, ManabaseReport } from '@jonny-boi/sim';
 import type { MatchTrace } from './replay-types.js';
 
 /*
@@ -143,8 +144,30 @@ export interface MatchRequest extends PilotedRequest {
   readonly maxEvents: number;
 }
 
+/**
+ * §3.175 — try other MANABASES: land-only variants of the hero (a land-count
+ * sweep, a colour-mix sweep, dual-land playsets from the pool), each evaluated
+ * with the same paired machinery as a swap and reported by win rate AND by the
+ * measured reliability of its draws. The worker enumerates the family from
+ * these settings, so the panel's preview and the run agree on the list.
+ */
+export interface ManabaseRequest extends PilotedRequest {
+  readonly kind: 'manabase';
+  readonly hero: SimDeckPayload;
+  readonly opponentNames: readonly string[];
+  /** Paired games per opponent a finalist variant reaches (the ladder is adaptive). */
+  readonly gamesPerVariant: number;
+  readonly seed: number;
+  /** Which sweeps to enumerate. */
+  readonly sweeps: { readonly count: boolean; readonly mix: boolean; readonly type: boolean };
+  /** Steps each way for the count and mix sweeps (`LAND_COUNT_SWEEP_RADIUS` by default). */
+  readonly radius: number;
+  /** Dual-land families the type sweep may draw on; omitted means every family. */
+  readonly families?: readonly DualLandFamilyId[];
+}
+
 /** Anything the UI can ask the worker to run. */
-export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest;
+export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | ManabaseRequest;
 
 /**
  * Live progress for the whole run, aggregated across every worker.
@@ -199,5 +222,6 @@ export type SimResultPayload =
       readonly sequential?: SequentialOutcome;
     }
   | { readonly kind: 'suggest'; readonly result: SuggestionReport; readonly pilotId: string }
-  | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string };
+  | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string }
+  | { readonly kind: 'manabase'; readonly result: ManabaseReport; readonly pilotId: string };
 

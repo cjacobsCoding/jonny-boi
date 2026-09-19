@@ -81,7 +81,24 @@ export interface MatchOptions {
    * `recordTrace`: use it to watch for one condition across a game cheaply.
    */
   readonly onEvent?: MatchEventObserver;
+  /**
+   * See every SETTLED state a decision is about to be made from — the state the
+   * priority holder's pilot is handed, before it acts (§3.175). Events say what
+   * happened; this is what the world looked like when somebody could act on it,
+   * which is the only honest place to ask "did the player hold a land they
+   * could have played?" or "could that hand have been cast with this board?".
+   * Read-only by contract: the state is the harness's live object and is
+   * mutated by the next action. Optional, and absent by default — the loop pays
+   * one branch per decision for it, nothing when unset.
+   */
+  readonly onState?: MatchStateObserver;
 }
+
+/**
+ * A settled-state observer (`MatchOptions.onState`). Called once per decision
+ * point with the live state; it must read and return, never retain or mutate.
+ */
+export type MatchStateObserver = (state: GameState) => void;
 
 /** One decision a pilot made, captured only when `recordTrace` is on. */
 export interface TracedDecision {
@@ -171,6 +188,7 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
   const events: GameEvent[] | undefined = record ? [...created.events] : undefined;
   const decisions: TracedDecision[] | undefined = record ? [] : undefined;
   const observe = opts.onEvent;
+  const observeState = opts.onState;
   /*
    * THE OBSERVATION SEAM (`docs/plans/superhuman-ai-program.md` §13–17). A pilot's
    * `chooseAction` runs only while that pilot holds priority, so a pilot could not
@@ -248,6 +266,10 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
   while (!state.gameOver && state.turnNumber <= sim.maxTurnsPerGame && actions < sim.maxActionsPerGame) {
     const seat = state.priorityPlayer;
     const pilot = pilots[seat];
+    // The settled-state seam (see `MatchOptions.onState`): shown the state a
+    // decision is about to be made from, including the decisions the fast pass
+    // below never builds a menu for.
+    if (observeState) observeState(state);
 
     let chosen: GameAction;
     if (queuedAt < queued.length) {
