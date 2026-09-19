@@ -129,6 +129,22 @@ life shows ∞. Stage 2 lands with the visual representation in the Play board.
 Creatures with ∞ counters print ∞/∞. Every choice that enumerates permanents handles a cohort as
 one option with a count.
 
+**Stage 2 design notes (for the lane that builds it).** The engine keeps JS `Infinity` in the
+resource fields it already has (`player.life`, a counter count) — arithmetic then does the right
+thing without a second number type (∞ − 5 = ∞; life −∞ loses by the ordinary SBA). Two funnels must
+learn it: the persistence/replay JSON (`Infinity` serialises to `null`; encode it in the ONE
+replacer/reviver pair `persist.ts` and the replay transport use) and the display (`∞`). ∞ meeting ∞
+(infinite damage into infinite life) is the one case with no answer in arithmetic and none in the
+CR either — real Magic makes a player name a finite number (CR 726.4); so the engine asks the
+affected player for a finite N there, never computes NaN, and says why in the prompt.
+
+**Stage 3 design notes.** A materialised infinite cohort would touch every consumer that walks the
+battlefield (attackers, blockers, targets, "each creature you control"), which is the invasive
+change to avoid. Pragmatic shape: the engine materialises at most `COMBO_REPEAT_CAP` tokens and
+records the cohort's DECLARED size as ∞ on a cohort record (for display and for "how many are
+there" arithmetic); the batching tools ("tap them all", "attack with X of them") act on the
+materialised set and the remainder stays ∞ on the record. State that bound plainly in the UI.
+
 **Acceptance per stage** is written in the stage's DESIGN section before the code; stage 1 is the
 first PR. **Owns:** `packages/core/src/combo*.ts`, the Play prompt component for the combo choice,
 `apps/web/src/components/play/ComboPrompt.tsx`. **Additive:** the engine's loop seam
