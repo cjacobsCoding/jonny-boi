@@ -70,6 +70,16 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.171',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: '"~ gains flying until end of turn" — creatures that grant themselves a keyword',
+    summary:
+      'Stromgald Crusader, Unyielding Krumar, Stonehorn Chanter, Hopping Automaton and 150 more creatures whose ability gives THEMSELVES flying, first strike, deathtouch or vigilance for the turn now play as printed — activated or triggered. Hybrid mana ({U/R}) in an activation cost is payable with either colour too, which brought the Lockets and Stream Hopper along.',
+    cards: ['Stromgald Crusader', 'Unyielding Krumar', 'Stonehorn Chanter', 'Hopping Automaton', 'Stream Hopper'],
+    witness: { kind: 'rule', id: 'self-grant-keyword-until-eot' },
+  },
+  {
     section: '3.170',
     date: '2026-09-19',
     kind: 'mechanic',

@@ -5171,6 +5171,56 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * §3.171 — the SELF keyword grant: "**~ gains flying until end of turn**",
+     * the body of the commonest activated ability in the corpus after the pump
+     * ("{B}: Stromgald Crusader gains flying", "{1}{W}: Unyielding Krumar gains
+     * first strike", "Pay 2 life: Shadowcloak Vampire gains flying") and of a
+     * long tail of triggers ("Whenever a land you control enters, Fledgling
+     * Griffin gains flying until end of turn"). Like the self pump above it,
+     * it needs no chosen target — the grant primitive falls back to its own
+     * source — which is what lets one row serve both ability kinds.
+     *
+     * The list goes through `parseKeywordList`, the same closed reading every
+     * granted keyword line uses: a word the engine does not model ("fear",
+     * "islandwalk"), a choice ("your choice of vigilance, lifelink, or haste"),
+     * and "protection from the color of your choice" all return null, and the
+     * line keeps reporting rather than granting a weaker card.
+     */
+    id: 'self-grant-keyword-until-eot',
+    description:
+      '"~ gains KEYWORD[, KEYWORD and KEYWORD] until end of turn" — the source grants itself (Stromgald Crusader, Unyielding Krumar, Stonehorn Chanter)',
+    pattern: /^~ gains (.+?) until end of turn$/,
+    build(match) {
+      const keywords = parseKeywordList(match[1] ?? '');
+      if (keywords === null) return null;
+      return effects({ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } });
+    },
+  },
+  {
+    /**
+     * §3.171 — the self pump and grant in one sentence: "**~ gets +1/+1 and
+     * gains flying until end of turn**" (Hopping Automaton's "{0}: gets -1/-1
+     * and gains flying", Leaping Lizard, Miner's Bane's "gets +3/+0 and gains
+     * trample"). The two primitives the separate sentences compile to, with no
+     * target on either, so the pair expires at cleanup through the same paths.
+     */
+    id: 'self-pump-and-grant-until-eot',
+    description:
+      '"~ gets +X/+Y and gains KEYWORD until end of turn" — the source pumps and grants itself (Hopping Automaton, Leaping Lizard, Kruin Striker)',
+    pattern: /^~ gets ([+-]\d+)\/([+-]\d+) and gains (.+?) until end of turn$/,
+    build(match) {
+      const power = parseSignedInt(match[1] ?? '');
+      const toughness = parseSignedInt(match[2] ?? '');
+      const keywords = parseKeywordList(match[3] ?? '');
+      if (!Number.isFinite(power) || !Number.isFinite(toughness) || keywords === null) return null;
+      return effects(
+        { primitive: 'pumpUntilEndOfTurn', params: { power, toughness } },
+        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } },
+      );
+    },
+  },
+  {
     id: 'pump-and-grant-until-eot',
     description:
       '"Target creature gets +X/+Y and gains KEYWORD until end of turn" — and the ATTACKING form (§3.112: "Bloodrush — {R}{G}, Discard this card: Target attacking creature gets +4/+4 and gains trample")',
