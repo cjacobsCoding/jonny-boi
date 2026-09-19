@@ -4,7 +4,7 @@
 // ✅ = unblocked by the ALL-CARDS campaign; the lane that did it is named. See docs/ALL-CARDS-CAMPAIGN.md §7a.
 
 4 Arbor Elf                    // ✅ compiles — §3.147
-4 Axebane Guardian             // ✗ not in pool
+4 Axebane Guardian             // ✅ compiles — §3.164 (a mana AMOUNT the board decides, in any combination of colours)
 3 Doorkeeper                   // ✅ compiles — §3.147
 2 Avacyn's Pilgrim
 2 Fog Bank                     // ✅ compiles — §3.151 (damage prevention)

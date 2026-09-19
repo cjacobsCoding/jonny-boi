@@ -63,6 +63,8 @@ import {
   TARGET_RESTRICTION_PARAM,
   isTargetRestriction,
 } from '@jonny-boi/core';
+import { MANA_AMOUNT_COUNTS, MANA_AMOUNT_PERMANENTS_MATCHING } from '@jonny-boi/core';
+import type { ManaAmountCount, ManaAmountSource } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
   ABILITY_WORD_LIST,
@@ -408,6 +410,15 @@ const NAMED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = O
  * Each row is a real printed phrase from the corpus — `dead-rule-sweep.mjs` and
  * `rule-coverage.test.ts` are what stop a remembered wording getting in.
  */
+/**
+ * §3.164 — the singular "for each …" spelling of every FILTERED count, filled
+ * by {@link scopedCounts} as the plural rows are generated, so "for each Elf
+ * you control" (Elvish Archdruid) and "for each Elf on the battlefield" (Priest
+ * of Titania) read the same row "elves you control" / "elves on the
+ * battlefield" does. Filled at module load, before any rule reads it.
+ */
+const FILTERED_EACH_TO_PLURAL: Record<string, string> = {};
+
 const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   ...subtypeCounts('mountain', 'Mountain'),
   ...subtypeCounts('swamp', 'Swamp'),
@@ -688,8 +699,16 @@ type DerivedCountDescriptor =
 function scopedCounts(
   plural: string,
   filter: CardFilter,
+  /** The SINGULAR noun, for the "for each …" spellings (§3.164). */
+  singular?: string,
 ): Record<string, DerivedCountDescriptor> {
   const row = (scope: DerivedCountScope) => ({ countOf: PERMANENTS_MATCHING, filter, scope }) as const;
+  const scopes = ['you control', 'an opponent controls', 'your opponents control', 'they control', 'on the battlefield'];
+  if (singular !== undefined) {
+    // The singular spellings point at the PLURAL rows — one definition of the
+    // count, exactly as `DERIVED_EACH_TO_PLURAL` does for the named rows.
+    for (const scope of scopes) FILTERED_EACH_TO_PLURAL[`${singular} ${scope}`] = `${plural} ${scope}`;
+  }
   return {
     [`${plural} you control`]: row('you'),
     [`${plural} an opponent controls`]: row('opponents'),
@@ -701,16 +720,16 @@ function scopedCounts(
 
 /** A SUBTYPE noun ("Mountains you control", "Clerics on the battlefield"). */
 function subtypeCounts(
-  plural: string,
+  singular: string,
   subtype: string,
   options?: { readonly plural?: string },
 ): Record<string, DerivedCountDescriptor> {
-  return scopedCounts(options?.plural ?? `${plural}s`, { anyOfSubtypes: [subtype] });
+  return scopedCounts(options?.plural ?? `${singular}s`, { anyOfSubtypes: [subtype] }, singular);
 }
 
 /** A CARD-TYPE noun ("artifacts you control"). */
-function typeCounts(plural: string, type: CardType): Record<string, DerivedCountDescriptor> {
-  return scopedCounts(`${plural}s`, { anyOfTypes: [type] });
+function typeCounts(singular: string, type: CardType): Record<string, DerivedCountDescriptor> {
+  return scopedCounts(`${singular}s`, { anyOfTypes: [type] }, singular);
 }
 
 /**
@@ -812,7 +831,8 @@ const DERIVED_EACH_PHRASE = `(${Object.keys(DERIVED_EACH_TO_PLURAL)
 
 /** The derived descriptor a printed "for each …" phrase means, or null. */
 function derivedEachValue(phrase: string): Record<string, unknown> | null {
-  const plural = DERIVED_EACH_TO_PLURAL[phrase.trim().toLowerCase()];
+  const key = phrase.trim().toLowerCase();
+  const plural = DERIVED_EACH_TO_PLURAL[key] ?? FILTERED_EACH_TO_PLURAL[key];
   return plural === undefined ? null : derivedValue(plural);
 }
 
@@ -11475,6 +11495,85 @@ function parseManaPayload(payload: string): readonly ManaProduction[] | null {
   return modes.length > 0 ? modes : null;
 }
 
+/**
+ * §3.164 — the AMOUNT vocabulary of a derived mana ability: a printed count
+ * phrase turned into core's `ManaAmountSource`, or null.
+ *
+ * Reads the SAME tables every other count reads (`derivedValue`,
+ * `derivedEachValue`, the where-X arithmetic) and then REFUSES anything the
+ * planner's battlefield view could not answer — a hand or graveyard count, an
+ * offset ("plus 1") — because a mana amount the engine can compute and the
+ * planner cannot is a tap the two would value differently. "This creature's
+ * power" is the one phrase with no count row: the source's own power.
+ */
+function manaAmountSourceOf(descriptor: Record<string, unknown> | null): ManaAmountSource | null {
+  if (descriptor === null) return null;
+  const countOf = descriptor.countOf;
+  // An arithmetic tail ("plus 1", "minus 2", a multiplier) has no home on the amount.
+  for (const key of Object.keys(descriptor)) {
+    if (key !== 'countOf' && key !== 'filter' && key !== 'scope') return null;
+  }
+  if (countOf === MANA_AMOUNT_PERMANENTS_MATCHING) {
+    const filter = descriptor.filter;
+    const scope = descriptor.scope;
+    if (typeof filter !== 'object' || filter === null) return null;
+    if (scope !== 'you' && scope !== 'opponents' && scope !== 'any') return null;
+    return { countOf: MANA_AMOUNT_PERMANENTS_MATCHING, filter: filter as CardFilter, scope };
+  }
+  if (typeof countOf === 'string' && (MANA_AMOUNT_COUNTS as readonly string[]).includes(countOf)) {
+    return { countOf: countOf as ManaAmountCount };
+  }
+  return null;
+}
+
+/** "this creature's power" / "~'s power" — the source's own power, as an amount. */
+const SOURCE_POWER_PHRASE = /^(?:this creature's|~'s|its) power$/;
+
+/** The amount a "where X is …" / "equal to …" phrase names, through the shared readers. */
+function manaAmountFromPhrase(phrase: string): ManaAmountSource | null {
+  const text = phrase.trim().toLowerCase();
+  if (SOURCE_POWER_PHRASE.test(text)) return { countOf: 'sourcePower' };
+  return manaAmountSourceOf(whereXBinding(text));
+}
+
+/**
+ * §3.164 — a mana payload whose AMOUNT the board decides, as the four printed
+ * shapes (83 cards on the corpus): "{G} for each creature you control",
+ * "an amount of {G} equal to your devotion to green", "X mana of any one color,
+ * where X is this creature's power", "X mana in any combination of colors,
+ * where X is the number of creatures you control with defender".
+ */
+function parseDerivedManaPayload(
+  payload: string,
+): { readonly produces: readonly ManaProduction[]; readonly amount: ManaAmountSource; readonly anyCombination?: true } | null {
+  const text = payload.trim();
+  const forEach = /^((?:\{[wubrgc]\})+) for each (.+)$/.exec(text);
+  if (forEach) {
+    const colors = manaSymbols(forEach[1] ?? '');
+    const amount = manaAmountSourceOf(derivedEachValue(forEach[2] ?? ''));
+    return colors === null || amount === null ? null : { produces: [productionFromColors(colors)], amount };
+  }
+  const equalTo = /^an amount of (\{[wubrgc]\}) equal to (.+)$/.exec(text);
+  if (equalTo) {
+    const colors = manaSymbols(equalTo[1] ?? '');
+    const amount = manaAmountFromPhrase(equalTo[2] ?? '');
+    return colors === null || amount === null ? null : { produces: [productionFromColors(colors)], amount };
+  }
+  const anyOne = /^x mana of any one color, where x is (.+)$/.exec(text);
+  if (anyOne) {
+    const amount = manaAmountFromPhrase(anyOne[1] ?? '');
+    return amount === null ? null : { produces: ANY_COLOR.map((color) => productionFromColors([color])), amount };
+  }
+  const combination = /^x mana in any combination of colors, where x is (.+)$/.exec(text);
+  if (combination) {
+    const amount = manaAmountFromPhrase(combination[1] ?? '');
+    return amount === null
+      ? null
+      : { produces: ANY_COLOR.map((color) => productionFromColors([color])), amount, anyCombination: true };
+  }
+  return null;
+}
+
 /** Card types an "Activate only if you control N or more …" clause may count. */
 const COUNTABLE_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
   artifacts: 'artifact',
@@ -11980,6 +12079,68 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     // The "add" half is the ordinary payload parser, so every production shape
     // the other rules read ("one mana of any color", "three mana of any one
     // color", a printed run) is available here with no second grammar.
+    id: 'mana-ability-derived-amount',
+    description:
+      '"{T}: Add {G} for each creature you control" / "…an amount of {G} equal to your devotion to green" / "…X mana of any one color, where X is this creature\'s power" / "…X mana in any combination of colors, where X is …" — with an optional mana cost (§3.164)',
+    /*
+     * The AMOUNT is data on the ability (`ManaAbility.amount`), multiplied
+     * into the chosen mode as the ability is activated; "in any combination"
+     * is a flag the engine honours by accepting a split on the action. The
+     * fixed-payload rules above decline these shapes (their grammars have no
+     * "for each" / "where X is"), so this rule's broad pattern never shadows
+     * one of them: it is tried after them and refuses everything but the four
+     * derived shapes.
+     */
+    pattern: /^(?:((?:\{[^}]+\})+), )?\{t\}: add (.+)$/,
+    build(match) {
+      const derived = parseDerivedManaPayload(match[2] ?? '');
+      if (derived === null) return null;
+      const costText = match[1];
+      const mana = costText === undefined ? undefined : parseCostWithHybrids(costText);
+      if (costText !== undefined && !mana) return null;
+      return {
+        manaAbilities: [
+          {
+            produces: derived.produces,
+            amount: derived.amount,
+            ...(derived.anyCombination ? { anyCombination: true } : {}),
+            ...(mana ? { cost: { mana } } : {}),
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'mana-ability-parley',
+    description:
+      '"{T}: Each player reveals the top card of their library. For each nonland card revealed this way, add {G} and you gain 1 life. Then each player draws a card." (Selvala, Explorer Returned — §3.164)',
+    /*
+     * A MANA ability (CR 605.1a: no target, adds mana) whose amount is decided
+     * by a reveal, so it compiles to a rider the engine performs as the
+     * ability resolves (`ManaAbilityRider.parley`). The one mode is EMPTY: the
+     * planner cannot know the amount before the reveal and must not count on
+     * it, and the engine adds what the reveal earns. "Parley —" is an ability
+     * word and is stripped before this rule sees the line.
+     */
+    pattern: new RegExp(
+      `^\\{t\\}: each player reveals the top card of their library\\. for each nonland card revealed this way, add (\\{[wubrgc]\\}) and you gain ${COUNT_TOKEN} life\\. then each player draws a card$`,
+    ),
+    build(match) {
+      const colors = manaSymbols(match[1] ?? '');
+      const life = parseCount(match[2]);
+      if (colors === null || life === null || life < 0) return null;
+      return {
+        manaAbilities: [
+          {
+            produces: [{}],
+            rider: { parley: { manaPerNonland: productionFromColors(colors), lifePerNonland: life, thenEachPlayerDraws: true } },
+            label: 'Parley: reveal, add mana per nonland card, then each player draws',
+          },
+        ],
+      };
+    },
+  },
+  {
     id: 'mana-ability-spend-restriction',
     description: '"{T}: Add one mana of any color. Spend this mana only to cast a creature spell"',
     pattern: /^\{t\}: add (.+?)\. spend this mana only to (.+)$/,
