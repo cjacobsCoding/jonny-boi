@@ -11,13 +11,14 @@ import { loadCardPool } from '../sim-pool.js';
 import { toSimPayload } from '../sim-format.js';
 import { applyManabaseToDeck } from './manabaseApply.js';
 
+/** A saved deck's id for a card, by the name the WEB INDEX prints (a DFC names both faces). */
 function id(name: string): string {
   const card = allAvailableCards().find((c) => c.name === name);
   if (!card) throw new Error(`no pool card named "${name}"`);
   return card.id;
 }
 
-/** A two-colour saved deck: 22 lands, playsets and part-sets, 60 cards. */
+/** A two-colour saved deck: 24 lands, playsets and part-sets, 60 cards. */
 function gwDeck(): Deck {
   const entries: Array<[string, number]> = [
     ['Llanowar Elves', 4],
@@ -31,7 +32,7 @@ function gwDeck(): Deck {
     ['Restoration Angel', 2],
     ['Cloudshift', 4],
     ['Conjurer\'s Closet', 3],
-    ['Skyclave Cleric', 2],
+    ['Wall of Omens', 2],
     ['Selesnya Guildgate', 2],
     ['Forest', 12],
     ['Plains', 10],
@@ -111,6 +112,33 @@ describe('applyManabaseToDeck', () => {
     expect(result.applied).toBe(false);
     expect(result.deck).toBe(edited);
     expect(result.note).toBe(`Not applied: “${variant.label}” needs 2 Plains and the deck has 1.`);
+  });
+
+  it('matches a modal double-faced card by its FRONT face, as the pool and the variant name it', () => {
+    // The web index names Skyclave Cleric by both faces; the pool's definition
+    // (and so a count step) says "Skyclave Cleric". A deck holding the MDFC
+    // must still be found when the step names the front face.
+    const mdfc: Deck = {
+      ...deck,
+      cards: deck.cards.map((e) =>
+        e.name === 'Wall of Omens' ? { cardId: id('Skyclave Cleric // Skyclave Basilica'), count: 2, name: 'Skyclave Cleric // Skyclave Basilica' } : e,
+      ),
+    };
+    const step = { outId: 'pool-id-unused', outName: 'Skyclave Cleric', inId: id('Forest'), inName: 'Forest', copies: 1 };
+    const variant: ManabaseVariant = {
+      key: 'count:+1',
+      kind: 'count',
+      label: '25 lands (+1 Forest, −1 Skyclave Cleric)',
+      note: '',
+      steps: [step],
+      landCount: 25,
+      slotsChanged: 1,
+    };
+    const result = applyManabaseToDeck(mdfc, variant);
+    expect(result.applied).toBe(true);
+    const after = countsByName(result.deck);
+    expect(after.get('Skyclave Cleric // Skyclave Basilica')).toBe(1);
+    expect(after.get('Forest')).toBe(13);
   });
 
   it('gathers copies across two printings of the same basic', () => {

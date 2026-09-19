@@ -27,14 +27,28 @@ export interface ApplyManabaseResult {
   readonly note: string;
 }
 
+/** The separator Scryfall prints between the faces of a two-faced card's name. */
+const FACE_SEPARATOR = ' // ';
+
+/**
+ * A card's name as the RULES know it — the front face. The web index names a
+ * modal double-faced card by both faces ("Skyclave Cleric // Skyclave
+ * Basilica") while the pool's definition, and so a variant's step, names the
+ * front face alone; the two must compare as one card.
+ */
+function frontFaceName(name: string): string {
+  const separator = name.indexOf(FACE_SEPARATOR);
+  return (separator < 0 ? name : name.slice(0, separator)).trim().toLowerCase();
+}
+
 /**
  * The saved deck's entries that ARE `name`, by the card each id resolves to.
  * Matched by NAME because a saved deck holds a printing id and the variant
  * names the pool's printing; the two are the same card to the rules.
  */
 function entriesNamed(deck: Deck, name: string): readonly { readonly cardId: string; readonly count: number }[] {
-  const key = name.trim().toLowerCase();
-  return deck.cards.filter((entry) => (getCard(entry.cardId)?.name ?? entry.name ?? '').trim().toLowerCase() === key);
+  const key = frontFaceName(name);
+  return deck.cards.filter((entry) => frontFaceName(getCard(entry.cardId)?.name ?? entry.name ?? '') === key);
 }
 
 /** The id the deck should add for a variant's in card: the pool's, or the index's by name. */

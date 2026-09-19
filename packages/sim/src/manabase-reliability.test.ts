@@ -140,9 +140,12 @@ describe('the reliability watch on a scripted game', () => {
     heroMain(state, watch, 9, [ELF], 0);
     watch.onEvent?.({ type: 'turnBegin', turn: 10, activePlayer: 'B' });
 
-    // Hero turn 6, cut short by the game ending: not judged.
+    // Hero turn 6, cut short by the game ending: a land held, none played — and
+    // NOT judged a miss, because the turn never completed. (Colour screw is
+    // judged at its window, so it would count mid-turn; a land in hand keeps
+    // the window closed here.)
     watch.onEvent?.({ type: 'turnBegin', turn: 11, activePlayer: 'A' });
-    heroMain(state, watch, 11, [ELF], 0);
+    heroMain(state, watch, 11, [FOREST], 0);
 
     const observation = reliabilityOf(watch.finish({} as never));
     expect(observation).toEqual({
@@ -231,7 +234,8 @@ describe('the settled-state seam and the watch on whole games', () => {
 describe('the paired runner with and without a watch', () => {
   const gauntlet = [loadDeck(MONO_RED_AGGRO, pool)];
   const SEED = 20260919;
-  const CANDIDATE = { out: 'Wall of Blossoms', in: 'Elvish Visionary' } as const;
+  /** A legal swap on Selesnya Blink (Llanowar Elves is not in the list, so a playset fits). */
+  const CANDIDATE = { out: 'Wall of Blossoms', in: 'Llanowar Elves' } as const;
 
   it('without a watch nothing about a record or a slice changes', () => {
     const runner = createPairedArmRunner(SELESNYA_BLINK, { gauntletDecks: gauntlet, pilots: pilots(), pool, registry, seed: SEED });
@@ -249,11 +253,12 @@ describe('the paired runner with and without a watch', () => {
       pool,
       registry,
       seed: SEED,
+      // One copy, so most games never draw the one slot and most variant games
+      // are answered from the base record — observation included.
+      runOptions: { swapScope: 'one' },
       watchGames: () => createReliabilityWatch(),
     });
     const games = 8;
-    // A one-copy swap: most games never draw the one slot, so most variant games
-    // are answered from the base record — observation included.
     const arm = runner.advance(runner.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in), games);
     expect(arm.variantGamesSkipped).toBeGreaterThan(0);
     expect(arm.observedBySlot).toHaveLength(games);
@@ -270,7 +275,9 @@ describe('the paired runner with and without a watch', () => {
   it('a variant arm refuses a deck of another size, and reports the slots it changed', () => {
     const runner = createPairedArmRunner(SELESNYA_BLINK, { gauntletDecks: gauntlet, pilots: pilots(), pool, registry, seed: SEED });
     const shorter: Deck = { ...SELESNYA_BLINK, cards: SELESNYA_BLINK.cards.map((e) => (e.cardId === 'Forest' ? { ...e, count: 7 } : e)) };
-    expect(() => runner.openVariantArm({ key: 'short', label: 'short', variantDeck: shorter, slotsChanged: 1 })).toThrow(/60 cards/);
+    expect(() => runner.openVariantArm({ key: 'short', label: 'short', variantDeck: shorter, slotsChanged: 1 })).toThrow(
+      /has 59 cards but the base deck has 60/,
+    );
     const rewritten = applySwap(SELESNYA_BLINK, { out: 'Forest', in: 'Plains' }, pool, { copies: 2 });
     const handle = runner.openVariantArm({ key: 'mix:Forest>Plains:2', label: 'Forest/Plains 8/8 → 6/10', variantDeck: rewritten, slotsChanged: 2 });
     runner.advance(handle, 2);
@@ -364,7 +371,9 @@ describe('aggregation', () => {
     expect(pairedMeanPValue([])).toBe(1);
     expect(pairedMeanPValue([0, 0, 0])).toBe(1);
     expect(pairedMeanPValue([1, 1, 1])).toBe(0);
-    expect(pairedMeanPValue([1, -1, 1, -1])).toBe(1);
+    // A zero mean with spread: the two-sided tail of z = 0, within the erf
+    // approximation's 1e-7 (it is 0.999999999, not a literal 1).
+    expect(pairedMeanPValue([1, -1, 1, -1])).toBeCloseTo(1, 6);
     expect(pairedMeanPValue(Array(50).fill(1).map((v: number, i) => v + (i % 2 === 0 ? 0.1 : -0.1)))).toBeLessThan(0.001);
   });
 });

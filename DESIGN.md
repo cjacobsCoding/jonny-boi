@@ -11087,6 +11087,130 @@ B 28, C 25, D 28, E 31, F 20, and a handful the rows reached through the pre-pas
 place — Ground Rift's *"target creature WITHOUT FLYING can't block"* through the target-bound
 strip, Fleeting Effigy's end-step *"return this creature to its owner's hand"* as a trigger body.
 
+### 3.175 The Lab experiments with manabases — land-only variants, judged by win rate AND measured reliability — ✅ done
+
+> "make it so the lab can experiment with different manabases - both amounts and types of lands - to
+> see which makes the deck perform better and more reliably. Right now, there arent really any tools
+> for that yet"
+
+**What it is.** A fourth Lab tab, **Manabase**: variants of the hero that differ ONLY in their lands,
+each played against the base deck on the same games (the §3.5 paired machinery, common random
+numbers, McNemar) and reported on TWO axes side by side — the paired win-rate verdict, Holm-corrected
+over the whole family exactly as Suggestions corrects its list (§3.6), and the RELIABILITY of the
+draws, read off the real games. The two are never blended into one number; the rule that picks a
+recommendation is printed on the panel. Apply replaces the hero's lands through the Lab's existing
+apply path.
+
+**The family is closed, and every label says what it is** (`packages/sim/src/manabase.ts`,
+`manabase-config.ts`). Three sweeps, each a pure function of the decklist and the pool:
+
+| sweep | what one variant is | label |
+|---|---|---|
+| land COUNT, `base ± k` (`LAND_COUNT_SWEEP_RADIUS` 2) | one copy of the most-played basic traded for one copy of the cheapest nonland WITH ROOM under the copy limit (or, going up, the cheapest that HAS the copies), so the deck stays the same size and the comparison is fair | `23 lands (−1 Forest, +1 Elvish Visionary)` |
+| colour MIX, `±1 … ±k` (`COLOR_MIX_SWEEP_RADIUS` 2) | basics of one type traded for another, both directions of every pair the deck runs | `Forest/Plains 8/8 → 7/9` |
+| land TYPE | a playset (`LAND_TYPE_VARIANT_COPIES` 4) of a PLAIN dual from the pool that taps for two of the deck's colours, replacing two basics of each; one variant per functional signature (entry rule × basic-land-typed or not), the equivalents named on it | `4 Temple Garden for 2 Forest + 2 Plains` — *shockland, pay 2 life or enters tapped* |
+
+"Plain" is a whitelist of definition keys (identity, type line, the two mana modes, the entry rule):
+a dual with a trigger, an activated ability or a static does something else and is left out, so
+what differs between two type variants is exactly the entry rule. The entry rules are a CLOSED
+family table (`DUAL_LAND_FAMILIES`: untapped, shock, check, fast, slow, battle, reveal, conditional,
+tapped), so "4 Sunpetal Grove" also says *checkland*. A deck outside a sweep's reach — no basics to
+shift, one colour, fewer than two of a basic, a dual it already runs or an equivalent of one, a
+count step no nonland has room for (Boros Aggro: nine 4-ofs) — is reported in `skipped` with the
+reason, on the panel BEFORE the run and in the report after. Never approximated.
+
+**A variant is a list of swaps, and that is what makes it paired.** `applySwap` rewrites a decklist
+IN PLACE (§3.5), so a variant expressed as `(out, in, copies)` steps and built by folding `applySwap`
+over them (`applyManabase`) has a library that differs from the base in exactly `slotsChanged`
+slots — four for a dual playset, one for a mix step. The runner's identical-game skip already reasons
+over a SET of differing slots (§3.6's playset generalisation), so a game that never draws one of the
+changed lands is the base game for free. The web Lab's Apply folds the SAME steps over the saved deck
+through `applySwapToDeck` (`lib/lab/manabaseApply.ts`), all-or-nothing, so what was tested and what
+lands in the deck cannot drift; a test compares the applied deck card for card with the deck the sim
+built and played.
+
+**Two optional seams, defaults unchanged.** `MatchOptions.onState` shows an observer every settled
+state a decision is about to be made from — one branch per decision, nothing when unset (a test
+counts the calls against `MatchResult.actions`). `PairedArmsOptions.watchGames` builds a
+`PairedGameWatch` per game; its `finish` result rides the base record (`PairedBaseRecord.observed`,
+on the wire too) and each variant slot (`PairedSlice.observedBySlot`), and a variant game the skip
+answers inherits the base game's reading because it IS that game. The runner also gained
+`openVariantArm` / `playVariantSlice` for a caller-built deck (refused unless it is the base deck's
+length), the seam a removal lane (§3.174) can build on. `summarize` reports a variant arm's
+`copiesSwapped` as the slots it changed and its `swap` as `{ out: 'base', in: <variant key> }`.
+
+**Reliability is measured, defined once** (`manabase-reliability.ts`, constants in
+`manabase-config.ts`):
+
+- **missed land drop** — a completed hero turn among the 2nd–4th (`LAND_DROP_TURNS`) that ended with
+  no land played, in the plain sense of "I missed my third land drop": the manabase's failure to
+  deliver, which is what the brief's acceptance names (a kept one-lander misses turns two and three).
+  The brief's parenthetical would have counted only a land HELD and not played — that is the pilot's
+  choice, not the deck's, and would read ~0% for every manabase — so it is kept as a SEPARATE count
+  (`heldLandTurns`, a footnote on the panel), and a turn cut short by the game ending is not judged;
+- **colour screw** — a hero turn from the 3rd on (`COLOUR_SCREW_FROM_TURN`) in which a spell in hand
+  was affordable in TOTAL mana and not in colours, both readings from the engine's own
+  `canAffordManaCost` (the printed cost, then the same mana value all generic), judged once per turn
+  at the first main-phase window after the land drop or once there is no land to drop;
+- **lands at the start of turn four** — lands the hero controls as its 4th own turn begins;
+- **mulligans — NOT MEASURED.** The harness never mulligans (CR 103.5 is a recorded engine gap,
+  `rules-manifest` §103); the rate would be identically zero and say nothing. The panel prints this
+  with the reason (`RELIABILITY_NOT_MEASURED`) rather than a zero.
+
+Rates get Wilson intervals; lands by turn four a mean with a normal interval. Because base and
+variant play the same seeds, each reading is PAIRED: the two rates go through McNemar on "the bad
+thing did not happen" and the mean through a paired z-test, and every metric gets the same
+`decideVerdict` the win rate uses — 'better' is MORE reliable. Only slots both arms observed enter a
+comparison; a missing reading leaves the denominator, it is never a zero.
+
+**The rule, stated** (`MANABASE_RECOMMENDATION_RULE`, printed verbatim on the panel): a variant
+QUALIFIES when its win rate is better or inconclusive and none of its reliability metrics is worse
+than the base; the RECOMMENDED manabase is the highest-ranked qualifier that is measurably better on
+at least one axis. When nothing is measurably better anywhere, nothing is recommended — the panel
+says so instead of promoting the best of the noise.
+
+**One scheduler, one correction.** A sweep is a family, so it is planned as a `SuggestionRunPlan`
+(each variant adapted to the ladder's candidate shape, `manabaseCandidateOf`, key
+`manabase>count:-1`), driven by `driveAdaptiveSearch` (scout, futility, rank cut, the §3.98
+leader-settled stop) and closed by `finishSuggestionRun` (Holm over the family, verdicts re-decided);
+`finishManabaseRun` joins the reliability half per arm. `runManabaseSweep` plays it inline on one
+runner (tests); the Lab plays the same plan over its pool with three watched shard kinds
+(`manabase-plan`, `manabase-base-slot-shard`, `manabase-variant-slice-shard`) and the same round
+loop `runSuggest` uses, readings kept by candidate key and absolute slot so arrival order cannot
+reach the report.
+
+**Reachability.** Lab → Manabase tab: the base manabase as built ("24 lands — 4
+Selesnya Guildgate, 4 Blossoming Sands, 8 Forest, 8 Plains · spells need W ×17, G ×19"), the three sweep toggles with
+the dual-family chips, the enumerated list and its skips in a fold-out, then "Try N manabases". The
+result is one table with the win-rate columns under one group header and the reliability columns
+under another (base → variant, with a *more reliable / less reliable / no difference shown* tag and
+the paired p on hover), the recommendation block with the rule, the NOT MEASURED line, the
+not-tested fold-out, and an Apply per row for a deck you own (gauntlet decks say they are
+read-only). Settings: `MANABASE_GAMES`, `MANABASE_SWEEP_RADIUS` in `lab-config.ts`.
+
+**Verification.** `manabase.test.ts`: the family for a fixed two-colour deck on a hand-built pool is
+EXACTLY the enumerated list, labels included (count 4, mix 4, type 5, one equivalence named, the
+off-colour dual, the tri-land and the trigger land never offered); skips by reason; Boros's full
+playsets; `applyManabase` changes exactly its slots (`swappedInstanceIdsFor` = 4, a `createGame`
+shuffle differs in 4 positions), gathers split lines, throws rather than under-applying; the real
+pool's Selesnya Blink family. `manabase-reliability.test.ts`: the watch on a scripted game (a kept
+one-lander: missed drops on turns two and three, one of them held; screw judged once, after the
+drop; a turn in progress at game end not judged); `onState` fires once per action; a landless deck
+misses all three and is mana-screwed, not colour-screwed; Plains-and-Elves is colour-screwed; the
+runner without a watch is byte-identical in shape, with one every record and slot carries a reading
+and a skipped game inherits; a variant arm refuses another size; **Selesnya Blink rigged to 15 lands
+against its 24-land self over 40 paired games: more missed drops, fewer lands by turn four, both
+verdicts 'better' for the 24 and 'worse' in reverse**; `runManabaseSweep` end to end. Web:
+`manabaseApply.test.ts` (acceptance 4 — the variant's lands and nothing else, agreeing card for card
+with the played deck, all-or-nothing on an edited deck), `manabase-panel.test.ts` (both axes, the
+rule, NOT MEASURED, Apply only for an editable hero). Red-then-green per claim in the lane report.
+
+**Left out, on purpose.** No CLI command (the tab is the deliverable; `runManabaseSweep` is exported
+for one). Panel settings are component state like the other tabs', not persisted. No per-turn
+breakdown of the reliability readings — the panel shows game rates; the per-game counts are in the
+report for a later drill-down. `runSuggest` was not rewritten onto a shared round driver while lane
+T is editing the same file; the two loops are the same shape and should become one after the wave.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

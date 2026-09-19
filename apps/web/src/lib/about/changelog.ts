@@ -70,6 +70,14 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.175',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'The Lab tries other manabases — and measures reliability, not just wins',
+    summary:
+      'A new Manabase tab in the Lab: it builds land-only variants of your deck — a land or two more or fewer, the basics shifted between colours, a playset of each dual from the pool that fits your colours — plays each one against your deck on the same games, and shows the win rate beside how often it missed a land drop, got colour-screwed, or had its lands by turn four. Two axes, side by side, with the rule that picks a recommendation printed; Apply swaps the lands in.',
+  },
+  {
     section: '3.173',
     date: '2026-09-19',
     kind: 'mechanic',
