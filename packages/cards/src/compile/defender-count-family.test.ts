@@ -126,24 +126,19 @@ describe('creaturesYouControlWithDefender — the discriminator', () => {
 
 // --- what stays reported, and exactly why -----------------------------------------
 
-describe('Axebane Guardian stays REPORTED', () => {
-  it('refuses "Add X mana in any combination of colors"', () => {
+describe('Axebane Guardian compiles WHOLE (§3.164)', () => {
+  it('reads "Add X mana in any combination of colors" as a board-derived amount over five colour modes', () => {
     /**
-     * The count half compiles (its phrase is a row of DERIVED_COUNTS, proven
-     * above by Doorkeeper). What cannot be said is the PRODUCTION half.
-     *
-     * `ManaAbility.produces` is a fixed list of `ManaProduction` records and
-     * `TapForManaAction.mode` is an INDEX into that list — core's own comment
-     * says a list whose length moved with the game would make the same action
-     * number mean different colours to the action generator, the payment
-     * planner and the apply path. "X mana in any combination of colors" is a
-     * multiset choice of size X over five colours, and X moves with the board:
-     * both the length and the contents vary per activation.
-     *
-     * Approximating it ("add X mana of any ONE color", or five fixed pips)
-     * would hand a wall deck a mana ability the printed card does not have, so
-     * the honest answer is to keep reporting until core can express a
-     * choose-N-colours production.
+     * HISTORY. Until §3.164 this test pinned the card as REPORTED, and the
+     * reason was real: `ManaAbility.produces` is a fixed list and
+     * `TapForManaAction.mode` an INDEX into it, so "X mana in any combination
+     * of colors" — a multiset choice of size X over five colours, X moving with
+     * the board — had no honest home, and approximating it ("any ONE color",
+     * five fixed pips) would have handed a wall deck an ability the card does
+     * not print. §3.164 kept the mode list fixed (one mode per colour, its
+     * length never moving) and put the SIZE in `ManaAbility.amount`, read at
+     * activation, with `anyCombination` letting one activation carry a split
+     * across the modes. That is the printed ability, so the pin flips.
      */
     const result = compileCard(
       card({
@@ -152,7 +147,9 @@ describe('Axebane Guardian stays REPORTED', () => {
           'Defender\n{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.',
       }),
     );
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.map((m) => m.text).join(' ')).toContain('any combination of colors');
+    expect(result.status).toBe('complete');
+    const ability = result.definition.manaAbilities?.[0];
+    expect(ability?.amount).toEqual({ countOf: 'creaturesYouControlWithDefender' });
+    expect(ability?.anyCombination).toBe(true);
   });
 });

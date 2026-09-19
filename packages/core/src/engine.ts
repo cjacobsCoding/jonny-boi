@@ -156,6 +156,8 @@ import {
 // §3.106 — upkeep costs and time counters; suspend.
 import { markBattlefieldEntry, TIME_COUNTER } from './upkeep-costs.js';
 import { settleDevotionForms } from './devotion.js';
+import { gainLifeAmount } from './life.js';
+import { manaAmountOf, scaleProduction, splitMatchesAmount } from './mana-amount.js';
 import { suspendWindowOpenFor } from './suspend.js';
 // §3.113 — the spell-count family: cast triggers and the library-pile windows.
 import { pushCastTriggers } from './cast-triggers.js';
@@ -3479,15 +3481,74 @@ function applyTapForMana(
     }
   }
 
+  // §3.164 — HOW MUCH. A board-derived amount multiplies the chosen mode, read
+  // now (CR 605.3 — a mana ability resolves at once); "in any combination of
+  // colors" may carry a split instead. A parley REVEALS to find its amount, so
+  // it too is settled here, before the mana is added.
+  let produced: ManaProduction = production;
+  const amountSpec = extra?.ability.amount;
+  const parley = extra?.ability.rider?.parley;
+  let parleyNonland = 0;
+  if (amountSpec !== undefined) {
+    const mod =
+      amountSpec.countOf === 'sourcePower' ? (indexContinuous(state).get(source.instanceId) ?? NO_MOD) : NO_MOD;
+    const amount = manaAmountOf(state, source, amountSpec, mod);
+    if (action.split !== undefined) {
+      if (extra?.ability.anyCombination !== true) {
+        return rejectWith(prevState, `${source.def.name}'s mana ability adds one colour per activation, not a combination`);
+      }
+      if (!splitMatchesAmount(action.split, amount, modes)) {
+        return rejectWith(prevState, `${source.def.name} adds exactly ${amount} mana in any combination of its colours`);
+      }
+      produced = action.split;
+    } else {
+      produced = scaleProduction(production, amount);
+    }
+  } else if (action.split !== undefined) {
+    return rejectWith(prevState, `${source.def.name}'s mana ability has no amount to split`);
+  } else if (parley !== undefined) {
+    // Each player reveals the top card of their library, controller first
+    // (APNAP is the controller's turn order; a two-seat parley is "you, then
+    // them"). A revealed card is public information: the event names it.
+    for (const who of [action.player, otherPlayer(action.player)] as const) {
+      const top = state.players[who].library[0];
+      if (top === undefined) continue;
+      emit({ type: 'cardRevealed', player: who, instanceId: top.instanceId, name: top.def.name, fromZone: 'library', sourceInstanceId: source.instanceId, matched: !isLand(top.def) });
+      if (!isLand(top.def)) parleyNonland += 1;
+    }
+    produced = scaleProduction(parley.manaPerNonland, parleyNonland);
+  }
+
   tapPermanentForMana(
     state,
     source,
     action.player,
-    production,
+    produced,
     emit,
     spendRestrictionMadeBy(source, extra?.ability.spendRestriction),
     extra?.ability.cost?.noTap === true,
   );
+
+  // §3.164 — the rest of a parley, after the mana: the life (through the one
+  // life-gain funnel, so "whenever you gain life" sees it) and the draws
+  // (through the one draw funnel, so a draw replacement applies), controller
+  // first. A parley that revealed no nonland card gains nothing and still
+  // draws — "then each player draws a card" is unconditional.
+  if (parley !== undefined) {
+    const life = parley.lifePerNonland * parleyNonland;
+    if (life > 0) {
+      const gained = gainLifeAmount(state, action.player, life, emit);
+      if (gained > 0) {
+        const player = state.players[action.player];
+        player.life += gained;
+        emit({ type: 'lifeChanged', player: action.player, delta: gained, to: player.life });
+        emit({ type: 'gainLife', player: action.player, amount: gained });
+      }
+    }
+    if (parley.thenEachPlayerDraws) {
+      for (const who of [action.player, otherPlayer(action.player)] as const) drawCardForPlayer(state, who, emit);
+    }
+  }
 
   // The RIDER runs as part of the ability's own resolution, AFTER the mana is
   // added — a pain land's damage is not a cost you may decline, and it is damage
@@ -3525,7 +3586,10 @@ function applyTapForMana(
     damage > 0 ||
     (extra?.ability.cost?.life ?? 0) > 0 ||
     extra?.ability.cost?.sacrificeSelf === true ||
-    extra?.ability.cost?.sacrificeAnother !== undefined
+    extra?.ability.cost?.sacrificeAnother !== undefined ||
+    // §3.164 — a parley draws, and a draw from an empty library is a loss the
+    // SBA pass settles; the reveal's life gain may also have moved a total.
+    parley !== undefined
   ) {
     checkStateBasedActions(state, emit);
   }

@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7115 cards.
+ * 7136 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -7132,6 +7132,25 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['beast'],
   },
+  // Defender
+  // {T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.
+  {
+    id: 'f0282af2-9b3f-4335-92ea-9db9267e8cd2',
+    name: 'Axebane Guardian',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 0,
+    toughness: 3,
+    keywords: { defender: true },
+    subtypes: ['human', 'druid'],
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        amount: { countOf: 'creaturesYouControlWithDefender' },
+        anyCombination: true,
+      },
+    ],
+  },
   {
     id: 'bfce7c02-ccc3-44cd-8087-627eaa6a072e',
     name: 'Axebane Stag',
@@ -9228,6 +9247,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // When this creature enters, if you control a creature with power 4 or greater, draw a card.
   // Plot {1}{G} (You may pay {1}{G} and exile this card from your hand. Cast it as a sorcery on a later turn without paying its mana cost. Plot only as a sorcery.)
   {
@@ -9250,9 +9272,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // Haste
   // {T}: Add one mana of any color. Spend this mana only to cast a creature spell.
   {
@@ -15122,6 +15141,19 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // {2}, {T}: Add {B} for each Swamp you control.
+  {
+    id: 'e1efb0d3-2c72-46ff-bdc1-1069967365a0',
+    name: 'Cabal Coffers',
+    types: ['land'],
+    manaAbilities: [
+      {
+        produces: [{ B: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfSubtypes: ['Swamp'] }, scope: 'you' },
+        cost: { mana: { generic: 2 } },
+      },
+    ],
+  },
   {
     id: 'd218d2a2-bb5d-4ea8-a131-341c574410b2',
     name: 'Cabal Evangel',
@@ -18121,6 +18153,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Haste
   // When this creature enters, create a 1/1 red Phyrexian Goblin creature token.
   {
@@ -18174,9 +18209,6 @@ const POOL_1: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 2, keywords: { menace: true } },
     },
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Changeling (This card is every creature type.)
   // Reach
   {
@@ -18461,6 +18493,17 @@ const POOL_2: readonly CardDefinition[] = [
         label: '{1}{b}: regenerate ~',
       },
     ],
+  },
+  // {T}: Add {G} for each creature you control.
+  {
+    id: 'be6fdec0-a2c4-4da2-ae14-961185eaee66',
+    name: 'Circle of Dreams Druid',
+    types: ['creature'],
+    cost: { G: 3 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'creaturesYouControl' } }],
   },
   // When this creature enters, you gain 2 life.
   // When this creature leaves the battlefield, draw a card.
@@ -22028,6 +22071,19 @@ const POOL_2: readonly CardDefinition[] = [
         label: 'Cast noncreature: ~ gets +3/+0 until end of turn',
       },
     ],
+  },
+  // Prototype {2}{G} — 1/3 (You may cast this spell with different mana cost, color, and size. It keeps its abilities and types.)
+  // {T}: Add an amount of {G} equal to this creature's power.
+  {
+    id: '50cc9b90-792e-4cf7-ab8c-cb616d94092a',
+    name: 'Cradle Clearcutter',
+    types: ['artifact', 'creature'],
+    cost: { generic: 6 },
+    power: 3,
+    toughness: 6,
+    subtypes: ['golem'],
+    alternativeCosts: { prototype: { cost: { generic: 2, G: 1 }, face: { power: 1, toughness: 3 } } },
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'sourcePower' } }],
   },
   // Trample
   // Echo {1}{G}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
@@ -26942,6 +26998,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // Target creature gets +2/+2 and gains flying until end of turn. You gain 2 life.
   {
     id: '69ce134a-25ef-4f8d-a385-7c29fc5707dc',
@@ -27042,9 +27101,6 @@ const POOL_2: readonly CardDefinition[] = [
       label: 'Enchant creature',
     },
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // At the beginning of combat on your turn, populate. The token created this way gains haste. Sacrifice it at the beginning of the next end step. (To populate, create a token that's a copy of a creature token you control.)
   {
     id: 'd95490fe-44f2-4f83-b587-b0df402d38ed',
@@ -32464,6 +32520,31 @@ const POOL_3: readonly CardDefinition[] = [
     ],
     produces: ['G', 'G', 'G'],
   },
+  // Other Elf creatures you control get +1/+1.
+  // {T}: Add {G} for each Elf you control.
+  {
+    id: '006ff5a3-355b-4a7d-b402-bb3c8d32a585',
+    name: 'Elvish Archdruid',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [
+      {
+        produces: [{ G: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfSubtypes: ['Elf'] }, scope: 'you' },
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], anyOfSubtypes: ['elf'], controller: 'you', excludeSource: true },
+        power: 1,
+        toughness: 1,
+        label: 'other elf creatures you control get +1/+1',
+      },
+    ],
+  },
   // First strike
   {
     id: '0e8411c9-4f6f-4301-ac36-386016a32852',
@@ -36101,6 +36182,9 @@ const POOL_3: readonly CardDefinition[] = [
     cost: { generic: 2, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 3 } }, { primitive: 'scry' }],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // {1}{R}: This creature gets +1/+0 until end of turn.
   {
     id: '52280963-ba5b-4735-b5cb-67866f8624c9',
@@ -36204,9 +36288,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   {
     id: '89f08297-f477-4330-a99e-3f0847c31364',
     name: 'Fearless Halberdier',
@@ -41411,6 +41492,14 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}: Add {G} for each creature you control.
+  {
+    id: '25b0b816-0583-44aa-9dc5-f3ff48993a51',
+    name: 'Gaea\'s Cradle',
+    types: ['land'],
+    legendary: true,
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'creaturesYouControl' } }],
+  },
   // Put a +1/+1 counter on target creature you control. It gains reach, trample, hexproof, and indestructible until end of turn. (It can't be the target of spells or abilities your opponents control. Damage and effects that say "destroy" don't destroy it.)
   {
     id: '5503186a-46fe-4956-8ae3-5ab3343f8a93',
@@ -45282,6 +45371,9 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Flash
   // {7}, {T}, Sacrifice this artifact: Destroy target permanent.
   {
@@ -45413,9 +45505,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // When this creature dies, destroy target land.
   {
     id: '9f5b02af-140e-404d-bf8a-6a706b323a13',
@@ -51174,6 +51263,37 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Vigilance
+  // Whenever another Human you control enters, put a +1/+1 counter on this creature.
+  // {T}: Add X mana of any one color, where X is this creature's power.
+  {
+    id: '36938a8e-8da0-4f27-86c3-6032aa7642b5',
+    name: 'Heronblade Elite',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { vigilance: true },
+    subtypes: ['human', 'warrior'],
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        amount: { countOf: 'sourcePower' },
+      },
+    ],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfSubtypes: ['human'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'another human (you) enters: put a +1/+1 counter on ~',
+      },
+    ],
+  },
   {
     id: '98534255-d8cd-4f42-8b90-f5672fb879a2',
     name: 'Hexplate Golem',
@@ -53995,6 +54115,9 @@ const POOL_5: readonly CardDefinition[] = [
     changeling: true,
     subtypes: ['shapeshifter'],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Enchant creature
   // Enchanted creature gets +2/+5.
   // Cycling {3} ({3}, Discard this card: Draw a card.)
@@ -54123,9 +54246,6 @@ const POOL_5: readonly CardDefinition[] = [
     subtypes: ['vampire'],
     madness: { generic: 2, R: 1 },
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // This artifact enters with three oil counters on it.
   // {4}, {T}, Remove an oil counter from this artifact: Create a 3/3 colorless Phyrexian Golem artifact creature token. Activate only as a sorcery.
   {
@@ -58046,6 +58166,31 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // If one or more +1/+1 counters would be put on a permanent you control, that many plus one +1/+1 counters are put on that permanent instead.
+  // {T}: Add X mana of any one color, where X is this creature's power.
+  {
+    id: '0be4e5f6-a1fc-4a91-aafe-f963878cd1b3',
+    name: 'Kami of Whispered Hopes',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['spirit'],
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        amount: { countOf: 'sourcePower' },
+      },
+    ],
+    replacements: [
+      {
+        event: 'counters',
+        applies: { recipientController: 'you', counterKind: '+1/+1' },
+        outcome: { plus: 1 },
+        label: 'if one or more +1/+1 counters would be put on a permanent you control, that many plus one +1/+1 counters are put on that permanent instead',
+      },
+    ],
+  },
   // Indestructible
   // As long as your devotion to green and white is less than seven, Karametra isn't a creature.
   // Whenever you cast a creature spell, you may search your library for a Forest or Plains card, put it onto the battlefield tapped, then shuffle.
@@ -58087,6 +58232,17 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'Cast creature: you may search your library for a forest or plains card, put it onto the battlefield tapped, then shuffle',
       },
     ],
+  },
+  // {T}: Add an amount of {G} equal to your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)
+  {
+    id: '374a1b7c-ce11-4734-aff2-b0bd00857fad',
+    name: 'Karametra\'s Acolyte',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 1,
+    toughness: 4,
+    subtypes: ['human', 'druid'],
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'devotionToGreen' } }],
   },
   // Other Warriors you control get +1/+1.
   {
@@ -63376,6 +63532,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // Protection from black
   {
     id: 'e6c75d89-e432-49aa-a407-555b223b7eff',
@@ -63512,9 +63671,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // Menace
   // Whenever a nontoken Knight you control dies, each opponent loses 1 life and you draw a card.
   {
@@ -65176,6 +65332,23 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // {2}, {T}: Add {B} for each Swamp you control.
+  {
+    id: '962a16bb-516c-4e74-b8dd-edd4c63c5fff',
+    name: 'Magus of the Coffers',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['human', 'wizard'],
+    manaAbilities: [
+      {
+        produces: [{ B: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfSubtypes: ['Swamp'] }, scope: 'you' },
+        cost: { mana: { generic: 2 } },
+      },
+    ],
+  },
   // Flying (This creature can't be blocked except by creatures with flying or reach.)
   {
     id: '855de173-6bec-457b-828e-28678b7d396e',
@@ -66434,6 +66607,31 @@ const POOL_7: readonly CardDefinition[] = [
           },
         ],
         label: 'Pay 2 life: prevent the next 1 damage that would be dealt to target creature this turn',
+      },
+    ],
+  },
+  // Whenever another Elf you control enters, put a +1/+1 counter on Marwyn.
+  // {T}: Add an amount of {G} equal to Marwyn's power.
+  {
+    id: 'aad61d99-5c8e-47b7-ab1a-e70905f59205',
+    name: 'Marwyn, the Nurturer',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    legendary: true,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'sourcePower' } }],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfSubtypes: ['elf'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'another elf (you) enters: put a +1/+1 counter on ~',
       },
     ],
   },
@@ -70052,6 +70250,25 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Reach
+  // {T}: Add X mana of any one color, where X is Mona Lisa's power.
+  {
+    id: 'c2164204-120c-4dff-86ac-46ca9012ccd9',
+    name: 'Mona Lisa, Science Geek',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 3,
+    legendary: true,
+    keywords: { reach: true },
+    subtypes: ['lizard', 'mutant'],
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        amount: { countOf: 'sourcePower' },
+      },
+    ],
+  },
   // Menace (This creature can't be blocked except by two or more creatures.)
   // When this creature enters, it deals 1 damage to any target.
   // Mountaincycling {2} ({2}, Discard this card: Search your library for a Mountain card, reveal it, put it into your hand, then shuffle.)
@@ -72299,6 +72516,9 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // As this land enters, you may reveal a Swamp or Forest card from your hand. If you don't, this land enters tapped.
   // {T}: Add {B} or {G}.
   {
@@ -72544,9 +72764,6 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { reach: true },
     subtypes: ['spider'],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   {
     id: 'f9b1628d-aacd-4e19-9ebb-bcd9b2842c91',
@@ -80697,6 +80914,22 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}: Add {G} for each Elf on the battlefield.
+  {
+    id: 'eb11921b-1b28-483f-a707-4de21a6daa31',
+    name: 'Priest of Titania',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [
+      {
+        produces: [{ G: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfSubtypes: ['Elf'] }, scope: 'any' },
+      },
+    ],
+  },
   // When this creature enters, add {R}{R}{R}.
   {
     id: 'd0a9f49c-f15c-4b2d-b6a5-8efc3c430d87',
@@ -81456,6 +81689,9 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // Equipped creature gets +0/+2 and has toxic 1. (Players dealt combat damage by equipped creature also get a poison counter.)
   // Equip {1}
   {
@@ -81719,9 +81955,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // Psychotic Haze deals 1 damage to each creature and each player.
   // Madness {1}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -83151,6 +83384,34 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
     producesOptions: [{ G: 1 }, { U: 1 }],
+  },
+  // When this creature enters, you may mill three cards. (You may put the top three cards of your library into your graveyard.)
+  // {T}: Add an amount of {G} equal to this creature's power.
+  {
+    id: '9bc5c316-6a41-48ba-864b-da3030dd3e0e',
+    name: 'Rainveil Rejuvenator',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['elephant', 'druid'],
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'sourcePower' } }],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may mill three cards',
+              valence: 'gain',
+              effects: [{ primitive: 'mill', params: { amount: 3, self: true } }],
+            },
+          },
+        ],
+        label: 'Enters: you may mill three cards',
+      },
+    ],
   },
   // Return target creature card from your graveyard to your hand.
   {
@@ -88281,6 +88542,23 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}: Add {G} for each Forest you control.
+  {
+    id: '6d63a085-101c-4749-a3a4-1d335c25b10e',
+    name: 'Rofellos, Llanowar Emissary',
+    types: ['creature'],
+    cost: { G: 2 },
+    power: 2,
+    toughness: 1,
+    legendary: true,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [
+      {
+        produces: [{ G: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfSubtypes: ['Forest'] }, scope: 'you' },
+      },
+    ],
+  },
   // Whenever equipped creature deals combat damage to a player, you may draw a card.
   // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -90418,6 +90696,25 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}: Add X mana of any one color, where X is the number of enchantments you control.
+  {
+    id: '3c9ac089-6962-48fd-bf67-f041ece27fa9',
+    name: 'Sanctum Weaver',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 1, G: 1 },
+    power: 0,
+    toughness: 2,
+    subtypes: ['dryad'],
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfTypes: ['enchantment'] }, scope: 'you' },
+      },
+    ],
+  },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
     id: '65ce3960-abf1-4f28-8434-ab3b27d3b7cb',
@@ -90736,9 +91033,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.
   {
     id: 'b1daf5bb-c8e9-4e79-a532-ca92a9a885cd',
@@ -93905,6 +94199,24 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // Parley — {T}: Each player reveals the top card of their library. For each nonland card revealed this way, add {G} and you gain 1 life. Then each player draws a card. (Activate only as an instant.)
+  {
+    id: '28c1b84a-a21b-4df1-9fc9-5b387fb56810',
+    name: 'Selvala, Explorer Returned',
+    types: ['creature'],
+    cost: { generic: 1, W: 1, G: 1 },
+    power: 2,
+    toughness: 4,
+    legendary: true,
+    subtypes: ['elf', 'scout'],
+    manaAbilities: [
+      {
+        produces: [{}],
+        rider: { parley: { manaPerNonland: { G: 1 }, lifePerNonland: 1, thenEachPlayerDraws: true } },
+        label: 'Parley: reveal, add mana per nonland card, then each player draws',
+      },
+    ],
+  },
   // Flying
   // When this creature enters, scry 1.
   {
@@ -94408,6 +94720,19 @@ const POOL_10: readonly CardDefinition[] = [
         affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
         keywords: { vigilance: true },
         label: 'other creatures you control have vigilance',
+      },
+    ],
+  },
+  // {T}: Add {W} for each enchantment you control.
+  {
+    id: 'f7a18130-dbaa-4657-a885-3a96a985935a',
+    name: 'Serra\'s Sanctum',
+    types: ['land'],
+    legendary: true,
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfTypes: ['enchantment'] }, scope: 'you' },
       },
     ],
   },
@@ -99416,6 +99741,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // Target creature gets +3/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)
   {
     id: '65ec8b61-e602-41f2-ac1a-64e150b2ce18',
@@ -99823,9 +100151,6 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // Wither (This deals damage to creatures in the form of -1/-1 counters.)
   // Whenever this creature blocks or becomes blocked, it gets -3/-0 until end of turn.
   {
@@ -108632,6 +108957,9 @@ const POOL_11: readonly CardDefinition[] = [
     keywords: { flash: true, reach: true },
     subtypes: ['spider'],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Double strike (This creature deals both first-strike and regular combat damage.)
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
@@ -109006,9 +109334,6 @@ const POOL_11: readonly CardDefinition[] = [
     subtypes: ['human', 'druid'],
     manaAbilities: [{ derivedColors: 'landsOpponentsControl' }],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Equipped creature gets +1/+0.
   // Whenever equipped creature dies, you gain 3 life.
   // Equip {1}
@@ -113820,6 +114145,19 @@ const POOL_12: readonly CardDefinition[] = [
     ],
     produces: ['U'],
   },
+  // {T}: Add {U} for each artifact you control.
+  {
+    id: 'fd99bce1-ce39-464b-8e61-2631eb3ed6f6',
+    name: 'Tolarian Academy',
+    types: ['land'],
+    legendary: true,
+    manaAbilities: [
+      {
+        produces: [{ U: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfTypes: ['artifact'] }, scope: 'you' },
+      },
+    ],
+  },
   // Kicker {1}{W} (You may pay an additional {1}{W} as you cast this spell.)
   // Flying
   // When this creature enters, if it was kicked, destroy target enchantment.
@@ -117577,6 +117915,9 @@ const POOL_12: readonly CardDefinition[] = [
     types: ['land'],
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ U: 1 }, { B: 1 }], rider: { damageToController: 1 } }],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // ({T}: Add {U} or {B}.)
   {
     id: '26cee543-6eab-494e-a803-33a5d48d7d74',
@@ -117881,9 +118222,6 @@ const POOL_12: readonly CardDefinition[] = [
     changeling: true,
     subtypes: ['shapeshifter'],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // {7}, {T}, Sacrifice this artifact: Destroy target permanent.
   {
     id: 'e142122f-3a04-436e-a958-dc2224b4fc6d',
@@ -121126,6 +121464,17 @@ const POOL_13: readonly CardDefinition[] = [
         label: 'Dies: you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
       },
     ],
+  },
+  // {T}: Add an amount of {G} equal to this creature's power.
+  {
+    id: 'b50679df-bf82-4bb2-9fe3-8ebd7a9decde',
+    name: 'Viridian Joiner',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [{ produces: [{ G: 1 }], amount: { countOf: 'sourcePower' } }],
   },
   // Equipped creature has "{T}: This creature deals 1 damage to any target."
   // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
@@ -125751,6 +126100,22 @@ const POOL_13: readonly CardDefinition[] = [
     ],
     effects: [{ primitive: 'exileTarget', params: { targets: 'enchantment' } }],
   },
+  // {T}: Add X mana of any one color, where X is the number of Elves on the battlefield.
+  {
+    id: '5670ae47-befb-4aaf-a77a-d7dbd4d8dc08',
+    name: 'Wirewood Channeler',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'druid'],
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        amount: { countOf: 'permanentsMatching', filter: { anyOfSubtypes: ['Elf'] }, scope: 'any' },
+      },
+    ],
+  },
   // {T}: Add {G}.
   {
     id: '10a34e31-97f1-40e8-9d91-a8139af7f096',
@@ -126044,6 +126409,9 @@ const POOL_13: readonly CardDefinition[] = [
       },
     },
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // When this artifact enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
   // {3}{U}, Sacrifice this artifact: Draw two cards.
   {
@@ -126503,9 +126871,6 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // ({T}: Add {R} or {G}.)
   // This land enters tapped.
   {

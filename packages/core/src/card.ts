@@ -23,6 +23,7 @@ import type { LandPlayZone } from './actions.js';
 // (`copy.ts` imports this module's `unionProtection` for real).
 import type { CopyAsEntersSpec } from './copy.js';
 import type { CreatureUnlessDevotion } from './devotion.js';
+import type { ManaAmountSource } from './mana-amount.js';
 import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
 // TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
 // and subtype readers, so a VALUE import here would close a runtime cycle. A
@@ -2223,6 +2224,30 @@ export interface ManaAbilityRider {
    * routes it through the same player-damage path combat and burn use.
    */
   readonly damageToController?: number;
+  /**
+   * §3.164 — PARLEY on a mana ability (Selvala, Explorer Returned): "Each player
+   * reveals the top card of their library. For each nonland card revealed this
+   * way, add {G} and you gain 1 life. Then each player draws a card."
+   *
+   * The reveal DECIDES the amount, so it happens before the mana is added; the
+   * life is gained through the one life-gain funnel (so "whenever you gain
+   * life" sees it and a Rhox Faithmender doubles it), and each player draws
+   * through the one draw funnel, controller first. A mana ability resolves at
+   * once (CR 605.3), so none of this uses the stack. The engine performs all of
+   * it; the PILOT plans no mana from this ability — the amount is unknown until
+   * the reveal, and a plan that assumed it would be a plan the engine refuses.
+   */
+  readonly parley?: ParleyManaRider;
+}
+
+/** What one nonland card revealed by a parley mana ability is worth (§3.164). */
+export interface ParleyManaRider {
+  /** Mana added per nonland card revealed. */
+  readonly manaPerNonland: ManaProduction;
+  /** Life the controller gains per nonland card revealed. */
+  readonly lifePerNonland: number;
+  /** "Then each player draws a card." */
+  readonly thenEachPlayerDraws: boolean;
 }
 
 /**
@@ -2301,6 +2326,22 @@ export interface ManaAbility {
   readonly cost?: ManaAbilityCost;
   /** An effect that is part of this ability's resolution ("deals 1 damage to you"). */
   readonly rider?: ManaAbilityRider;
+  /**
+   * §3.164 — how MUCH one activation adds, when the board decides it: "Add {G}
+   * for each creature you control" (Gaea's Cradle), "…equal to your devotion to
+   * green" (Karametra's Acolyte), "Add X mana of any one color, where X is this
+   * creature's power". A multiplier on the chosen mode, read as the ability is
+   * activated; absent means one, which is every ability written before this.
+   * See `mana-amount.ts` for why the vocabulary is the battlefield subset.
+   */
+  readonly amount?: ManaAmountSource;
+  /**
+   * §3.164 — "in any COMBINATION of colors" (Axebane Guardian): the modes are
+   * the colours, each worth the whole amount, and an activation may instead
+   * carry a `split` across them (`TapForManaAction.split`). Absent means one
+   * mode per tap, which is every other multi-mode ability.
+   */
+  readonly anyCombination?: boolean;
   /** "Activate only if …". */
   readonly restriction?: ManaActivationCondition;
   /**

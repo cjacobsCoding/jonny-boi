@@ -83,6 +83,7 @@ import {
   defenseOf,
   loyaltyOf,
   MANA_COLORS,
+  manaExtrasOf,
   manaModesOf,
   poolTotal,
   planManaPayment,
@@ -1280,6 +1281,14 @@ function fetchesALand(ability: { readonly effects: readonly EffectRef[] }): bool
 }
 
 /**
+ * §3.164 — how many nonland cards a two-seat parley is expected to reveal: two
+ * tops from constructed decks of roughly 40% land, rounded DOWN to one so the
+ * pilot never counts on the second. A named constant rather than a read of the
+ * libraries, which are hidden information the pilot must not consult.
+ */
+const PARLEY_EXPECTED_NONLAND_REVEALS = 1;
+
+/**
  * Memo for {@link fetchesALand}. An activated ability is immutable card data
  * shared by every instance of its definition, so the answer can never change —
  * and the question is asked once per offered ability on every rollout ply.
@@ -1313,6 +1322,23 @@ function bestOfferedActivation(
   let best: { action: GameAction; score: number; label: string } | undefined;
   let cards: ReturnType<typeof cardValueContext> | undefined;
   for (const action of legalActions) {
+    // §3.164 — a PARLEY (Selvala, Explorer Returned) is a mana ability the
+    // planner deliberately plans nothing from: its amount is decided by a
+    // reveal. It is still a play — the reveal draws both players a card and
+    // gains a life per nonland card revealed — so it is priced here by the life
+    // it is expected to gain, and whatever mana it earns is floating for the
+    // next decision. The symmetric draw is priced at nothing: a card each way.
+    if (action.kind === 'tapForMana') {
+      const source = findInstance(view, action.instanceId);
+      const parley =
+        source?.def.manaAbilities === undefined ? undefined : manaExtrasOf(source.def)?.[action.mode ?? 0]?.ability.rider?.parley;
+      if (parley === undefined) continue;
+      const score = parley.lifePerNonland * PARLEY_EXPECTED_NONLAND_REVEALS * weights.modeLifePerPointValue;
+      if (score <= weights.passScore) continue;
+      if (best !== undefined && score <= best.score) continue;
+      best = { action, score, label: ctx.trace ? `parley with ${source!.def.name}` : NO_REASON };
+      continue;
+    }
     if (action.kind !== "activateAbility") continue;
     const source = findInstance(view, action.instanceId);
     const ability = source?.def.activated?.[action.abilityIndex];

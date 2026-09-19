@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T09:02:57.569Z",
+  "generatedAt": "2026-09-19T09:43:24.896Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7147,
+  "requested": 7168,
   "unresolved": [],
   "cards": [
     {
@@ -19910,6 +19910,59 @@
         "normal": "https://cards.scryfall.io/normal/front/2/f/2f420b35-1f73-41c8-a15f-1aee4af0999c.jpg?1783933673",
         "large": "https://cards.scryfall.io/large/front/2/f/2f420b35-1f73-41c8-a15f-1aee4af0999c.jpg?1783933673",
         "art_crop": "https://cards.scryfall.io/art_crop/front/2/f/2f420b35-1f73-41c8-a15f-1aee4af0999c.jpg?1783933673"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f0282af2-9b3f-4335-92ea-9db9267e8cd2",
+      "name": "Axebane Guardian",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Druid",
+      "oracleText": "Defender\n{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.",
+      "power": 0,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Defender"
+      ],
+      "set": "tdc",
+      "collectorNumber": "248",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/0/f0282af2-9b3f-4335-92ea-9db9267e8cd2.jpg?1783907052",
+        "normal": "https://cards.scryfall.io/normal/front/f/0/f0282af2-9b3f-4335-92ea-9db9267e8cd2.jpg?1783907052",
+        "large": "https://cards.scryfall.io/large/front/f/0/f0282af2-9b3f-4335-92ea-9db9267e8cd2.jpg?1783907052",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/0/f0282af2-9b3f-4335-92ea-9db9267e8cd2.jpg?1783907052"
       },
       "localImages": {},
       "layout": "normal",
@@ -43399,6 +43452,53 @@
       "faces": []
     },
     {
+      "id": "e1efb0d3-2c72-46ff-bdc1-1069967365a0",
+      "name": "Cabal Coffers",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [],
+        "absent": true
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "{2}, {T}: Add {B} for each Swamp you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "mh2",
+      "collectorNumber": "301",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/1/e1efb0d3-2c72-46ff-bdc1-1069967365a0.jpg?1783926775",
+        "normal": "https://cards.scryfall.io/normal/front/e/1/e1efb0d3-2c72-46ff-bdc1-1069967365a0.jpg?1783926775",
+        "large": "https://cards.scryfall.io/large/front/e/1/e1efb0d3-2c72-46ff-bdc1-1069967365a0.jpg?1783926775",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/1/e1efb0d3-2c72-46ff-bdc1-1069967365a0.jpg?1783926775"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d218d2a2-bb5d-4ea8-a131-341c574410b2",
       "name": "Cabal Evangel",
       "manaCost": {
@@ -52962,6 +53062,57 @@
         "normal": "https://cards.scryfall.io/normal/front/2/2/22dcf40c-62fb-4205-807e-71655066a61b.jpg?1783942756",
         "large": "https://cards.scryfall.io/large/front/2/2/22dcf40c-62fb-4205-807e-71655066a61b.jpg?1783942756",
         "art_crop": "https://cards.scryfall.io/art_crop/front/2/2/22dcf40c-62fb-4205-807e-71655066a61b.jpg?1783942756"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "be6fdec0-a2c4-4da2-ae14-961185eaee66",
+      "name": "Circle of Dreams Druid",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 3,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Druid",
+      "oracleText": "{T}: Add {G} for each creature you control.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "afr",
+      "collectorNumber": "176",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/e/be6fdec0-a2c4-4da2-ae14-961185eaee66.jpg?1783926466",
+        "normal": "https://cards.scryfall.io/normal/front/b/e/be6fdec0-a2c4-4da2-ae14-961185eaee66.jpg?1783926466",
+        "large": "https://cards.scryfall.io/large/front/b/e/be6fdec0-a2c4-4da2-ae14-961185eaee66.jpg?1783926466",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/e/be6fdec0-a2c4-4da2-ae14-961185eaee66.jpg?1783926466"
       },
       "localImages": {},
       "layout": "normal",
@@ -63358,6 +63509,57 @@
       },
       "localImages": {},
       "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "50cc9b90-792e-4cf7-ab8c-cb616d94092a",
+      "name": "Cradle Clearcutter",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Golem"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Golem",
+      "oracleText": "Prototype {2}{G} — 1/3 (You may cast this spell with different mana cost, color, and size. It keeps its abilities and types.)\n{T}: Add an amount of {G} equal to this creature's power.",
+      "power": 3,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Prototype"
+      ],
+      "set": "bro",
+      "collectorNumber": "198",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/0/50cc9b90-792e-4cf7-ab8c-cb616d94092a.jpg?1783920035",
+        "normal": "https://cards.scryfall.io/normal/front/5/0/50cc9b90-792e-4cf7-ab8c-cb616d94092a.jpg?1783920035",
+        "large": "https://cards.scryfall.io/large/front/5/0/50cc9b90-792e-4cf7-ab8c-cb616d94092a.jpg?1783920035",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/0/50cc9b90-792e-4cf7-ab8c-cb616d94092a.jpg?1783920035"
+      },
+      "localImages": {},
+      "layout": "prototype",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -93795,6 +93997,57 @@
       "faces": []
     },
     {
+      "id": "006ff5a3-355b-4a7d-b402-bb3c8d32a585",
+      "name": "Elvish Archdruid",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Druid",
+      "oracleText": "Other Elf creatures you control get +1/+1.\n{T}: Add {G} for each Elf you control.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "hoc",
+      "collectorNumber": "204",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/0/006ff5a3-355b-4a7d-b402-bb3c8d32a585.jpg?1785497593",
+        "normal": "https://cards.scryfall.io/normal/front/0/0/006ff5a3-355b-4a7d-b402-bb3c8d32a585.jpg?1785497593",
+        "large": "https://cards.scryfall.io/large/front/0/0/006ff5a3-355b-4a7d-b402-bb3c8d32a585.jpg?1785497593",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/0/006ff5a3-355b-4a7d-b402-bb3c8d32a585.jpg?1785497593"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "0e8411c9-4f6f-4301-ac36-386016a32852",
       "name": "Elvish Archers",
       "manaCost": {
@@ -119672,6 +119925,55 @@
         "normal": "gaea-s-anthem-normal.jpg",
         "art_crop": "gaea-s-anthem-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "25b0b816-0583-44aa-9dc5-f3ff48993a51",
+      "name": "Gaea's Cradle",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [],
+        "absent": true
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Legendary Land",
+      "oracleText": "{T}: Add {G} for each creature you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "usg",
+      "collectorNumber": "321",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/5/25b0b816-0583-44aa-9dc5-f3ff48993a51.jpg?1783946299",
+        "normal": "https://cards.scryfall.io/normal/front/2/5/25b0b816-0583-44aa-9dc5-f3ff48993a51.jpg?1783946299",
+        "large": "https://cards.scryfall.io/large/front/2/5/25b0b816-0583-44aa-9dc5-f3ff48993a51.jpg?1783946299",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/5/25b0b816-0583-44aa-9dc5-f3ff48993a51.jpg?1783946299"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -147309,6 +147611,59 @@
       "faces": []
     },
     {
+      "id": "36938a8e-8da0-4f27-86c3-6032aa7642b5",
+      "name": "Heronblade Elite",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Warrior",
+      "oracleText": "Vigilance\nWhenever another Human you control enters, put a +1/+1 counter on this creature.\n{T}: Add X mana of any one color, where X is this creature's power.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Vigilance"
+      ],
+      "set": "mic",
+      "collectorNumber": "26",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/6/36938a8e-8da0-4f27-86c3-6032aa7642b5.jpg?1783925374",
+        "normal": "https://cards.scryfall.io/normal/front/3/6/36938a8e-8da0-4f27-86c3-6032aa7642b5.jpg?1783925374",
+        "large": "https://cards.scryfall.io/large/front/3/6/36938a8e-8da0-4f27-86c3-6032aa7642b5.jpg?1783925374",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/6/36938a8e-8da0-4f27-86c3-6032aa7642b5.jpg?1783925374"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "98534255-d8cd-4f42-8b90-f5672fb879a2",
       "name": "Hexplate Golem",
       "manaCost": {
@@ -167892,6 +168247,56 @@
       "faces": []
     },
     {
+      "id": "0be4e5f6-a1fc-4a91-aafe-f963878cd1b3",
+      "name": "Kami of Whispered Hopes",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "If one or more +1/+1 counters would be put on a permanent you control, that many plus one +1/+1 counters are put on that permanent instead.\n{T}: Add X mana of any one color, where X is this creature's power.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "273",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/b/0be4e5f6-a1fc-4a91-aafe-f963878cd1b3.jpg?1783903765",
+        "normal": "https://cards.scryfall.io/normal/front/0/b/0be4e5f6-a1fc-4a91-aafe-f963878cd1b3.jpg?1783903765",
+        "large": "https://cards.scryfall.io/large/front/0/b/0be4e5f6-a1fc-4a91-aafe-f963878cd1b3.jpg?1783903765",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/b/0be4e5f6-a1fc-4a91-aafe-f963878cd1b3.jpg?1783903765"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2bd9d26e-984c-4cf8-8c46-447f9776668f",
       "name": "Karametra, God of Harvests",
       "manaCost": {
@@ -167942,6 +168347,57 @@
         "normal": "https://cards.scryfall.io/normal/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
         "large": "https://cards.scryfall.io/large/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
         "art_crop": "https://cards.scryfall.io/art_crop/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "374a1b7c-ce11-4734-aff2-b0bd00857fad",
+      "name": "Karametra's Acolyte",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Druid",
+      "oracleText": "{T}: Add an amount of {G} equal to your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)",
+      "power": 1,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "ths",
+      "collectorNumber": "160",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/7/374a1b7c-ce11-4734-aff2-b0bd00857fad.jpg?1783939745",
+        "normal": "https://cards.scryfall.io/normal/front/3/7/374a1b7c-ce11-4734-aff2-b0bd00857fad.jpg?1783939745",
+        "large": "https://cards.scryfall.io/large/front/3/7/374a1b7c-ce11-4734-aff2-b0bd00857fad.jpg?1783939745",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/7/374a1b7c-ce11-4734-aff2-b0bd00857fad.jpg?1783939745"
       },
       "localImages": {},
       "layout": "normal",
@@ -187863,6 +188319,57 @@
       "faces": []
     },
     {
+      "id": "962a16bb-516c-4e74-b8dd-edd4c63c5fff",
+      "name": "Magus of the Coffers",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Wizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Wizard",
+      "oracleText": "{2}, {T}: Add {B} for each Swamp you control.",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "c14",
+      "collectorNumber": "148",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/6/962a16bb-516c-4e74-b8dd-edd4c63c5fff.jpg?1783938843",
+        "normal": "https://cards.scryfall.io/normal/front/9/6/962a16bb-516c-4e74-b8dd-edd4c63c5fff.jpg?1783938843",
+        "large": "https://cards.scryfall.io/large/front/9/6/962a16bb-516c-4e74-b8dd-edd4c63c5fff.jpg?1783938843",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/6/962a16bb-516c-4e74-b8dd-edd4c63c5fff.jpg?1783938843"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "855de173-6bec-457b-828e-28678b7d396e",
       "name": "Mahamoti Djinn",
       "manaCost": {
@@ -191632,6 +192139,59 @@
         "normal": "https://cards.scryfall.io/normal/front/a/9/a906a775-7c2d-47b7-a20e-a325dd28d0bd.jpg?1783945333",
         "large": "https://cards.scryfall.io/large/front/a/9/a906a775-7c2d-47b7-a20e-a325dd28d0bd.jpg?1783945333",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/9/a906a775-7c2d-47b7-a20e-a325dd28d0bd.jpg?1783945333"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "aad61d99-5c8e-47b7-ab1a-e70905f59205",
+      "name": "Marwyn, the Nurturer",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Elf Druid",
+      "oracleText": "Whenever another Elf you control enters, put a +1/+1 counter on Marwyn.\n{T}: Add an amount of {G} equal to Marwyn's power.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "khc",
+      "collectorNumber": "68",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/a/aad61d99-5c8e-47b7-ab1a-e70905f59205.jpg?1783928311",
+        "normal": "https://cards.scryfall.io/normal/front/a/a/aad61d99-5c8e-47b7-ab1a-e70905f59205.jpg?1783928311",
+        "large": "https://cards.scryfall.io/large/front/a/a/aad61d99-5c8e-47b7-ab1a-e70905f59205.jpg?1783928311",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/a/aad61d99-5c8e-47b7-ab1a-e70905f59205.jpg?1783928311"
       },
       "localImages": {},
       "layout": "normal",
@@ -201742,6 +202302,61 @@
         "normal": "https://cards.scryfall.io/normal/front/9/3/9350bf4a-fa12-4867-b31f-1f1394d99571.jpg?1783904996",
         "large": "https://cards.scryfall.io/large/front/9/3/9350bf4a-fa12-4867-b31f-1f1394d99571.jpg?1783904996",
         "art_crop": "https://cards.scryfall.io/art_crop/front/9/3/9350bf4a-fa12-4867-b31f-1f1394d99571.jpg?1783904996"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c2164204-120c-4dff-86ac-46ca9012ccd9",
+      "name": "Mona Lisa, Science Geek",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard",
+          "Mutant"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Lizard Mutant",
+      "oracleText": "Reach\n{T}: Add X mana of any one color, where X is Mona Lisa's power.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Reach"
+      ],
+      "set": "tmt",
+      "collectorNumber": "123",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/2/c2164204-120c-4dff-86ac-46ca9012ccd9.jpg?1783904085",
+        "normal": "https://cards.scryfall.io/normal/front/c/2/c2164204-120c-4dff-86ac-46ca9012ccd9.jpg?1783904085",
+        "large": "https://cards.scryfall.io/large/front/c/2/c2164204-120c-4dff-86ac-46ca9012ccd9.jpg?1783904085",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/2/c2164204-120c-4dff-86ac-46ca9012ccd9.jpg?1783904085"
       },
       "localImages": {},
       "layout": "normal",
@@ -232466,6 +233081,57 @@
       "faces": []
     },
     {
+      "id": "eb11921b-1b28-483f-a707-4de21a6daa31",
+      "name": "Priest of Titania",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Druid",
+      "oracleText": "{T}: Add {G} for each Elf on the battlefield.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mh3",
+      "collectorNumber": "286",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/b/eb11921b-1b28-483f-a707-4de21a6daa31.jpg?1783911212",
+        "normal": "https://cards.scryfall.io/normal/front/e/b/eb11921b-1b28-483f-a707-4de21a6daa31.jpg?1783911212",
+        "large": "https://cards.scryfall.io/large/front/e/b/eb11921b-1b28-483f-a707-4de21a6daa31.jpg?1783911212",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/b/eb11921b-1b28-483f-a707-4de21a6daa31.jpg?1783911212"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d0a9f49c-f15c-4b2d-b6a5-8efc3c430d87",
       "name": "Priest of Urabrask",
       "manaCost": {
@@ -239608,6 +240274,59 @@
         "normal": "https://cards.scryfall.io/normal/front/3/f/3f967dee-1c2e-423a-823b-9fc74e8053bc.jpg?1783903722",
         "large": "https://cards.scryfall.io/large/front/3/f/3f967dee-1c2e-423a-823b-9fc74e8053bc.jpg?1783903722",
         "art_crop": "https://cards.scryfall.io/art_crop/front/3/f/3f967dee-1c2e-423a-823b-9fc74e8053bc.jpg?1783903722"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9bc5c316-6a41-48ba-864b-da3030dd3e0e",
+      "name": "Rainveil Rejuvenator",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elephant",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Elephant Druid",
+      "oracleText": "When this creature enters, you may mill three cards. (You may put the top three cards of your library into your graveyard.)\n{T}: Add an amount of {G} equal to this creature's power.",
+      "power": 2,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Mill"
+      ],
+      "set": "tdm",
+      "collectorNumber": "152",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/b/9bc5c316-6a41-48ba-864b-da3030dd3e0e.jpg?1783907336",
+        "normal": "https://cards.scryfall.io/normal/front/9/b/9bc5c316-6a41-48ba-864b-da3030dd3e0e.jpg?1783907336",
+        "large": "https://cards.scryfall.io/large/front/9/b/9bc5c316-6a41-48ba-864b-da3030dd3e0e.jpg?1783907336",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/b/9bc5c316-6a41-48ba-864b-da3030dd3e0e.jpg?1783907336"
       },
       "localImages": {},
       "layout": "normal",
@@ -253811,6 +254530,59 @@
       "faces": []
     },
     {
+      "id": "6d63a085-101c-4749-a3a4-1d335c25b10e",
+      "name": "Rofellos, Llanowar Emissary",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Elf Druid",
+      "oracleText": "{T}: Add {G} for each Forest you control.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "vma",
+      "collectorNumber": "229",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/d/6d63a085-101c-4749-a3a4-1d335c25b10e.jpg?1783939250",
+        "normal": "https://cards.scryfall.io/normal/front/6/d/6d63a085-101c-4749-a3a4-1d335c25b10e.jpg?1783939250",
+        "large": "https://cards.scryfall.io/large/front/6/d/6d63a085-101c-4749-a3a4-1d335c25b10e.jpg?1783939250",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/d/6d63a085-101c-4749-a3a4-1d335c25b10e.jpg?1783939250"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "794fe9d4-2af4-40b0-bbb2-8015b6206972",
       "name": "Rogue's Gloves",
       "manaCost": {
@@ -260246,6 +261018,57 @@
         "normal": "https://cards.scryfall.io/normal/front/7/6/7678e008-f054-485d-ae21-6b97f83dd824.jpg?1783927571",
         "large": "https://cards.scryfall.io/large/front/7/6/7678e008-f054-485d-ae21-6b97f83dd824.jpg?1783927571",
         "art_crop": "https://cards.scryfall.io/art_crop/front/7/6/7678e008-f054-485d-ae21-6b97f83dd824.jpg?1783927571"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3c9ac089-6962-48fd-bf67-f041ece27fa9",
+      "name": "Sanctum Weaver",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "Dryad"
+        ]
+      },
+      "rawTypeLine": "Enchantment Creature — Dryad",
+      "oracleText": "{T}: Add X mana of any one color, where X is the number of enchantments you control.",
+      "power": 0,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "cmm",
+      "collectorNumber": "910",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/c/3c9ac089-6962-48fd-bf67-f041ece27fa9.jpg?1783915420",
+        "normal": "https://cards.scryfall.io/normal/front/3/c/3c9ac089-6962-48fd-bf67-f041ece27fa9.jpg?1783915420",
+        "large": "https://cards.scryfall.io/large/front/3/c/3c9ac089-6962-48fd-bf67-f041ece27fa9.jpg?1783915420",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/c/3c9ac089-6962-48fd-bf67-f041ece27fa9.jpg?1783915420"
       },
       "localImages": {},
       "layout": "normal",
@@ -270220,6 +271043,63 @@
       "faces": []
     },
     {
+      "id": "28c1b84a-a21b-4df1-9fc9-5b387fb56810",
+      "name": "Selvala, Explorer Returned",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Scout"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Elf Scout",
+      "oracleText": "Parley — {T}: Each player reveals the top card of their library. For each nonland card revealed this way, add {G} and you gain 1 life. Then each player draws a card. (Activate only as an instant.)",
+      "power": 2,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G",
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Parley"
+      ],
+      "set": "mkc",
+      "collectorNumber": "218",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/8/28c1b84a-a21b-4df1-9fc9-5b387fb56810.jpg?1786381273",
+        "normal": "https://cards.scryfall.io/normal/front/2/8/28c1b84a-a21b-4df1-9fc9-5b387fb56810.jpg?1786381273",
+        "large": "https://cards.scryfall.io/large/front/2/8/28c1b84a-a21b-4df1-9fc9-5b387fb56810.jpg?1786381273",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/8/28c1b84a-a21b-4df1-9fc9-5b387fb56810.jpg?1786381273"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "465adbb4-4c64-44eb-8323-61d23282c6b8",
       "name": "Senate Griffin",
       "manaCost": {
@@ -271736,6 +272616,55 @@
         "normal": "serra-s-guardian-normal.jpg",
         "art_crop": "serra-s-guardian-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f7a18130-dbaa-4657-a885-3a96a985935a",
+      "name": "Serra's Sanctum",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [],
+        "absent": true
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Legendary Land",
+      "oracleText": "{T}: Add {W} for each enchantment you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "usg",
+      "collectorNumber": "325",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/7/f7a18130-dbaa-4657-a885-3a96a985935a.jpg?1783946298",
+        "normal": "https://cards.scryfall.io/normal/front/f/7/f7a18130-dbaa-4657-a885-3a96a985935a.jpg?1783946298",
+        "large": "https://cards.scryfall.io/large/front/f/7/f7a18130-dbaa-4657-a885-3a96a985935a.jpg?1783946298",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/7/f7a18130-dbaa-4657-a885-3a96a985935a.jpg?1783946298"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -327557,6 +328486,55 @@
       "faces": []
     },
     {
+      "id": "fd99bce1-ce39-464b-8e61-2631eb3ed6f6",
+      "name": "Tolarian Academy",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [],
+        "absent": true
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Legendary Land",
+      "oracleText": "{T}: Add {U} for each artifact you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "vma",
+      "collectorNumber": "319",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/d/fd99bce1-ce39-464b-8e61-2631eb3ed6f6.jpg?1783939217",
+        "normal": "https://cards.scryfall.io/normal/front/f/d/fd99bce1-ce39-464b-8e61-2631eb3ed6f6.jpg?1783939217",
+        "large": "https://cards.scryfall.io/large/front/f/d/fd99bce1-ce39-464b-8e61-2631eb3ed6f6.jpg?1783939217",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/d/fd99bce1-ce39-464b-8e61-2631eb3ed6f6.jpg?1783939217"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "1cbc55e5-b84c-4449-a288-ec26cdd3997c",
       "name": "Tolarian Emissary",
       "manaCost": {
@@ -348204,6 +349182,57 @@
       "faces": []
     },
     {
+      "id": "b50679df-bf82-4bb2-9fe3-8ebd7a9decde",
+      "name": "Viridian Joiner",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Druid",
+      "oracleText": "{T}: Add an amount of {G} equal to this creature's power.",
+      "power": 1,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mrd",
+      "collectorNumber": "138",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/5/b50679df-bf82-4bb2-9fe3-8ebd7a9decde.jpg?1783944529",
+        "normal": "https://cards.scryfall.io/normal/front/b/5/b50679df-bf82-4bb2-9fe3-8ebd7a9decde.jpg?1783944529",
+        "large": "https://cards.scryfall.io/large/front/b/5/b50679df-bf82-4bb2-9fe3-8ebd7a9decde.jpg?1783944529",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/5/b50679df-bf82-4bb2-9fe3-8ebd7a9decde.jpg?1783944529"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "f4607634-6206-4c6c-b389-abcbfe969b65",
       "name": "Viridian Longbow",
       "manaCost": {
@@ -362974,6 +364003,57 @@
         "normal": "https://cards.scryfall.io/normal/front/c/f/cf7c14c9-cb5a-49f0-be2c-eb3166f02510.jpg?1783944889",
         "large": "https://cards.scryfall.io/large/front/c/f/cf7c14c9-cb5a-49f0-be2c-eb3166f02510.jpg?1783944889",
         "art_crop": "https://cards.scryfall.io/art_crop/front/c/f/cf7c14c9-cb5a-49f0-be2c-eb3166f02510.jpg?1783944889"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "5670ae47-befb-4aaf-a77a-d7dbd4d8dc08",
+      "name": "Wirewood Channeler",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Druid",
+      "oracleText": "{T}: Add X mana of any one color, where X is the number of Elves on the battlefield.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "khc",
+      "collectorNumber": "79",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/6/5670ae47-befb-4aaf-a77a-d7dbd4d8dc08.jpg?1783928307",
+        "normal": "https://cards.scryfall.io/normal/front/5/6/5670ae47-befb-4aaf-a77a-d7dbd4d8dc08.jpg?1783928307",
+        "large": "https://cards.scryfall.io/large/front/5/6/5670ae47-befb-4aaf-a77a-d7dbd4d8dc08.jpg?1783928307",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/6/5670ae47-befb-4aaf-a77a-d7dbd4d8dc08.jpg?1783928307"
       },
       "localImages": {},
       "layout": "normal",
