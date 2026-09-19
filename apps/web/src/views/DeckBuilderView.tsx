@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
-import { allAvailableCards } from '../lib/cards.js';
+import { allAvailableCards, cardPoolVersion, subscribeToCardPool } from '../lib/cards.js';
+import { browseIndexStatus, describeBrowseIndex, ensureBrowseIndex, subscribeToBrowseIndex } from '../lib/cards/browseIndex.js';
 import { queryCards, EMPTY_QUERY, type CardQuery } from '../lib/filter.js';
 import {
   deckSize,
@@ -27,6 +28,7 @@ import {
 import { DECK_ORIGIN_ATTR, originPresentation } from '../lib/decklist/deckOrigin.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
+import './catalogue-status.css';
 import { CardGrid } from '../components/CardGrid.js';
 import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
@@ -52,12 +54,20 @@ export function DeckBuilderView({ decks }: { decks: DecksApi }): ReactElement {
   const [query, setQuery] = useState<CardQuery>(EMPTY_QUERY);
   const [selected, setSelected] = useState<NormalizedCard | null>(null);
 
-  // Includes cards added by deck import, so an imported card is browsable and
-  // re-addable exactly like a curated one.
-  // `decks.decks` is an INVISIBLE dependency (see CardsView): `allAvailableCards()`
-  // reads a registry deck import mutates, so this list is the only signal the pool grew.
+  // Includes cards added by deck import AND, once loaded, the whole-Scryfall
+  // catalogue — so any card can be put in a deck; the health badge and the row
+  // marker say which ones the engine cannot play yet (§3.158).
+  const poolVersion = useSyncExternalStore(subscribeToCardPool, cardPoolVersion, cardPoolVersion);
+  const catalogue = useSyncExternalStore(subscribeToBrowseIndex, browseIndexStatus, browseIndexStatus);
+  useEffect(() => {
+    void ensureBrowseIndex();
+  }, []);
+  // `poolVersion` and `decks.decks` are INVISIBLE dependencies (see CardsView):
+  // `allAvailableCards()` reads registries that deck import and the catalogue
+  // loader mutate, so nothing in this expression changes when the pool does.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pool = useMemo(() => allAvailableCards(), [decks.decks]);
+  const pool = useMemo(() => allAvailableCards(), [poolVersion, decks.decks]);
+  const catalogueNote = describeBrowseIndex(catalogue);
   const results = useMemo(() => queryCards(pool, query), [pool, query]);
   const active = decks.activeDeck;
 
@@ -78,6 +88,11 @@ export function DeckBuilderView({ decks }: { decks: DecksApi }): ReactElement {
     <div className="deck-layout">
       <section aria-label="Card pool">
         <CardToolbar query={query} onChange={setQuery} resultCount={results.length} />
+        {catalogueNote && (
+          <p className="cards-view__catalogue" role="status">
+            {catalogueNote}
+          </p>
+        )}
         <CardGrid cards={results} onSelect={setSelected} deckControls={deckControls} />
       </section>
 

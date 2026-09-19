@@ -9,7 +9,9 @@ import {
 import { attribution, allAvailableCards } from './lib/cards.js';
 import { BugReporter } from './components/BugReporter.js';
 import { registerStateSection } from './lib/bugreport/state-dump.js';
-import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
+import { cardPoolVersion, subscribeToCardPool } from './lib/cards.js';
+import { ensureBrowseIndex } from './lib/cards/browseIndex.js';
+import { BROWSE_INDEX_CONFIG } from './lib/config.js';
 import { NAV_FITS, computeNavOverflow, type NavOverflow } from './lib/nav-overflow.js';
 import { appUpdater, updateResumeFlag } from './lib/update/updater.js';
 import { UpdatePill } from './components/UpdatePill.js';
@@ -63,8 +65,15 @@ export function App(): ReactElement {
   // The footer count must be the LIVE pool, not the bundled curated slice — it
   // read a stale, never-changing number that looked hardcoded, and stayed wrong
   // after adding a card. Subscribing to the imported-card store keeps it honest.
-  useSyncExternalStore(subscribeToImportedCards, importedCardCount, importedCardCount);
+  useSyncExternalStore(subscribeToCardPool, cardPoolVersion, cardPoolVersion);
   const cardCount = allAvailableCards().length;
+  // Fetch the whole-Scryfall catalogue once the shell has painted, so it is
+  // already cached by the time the browser or the deck builder asks. Idle work:
+  // Play never needs it, and a failure here is reported by the views that do.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void ensureBrowseIndex(), BROWSE_INDEX_CONFIG.idlePrefetchDelayMs);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const [view, setView] = useState<ViewId>(initialView);
   const decks = useDecks();

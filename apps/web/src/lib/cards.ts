@@ -23,8 +23,15 @@ import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools'
 import { COPY_ID_SUFFIX } from '@jonny-boi/core';
 import rawIndex from '../data/card-index.json';
 import { engineDisplayCards } from './cards/enginePool.js';
-import { importedCard, importedCards } from './decklist/importedCards.js';
+import { importedCard, importedCards, subscribeToImportedCards } from './decklist/importedCards.js';
 import { normalizeName } from './scryfall/collection.js';
+import {
+  browseCardById,
+  browseCardByName,
+  browseCards,
+  browseIndexStatus,
+  subscribeToBrowseIndex,
+} from './cards/browseIndex.js';
 
 /** The bundled, normalized card index. */
 export const cardIndex: CardIndex = rawIndex as CardIndex;
@@ -131,9 +138,10 @@ function backFaceRecord(backId: string): NormalizedCard | undefined {
 }
 
 /**
- * Resolve a card by id, or `undefined` if it is in neither the curated pool nor
- * the user's imported cards. Every display path (deck lists, curves, validation)
- * goes through here, so an imported card renders exactly like a curated one —
+ * Resolve a card by id, or `undefined` if it is in none of the curated pool, the
+ * user's imported cards, or the whole-Scryfall browse index (once loaded). Every
+ * display path (deck lists, curves, validation) goes through here, so an
+ * imported or browse-only card renders exactly like a curated one —
  * and a transformed DFC's back-face id (`<frontId>#back`) resolves to a record
  * built from that face's own Scryfall data, so the board and CardHover show the
  * active face's art.
@@ -149,7 +157,10 @@ export function getCard(id: string): NormalizedCard | undefined {
   if (id.endsWith(COPY_ID_SUFFIX)) {
     return getCard(id.slice(0, -COPY_ID_SUFFIX.length));
   }
-  return cardsById.get(id) ?? importedCard(id);
+  // Bundled → imported → browse: the same precedence everywhere in this file.
+  // A browse card is displayable and deck-buildable; whether it is PLAYABLE is
+  // `decklist/deckHealth.ts`'s question, and it answers no.
+  return cardsById.get(id) ?? importedCard(id) ?? browseCardById(id);
 }
 
 /**
@@ -162,14 +173,17 @@ export function getCardByName(name: string): NormalizedCard | undefined {
   const key = normalizeName(name);
   const pooled = displayableByName.get(key);
   if (pooled) return pooled;
-  return importedCards().find((card) => normalizeName(card.name) === key);
+  return importedCards().find((card) => normalizeName(card.name) === key) ?? browseCardByName(name);
 }
 
 /**
- * Every card available to the user right now: the curated pool plus everything
- * deck import has added, name-sorted. Recomputed per call because the imported
- * set changes at runtime; the lists are small enough that this is cheaper than
- * cache invalidation.
+ * Every card available to the user right now: the curated pool, plus everything
+ * deck import has added, plus — once it has loaded — every other card Scryfall
+ * knows (`cards/browseIndex.ts`), name-sorted. Recomputed per call because both
+ * extra sources change at runtime; callers memoize on {@link cardPoolVersion}.
+ *
+ * ⚠️ With the browse index in, this is ~32k records and the sort is not free:
+ * memoize it (every view does) rather than calling it per render.
  *
  * Deduplicated by NAME, curated record first: the import store keys on Scryfall
  * id, so a different PRINTING of a curated card (an old import from before the
@@ -181,14 +195,46 @@ export function getCardByName(name: string): NormalizedCard | undefined {
  */
 export function allAvailableCards(): readonly NormalizedCard[] {
   const imported = importedCards();
-  if (imported.length === 0) return displayablePool;
+  const browse = browseCards();
+  if (imported.length === 0 && browse.length === 0) return displayablePool;
   const extras = new Map<string, NormalizedCard>();
+  // Imports before browse cards, so a card the user imported (and that compiled,
+  // hence PLAYABLE) is the one offered rather than the browse copy of the same name.
   for (const card of imported) {
+    const key = normalizeName(card.name);
+    if (!displayableByName.has(key) && !extras.has(key)) extras.set(key, card);
+  }
+  for (const card of browse) {
     const key = normalizeName(card.name);
     if (!displayableByName.has(key) && !extras.has(key)) extras.set(key, card);
   }
   if (extras.size === 0) return displayablePool;
   return [...displayablePool, ...extras.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * ONE signal for "the set of available cards changed" — the import store OR the
+ * browse index. Views used to subscribe to the import store alone and memoize
+ * `allAvailableCards()` on its count; with a second source that would leave the
+ * catalogue's 25k cards invisible until an unrelated re-render. Subscribe here,
+ * snapshot {@link cardPoolVersion}, and both sources are covered by one line.
+ */
+export function subscribeToCardPool(listener: () => void): () => void {
+  const offImports = subscribeToImportedCards(listener);
+  const offBrowse = subscribeToBrowseIndex(listener);
+  return () => {
+    offImports();
+    offBrowse();
+  };
+}
+
+/**
+ * A cheap snapshot that changes exactly when {@link allAvailableCards} would:
+ * the imported count and the browse status, folded into one string.
+ */
+export function cardPoolVersion(): string {
+  const status = browseIndexStatus();
+  return `${importedCards().length}:${status.kind}:${status.kind === 'ready' ? status.cards : 0}`;
 }
 
 /**

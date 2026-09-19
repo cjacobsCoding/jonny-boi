@@ -14,3 +14,12 @@
 export * from './types.js';
 export { parseManaCost, parseTypeLine, parseStat } from './parse.js';
 export { normalizeCard } from './normalize.js';
+export {
+  browseImageUris,
+  imageIdOf,
+  packBrowseRecord,
+  packManaCost,
+  unpackBrowseRecord,
+  type BrowseFace,
+  type BrowseRecord,
+} from './browse-record.js';

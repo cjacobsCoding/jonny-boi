@@ -141,7 +141,28 @@ export default defineConfig({
        * still loads without it — the limit is raised for the one asset that
        * needs it, not to hide a bundle nobody is watching.
        */
-      workbox: { maximumFileSizeToCacheInBytes: MAX_PRECACHED_FILE_BYTES },
+      workbox: {
+        maximumFileSizeToCacheInBytes: MAX_PRECACHED_FILE_BYTES,
+        /**
+         * THE BROWSE INDEX IS NOT PRECACHED, and the policy is written down so a
+         * default cannot change it: `public/data/browse-index.json` is every card
+         * the engine does not play yet, 9.3 MB raw, and Play never needs it.
+         * Precaching it would put a quarter of Scryfall in front of every first
+         * install. It is fetched when a view asks (`lib/cards/browseIndex.ts`)
+         * and kept from then on by the runtime rule below — stale-while-
+         * revalidate, so a regenerated file replaces the cached one on the visit
+         * after it ships, and offline reads never wait on the network.
+         */
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        globIgnores: ['**/data/browse-index.json'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.endsWith('/data/browse-index.json'),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'browse-index', expiration: { maxEntries: 2 } },
+          },
+        ],
+      },
       includeAssets: [
         'icons/favicon-32.png',
         'icons/favicon-16.png',

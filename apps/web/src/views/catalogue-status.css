@@ -1,0 +1,13 @@
+/*
+ * The whole-Scryfall catalogue's status line (Cards view, Deck Builder).
+ *
+ * Shown only while the catalogue is loading or when it could not be loaded — a
+ * browser that quietly showed a quarter of Scryfall would look complete, so the
+ * fallback says it fired (DESIGN §6). Own file, imported by both views.
+ */
+
+.cards-view__catalogue {
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}

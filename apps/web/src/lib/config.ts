@@ -209,3 +209,17 @@ export const SORT_OPTIONS = [
 ] as const;
 
 export type SortId = (typeof SORT_OPTIONS)[number]['id'];
+
+/**
+ * The whole-Scryfall BROWSE index — every card the engine does not yet play,
+ * packed (see `data-tools/src/browse-record.ts`) and served as a static asset
+ * rather than bundled: 9.3 MB raw / 2.4 MB gzipped is a thing to fetch once and
+ * cache, not to put in front of the app shell. `lib/cards/browseIndex.ts` loads
+ * it; `vite.config.ts` keeps it out of the precache and caches it at runtime.
+ */
+export const BROWSE_INDEX_CONFIG = Object.freeze({
+  /** Path under the deploy base. The generator writes `apps/web/public/data/browse-index.json`. */
+  path: 'data/browse-index.json',
+  /** How long after first paint the app starts fetching it on its own (idle work, never on the critical path). */
+  idlePrefetchDelayMs: 4_000,
+});
