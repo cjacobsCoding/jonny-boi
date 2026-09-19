@@ -305,36 +305,32 @@ const JACE = walker(
     '−8: For each player, search that player’s library for a nonland card and exile it, then that player shuffles. You may cast those cards without paying their mana costs.',
 );
 
-describe('Jace, Architect of Thought — two clauses in, ONE residue pinned by name', () => {
-  it('the +1 and the −2 no longer report', () => {
+describe('Jace, Architect of Thought — every residue landed', () => {
+  it('the +1 and the −2 still compile', () => {
     const texts = missingTexts(JACE);
     expect(texts.some((t) => t.includes('Until your next turn'))).toBe(false);
     expect(texts.some((t) => t.includes('separates those cards into two piles'))).toBe(false);
   });
 
   /**
-   * ⚠️ THE RESIDUE PIN. Exactly ONE clause is left, and it is named — so a card
-   * that quietly starts compiling it makes this test fail rather than sliding
-   * into the pool unnoticed, and a lane that regresses either landed clause
-   * fails on the count.
+   * The −8 was pinned here as the last residue, with three engine gaps named:
+   * no `'exile'` search destination; a search that had to be of your OWN
+   * library; and a cast permission that could not cross seats — the card exiled
+   * from the opponent's library sits in the opponent's exile, and
+   * `generateLegalActions` walked only the asker's. All three are rows now:
+   * `searchLibrary` takes `who: 'each'` / `chooser: 'controller'` /
+   * `destination: 'exile'` / `grantCast: 'free'`, and `CardGrant.castBy`
+   * (`core/card-grants.ts`, with `core/cross-seat-cast.test.ts`) lets the
+   * chooser cast from another seat's exile. `jace-ultimate-play.test.ts` drives
+   * the whole ability through a real game.
    *
-   * What the −8 needs, read from the engine rather than guessed:
-   *  1. `SEARCH_DESTINATIONS` has no `'exile'` row — one row, and its own comment
-   *     says exile is absent only because no compiled template printed it;
-   *  2. `searchLibrary` already takes `who`, so another player's library is
-   *     expressible;
-   *  3. ⛔ the free-cast permission CANNOT CROSS SEATS. `CardGrant.castFace` +
-   *     `castFree` is the right shape and exists, but `generateLegalActions`
-   *     offers an exile cast by walking `player.exile` — the ASKING player's own
-   *     exile zone — and this engine models exile per player, so a card exiled
-   *     from B's library sits in B's exile and A is never offered it.
-   *
-   * Corpus: **321 clauses / 315 distinct shapes / 168 sole-blocked cards** print
-   * "without paying its/their mana cost".
+   * Corpus, for the record: **321 clauses / 315 distinct shapes / 168
+   * sole-blocked cards** print "without paying its/their mana cost"; this rule
+   * takes exactly the "for each player, search that player's library … exile
+   * it … you may cast those cards" shape, not the family.
    */
-  it('reports exactly ONE residual ability, and this names it', () => {
-    const texts = missingTexts(JACE);
-    expect(texts).toHaveLength(1);
-    expect(texts[0]).toContain('You may cast those cards without paying their mana costs');
+  it('compiles COMPLETE — the −8 included', () => {
+    expect(missingTexts(JACE)).toEqual([]);
+    expect(compileCard(JACE).status).toBe('complete');
   });
 });

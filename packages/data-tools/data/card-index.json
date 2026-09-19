@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T07:14:17.253Z",
+  "generatedAt": "2026-09-19T08:14:13.248Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7134,
+  "requested": 7135,
   "unresolved": [],
   "cards": [
     {
@@ -184460,6 +184460,65 @@
         "normal": "izzet-signet-normal.jpg",
         "art_crop": "izzet-signet-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7051cdfa-509e-4d84-bbae-f77556c861e4",
+      "name": "Jace, Architect of Thought",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Planeswalker"
+        ],
+        "subtypes": [
+          "Jace"
+        ]
+      },
+      "rawTypeLine": "Legendary Planeswalker — Jace",
+      "oracleText": "+1: Until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn.\n−2: Reveal the top three cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other on the bottom of your library in any order.\n−8: For each player, search that player's library for a nonland card and exile it, then that player shuffles. You may cast those cards without paying their mana costs.",
+      "power": null,
+      "toughness": null,
+      "loyalty": 4,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "cmm",
+      "collectorNumber": "851",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "large": "https://cards.scryfall.io/large/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "png": "https://cards.scryfall.io/png/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.png?1783915441",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "grid": "https://cards.scryfall.io/grid/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "display": "https://cards.scryfall.io/display/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "art": "https://cards.scryfall.io/art/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "crop": "https://cards.scryfall.io/crop/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []

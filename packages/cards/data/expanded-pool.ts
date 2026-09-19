@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7102 cards.
+ * 7103 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -55985,6 +55985,64 @@ const POOL_6: readonly CardDefinition[] = [
     cost: { generic: 2 },
     manaAbilities: [{ produces: [{ U: 1, R: 1 }], cost: { mana: { generic: 1 } } }],
   },
+  // +1: Until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn.
+  // −2: Reveal the top three cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other on the bottom of your library in any order.
+  // −8: For each player, search that player's library for a nonland card and exile it, then that player shuffles. You may cast those cards without paying their mana costs.
+  {
+    id: '7051cdfa-509e-4d84-bbae-f77556c861e4',
+    name: 'Jace, Architect of Thought',
+    types: ['planeswalker'],
+    cost: { generic: 2, U: 2 },
+    loyalty: 4,
+    legendary: true,
+    subtypes: ['jace'],
+    activated: [
+      {
+        cost: { loyalty: 1 },
+        effects: [
+          {
+            primitive: 'installUntilYourNextTurnTrigger',
+            params: {
+              condition: { on: 'creatureAttacks', who: 'opponent' },
+              effects: [
+                {
+                  primitive: 'pumpUntilEndOfTurn',
+                  params: { power: -1, toughness: 0, subject: 'triggering' },
+                },
+              ],
+              label: 'Until your next turn: a creature (opponent) attacks — it gets -1/-0 until end of turn',
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '+1: until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn',
+      },
+      {
+        cost: { loyalty: -2 },
+        effects: [{ primitive: 'revealAndOpponentSplitsPiles', params: { count: 3, rest: 'libraryBottom' } }],
+        timing: 'sorcery',
+        label: '−2: reveal the top three cards of your library. an opponent separates those cards into two piles. put one pile into your hand and the other on the bottom of your library in any order',
+      },
+      {
+        cost: { loyalty: -8 },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'each',
+              chooser: 'controller',
+              count: 1,
+              filter: { noneOfTypes: ['land'] },
+              destination: 'exile',
+              grantCast: 'free',
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '−8: for each player, search that player\'s library for a nonland card and exile it, then that player shuffles. you may cast those cards without paying their mana costs',
+      },
+    ],
+  },
   // Draw three cards.
   {
     id: 'ad4932ba-e272-4f22-89f5-a6153ca570b5',
@@ -63363,6 +63421,9 @@ const POOL_6: readonly CardDefinition[] = [
     ],
     produces: ['U'],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // Vigilance
   {
     id: 'c8f6cc1f-b7e4-470d-8d48-ef848d7c1116',
@@ -63398,9 +63459,6 @@ const POOL_6: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // This spell can't be countered. (This includes by the ward ability.)
   // Destroy target creature or planeswalker with mana value 3 or less.
   {
@@ -72369,6 +72427,9 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 5,
     subtypes: ['lizard'],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {1}{U}{B}, {T}: Target player mills three cards.
   {
@@ -72384,9 +72445,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // Flash (You may cast this spell any time you could cast an instant.)
   // Flying
   {
@@ -81494,6 +81552,9 @@ const POOL_8: readonly CardDefinition[] = [
     flashback: { W: 1 },
     effects: [{ primitive: 'exileTargetCardFromGraveyard', params: { targets: 'cardInAnyGraveyard' } }],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // When this creature dies, draw a card.
   {
     id: 'e26c576d-94c8-4f63-9f54-732fb1eade12',
@@ -81511,9 +81572,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // {B}, Sacrifice this creature: Destroy target nonblack creature.
   // Soulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)
   {
@@ -90565,6 +90623,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // Counter target spell.
   // Amass Orcs 1. (Put a +1/+1 counter on an Army you control. It's also an Orc. If you don't control an Army, create a 0/0 black Orc Army creature token first.)
   {
@@ -90577,9 +90638,6 @@ const POOL_9: readonly CardDefinition[] = [
       { primitive: 'amass', params: { subtype: 'Orc', amount: 1 } },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Whenever you cast an enchantment spell, draw a card.
   {
     id: 'df83d28d-bb0b-4f3d-a16f-8ee8bf452e10',
@@ -99620,6 +99678,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // Trample
   // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
   {
@@ -99639,9 +99700,6 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // Whenever this creature becomes blocked, draw a card.
   // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
   {
@@ -108861,6 +108919,9 @@ const POOL_11: readonly CardDefinition[] = [
     },
     costAssist: 'improvise',
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Target creature gets -6/-6 until end of turn. You gain 2 life.
   {
     id: '4af17ae0-1035-4cb2-8974-98b377bfaa48',
@@ -108872,9 +108933,6 @@ const POOL_11: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 2 } },
     ],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Target player loses 2 life and you gain 2 life.
   // Retrace (You may cast this card from your graveyard by discarding a land card in addition to paying its other costs.)
   {
@@ -117622,6 +117680,9 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // Whenever another creature you control dies, put a +1/+1 counter on this creature.
   {
     id: '5f48622a-abf3-407f-921f-77c29d59ba8e',
@@ -117644,9 +117705,6 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // Pay 3 life: Put a +1/+1 counter on target creature.
   {
     id: 'a5690d5f-633c-4a1e-afba-5fd79dcbf20e',
@@ -126196,6 +126254,9 @@ const POOL_13: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['beast'],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // Vigilance (Attacking doesn't cause this creature to tap.)
   {
     id: 'ced54aa6-c8ee-451f-91cd-967fe766ec13',
@@ -126208,9 +126269,6 @@ const POOL_13: readonly CardDefinition[] = [
     keywords: { vigilance: true },
     subtypes: ['klingon', 'warrior', 'officer'],
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // This creature enters with four +1/+1 counters on it.
   // Remove a +1/+1 counter from this creature: Add {C}.
   {
