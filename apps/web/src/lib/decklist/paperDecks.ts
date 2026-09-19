@@ -71,9 +71,9 @@
  * answer (CLAUDE.md rule 12).
  */
 
-import { OWNER_DECK_ENTRIES, type Deck as SimDeck } from '@jonny-boi/sim';
+import { OWNER_DECK_ENTRIES, currentOwnerDeck, type Deck as SimDeck, type DeckRevision } from '@jonny-boi/sim';
 import { copyGauntletDeck } from './gauntletDecks.js';
-import { newDeckId, type Deck, type UnresolvedCard } from '../deck.js';
+import { newDeckId, type AppliedRevision, type Deck, type UnresolvedCard } from '../deck.js';
 import { SEEDED_DECKS_STORAGE_KEY } from '../config.js';
 import { writeStorage } from '../persistence/write.js';
 
@@ -82,7 +82,12 @@ export type SeedOutcome =
   /** Minted into his collection as an ordinary deck of his own. */
   | 'seeded'
   /** He already had a deck by that name. His was left exactly as it was. */
-  | 'name-in-use';
+  | 'name-in-use'
+  /**
+   * A REVISION whose deck is not in his collection any more — he deleted it.
+   * Settled without effect: a revision never resurrects a deck (§3.162).
+   */
+  | 'deck-absent';
 
 /** One settled seed, as the ledger stores it. */
 export interface SettledSeed {
@@ -98,9 +103,17 @@ export interface PaperSeed {
    * make the app think it was never delivered.
    */
   readonly id: string;
+  /** The deck as it stands TODAY — the transcription with every revision in. */
   readonly deck: SimDeck;
   /** Repo-relative path to the `.txt` the list came from, for the record. */
   readonly source: string;
+  /**
+   * §3.162 — the dated, add-only revisions he asked for after the transcription.
+   * A fresh mint has them in already (see `deck`) and settles them all; a
+   * profile that was seeded earlier receives each one ONCE, applied to his copy
+   * by {@link planRevisions}.
+   */
+  readonly revisions: readonly DeckRevision[];
 }
 
 /** Turn `docs/decks/thunes-life.txt` into `thunes-life`. */
@@ -117,9 +130,25 @@ function seedIdFromSource(source: string): string {
  */
 export const PAPER_SEEDS: readonly PaperSeed[] = OWNER_DECK_ENTRIES.map((entry) => ({
   id: seedIdFromSource(entry.source),
-  deck: entry.deck,
+  deck: currentOwnerDeck(entry),
   source: entry.source,
+  revisions: entry.revisions,
 }));
+
+/** The ledger id a revision of a seed settles under — one namespace, two kinds of entry. */
+export function revisionLedgerId(seed: PaperSeed, revision: DeckRevision): string {
+  return `${seed.id}#${revision.id}`;
+}
+
+/** The note a revision leaves on the deck — the same text a fresh mint and a later application show. */
+function revisionNote(seed: PaperSeed, revision: DeckRevision, at: string): AppliedRevision {
+  return {
+    id: revisionLedgerId(seed, revision),
+    appliedAt: at,
+    note: revision.note,
+    added: revision.adds.map((add) => ({ name: add.cardId, count: add.count })),
+  };
+}
 
 /** Case- and space-insensitive deck-name key, so "  thune's  life" collides. */
 function nameKey(name: string): string {
@@ -158,14 +187,112 @@ export function mintSeedDeck(seed: PaperSeed): Deck {
     missingCounts.set(entry.cardId, (missingCounts.get(entry.cardId) ?? 0) + entry.count);
   }
   const unresolved: UnresolvedCard[] = [...missingCounts].map(([name, count]) => ({ name, count }));
+  const now = new Date().toISOString();
   const deck: Deck = {
     id: seedDeckId(seed),
     name: seed.deck.name,
     cards: copy.deck.cards,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   };
   if (unresolved.length > 0) deck.unresolved = unresolved;
+  // A fresh mint already holds every revision (`seed.deck` is the current
+  // deck); the notes still go on, so a new profile is told the same thing an
+  // old one is — which cards are there because he asked for them.
+  if (seed.revisions.length > 0) deck.revisions = seed.revisions.map((r) => revisionNote(seed, r, now));
   return deck;
+}
+
+/**
+ * Apply one revision to his copy of the deck — ADD-ONLY, through the one
+ * bundled-deck → pool funnel: a name the pool carries joins `cards` (counts
+ * summed), a name it does not yet carry joins the `unresolved` wish-list
+ * (counts summed) and is folded in by {@link reconcileUnresolved} the day the
+ * compiler learns it. Nothing is removed and no count he set goes down; the
+ * 4-of rule is reported by `validateDeck` like any other illegal deck, never
+ * silently capped. A note records the addition for the deck builder to show.
+ */
+export function applyRevisionToDeck(deck: Deck, seed: PaperSeed, revision: DeckRevision): Deck {
+  const pending: SimDeck = { name: deck.name, archetype: '', cards: revision.adds };
+  const copy = copyGauntletDeck(pending, '');
+  const cards = deck.cards.map((entry) => ({ ...entry }));
+  for (const found of copy.deck.cards) {
+    const existing = cards.find((entry) => entry.cardId === found.cardId);
+    if (existing) existing.count += found.count;
+    else cards.push({ ...found });
+  }
+  const unresolved = (deck.unresolved ?? []).map((entry) => ({ ...entry }));
+  for (const add of revision.adds) {
+    if (!copy.unresolved.includes(add.cardId)) continue;
+    const index = unresolved.findIndex((entry) => entry.name === add.cardId);
+    if (index >= 0) unresolved[index] = { name: add.cardId, count: unresolved[index]!.count + add.count };
+    else unresolved.push({ name: add.cardId, count: add.count });
+  }
+  const now = new Date().toISOString();
+  const next: Deck = {
+    ...deck,
+    cards,
+    updatedAt: now,
+    revisions: [...(deck.revisions ?? []), revisionNote(seed, revision, now)],
+  };
+  if (unresolved.length > 0) next.unresolved = unresolved;
+  else delete next.unresolved;
+  return next;
+}
+
+/**
+ * Find HIS copy of a seeded deck: by the stable id the seed minted, or — when
+ * the seed was skipped because he had transcribed the deck himself
+ * (`name-in-use`) — by name. Undefined when he has deleted it.
+ */
+function hisCopyOf(decks: readonly Deck[], seed: PaperSeed): Deck | undefined {
+  return (
+    decks.find((deck) => deck.id === seedDeckId(seed)) ??
+    decks.find((deck) => nameKey(deck.name) === nameKey(seed.deck.name))
+  );
+}
+
+/**
+ * §3.162 — apply every revision this profile has not yet received.
+ *
+ * Runs AFTER {@link planSeeding} on its output, exactly as
+ * {@link reconcileUnresolved} does, and with the same contract: a deck that
+ * receives nothing comes out by identity; a deck that receives a revision comes
+ * out as a new object that holds everything it held plus the additions. Each
+ * revision settles once — applied, or `deck-absent` when he has deleted the
+ * deck, which a revision never undoes.
+ *
+ * A revision of a seed that is NOT yet settled is left alone: that seed is
+ * being minted in this same pass with the revision already in, and
+ * {@link planSeeding} settles the revision with it.
+ */
+export function planRevisions(decks: readonly Deck[], settledIds: ReadonlySet<string>): SeedPlan {
+  const settled: SettledSeed[] = [];
+  let next: Deck[] = [...decks];
+  let changed = false;
+  for (const seed of PAPER_SEEDS) {
+    if (!settledIds.has(seed.id)) continue;
+    for (const revision of seed.revisions) {
+      const ledgerId = revisionLedgerId(seed, revision);
+      if (settledIds.has(ledgerId)) continue;
+      const target = hisCopyOf(next, seed);
+      if (target === undefined) {
+        settled.push({ id: ledgerId, outcome: 'deck-absent' });
+        continue;
+      }
+      // The second belt, for a ledger write that failed: the note a revision
+      // leaves on the deck (a fresh mint leaves one too) says it has already
+      // arrived, so it is settled again rather than applied again.
+      if ((target.revisions ?? []).some((note) => note.id === ledgerId)) {
+        settled.push({ id: ledgerId, outcome: 'seeded' });
+        continue;
+      }
+      const revised = applyRevisionToDeck(target, seed, revision);
+      next = next.map((deck) => (deck === target ? revised : deck));
+      changed = true;
+      settled.push({ id: ledgerId, outcome: 'seeded' });
+    }
+  }
+  return { decks: next, settled, unchanged: !changed };
 }
 
 /** What one pass of seeding decided. */
@@ -220,6 +347,9 @@ export function planSeeding(
     takenNames.add(nameKey(deck.name));
     takenIds.add(deck.id);
     settled.push({ id: seed.id, outcome: 'seeded' });
+    // The mint already holds every revision; settle them with it, or the next
+    // load would apply each one a second time on top.
+    for (const revision of seed.revisions) settled.push({ id: revisionLedgerId(seed, revision), outcome: 'seeded' });
   }
 
   return {

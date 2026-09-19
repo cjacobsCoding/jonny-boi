@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T06:11:35.724Z",
+  "generatedAt": "2026-09-19T08:14:13.248Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7043,
+  "requested": 7135,
   "unresolved": [],
   "cards": [
     {
@@ -3189,6 +3189,54 @@
         "normal": "https://cards.scryfall.io/normal/front/f/7/f7017afb-4c7c-4c8d-9c9d-3f056a55561e.jpg?1783917072",
         "large": "https://cards.scryfall.io/large/front/f/7/f7017afb-4c7c-4c8d-9c9d-3f056a55561e.jpg?1783917072",
         "art_crop": "https://cards.scryfall.io/art_crop/front/f/7/f7017afb-4c7c-4c8d-9c9d-3f056a55561e.jpg?1783917072"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c63e9c49-3fa4-41ad-9eed-19801df103c6",
+      "name": "Aerial Maneuver",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +1/+1 and gains flying and first strike until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "gtc",
+      "collectorNumber": "1",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/6/c63e9c49-3fa4-41ad-9eed-19801df103c6.jpg?1783940146",
+        "normal": "https://cards.scryfall.io/normal/front/c/6/c63e9c49-3fa4-41ad-9eed-19801df103c6.jpg?1783940146",
+        "large": "https://cards.scryfall.io/large/front/c/6/c63e9c49-3fa4-41ad-9eed-19801df103c6.jpg?1783940146",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/6/c63e9c49-3fa4-41ad-9eed-19801df103c6.jpg?1783940146"
       },
       "localImages": {},
       "layout": "normal",
@@ -12651,6 +12699,50 @@
       "faces": []
     },
     {
+      "id": "d10d85c9-859a-4ff5-9a41-bf20622a3ff5",
+      "name": "Arcane Spyglass",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{2}, {T}, Sacrifice a land: Draw a card and put a charge counter on this artifact.\nRemove three charge counters from this artifact: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "dst",
+      "collectorNumber": "93",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/1/d10d85c9-859a-4ff5-9a41-bf20622a3ff5.jpg?1783944431",
+        "normal": "https://cards.scryfall.io/normal/front/d/1/d10d85c9-859a-4ff5-9a41-bf20622a3ff5.jpg?1783944431",
+        "large": "https://cards.scryfall.io/large/front/d/1/d10d85c9-859a-4ff5-9a41-bf20622a3ff5.jpg?1783944431",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/1/d10d85c9-859a-4ff5-9a41-bf20622a3ff5.jpg?1783944431"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "68cdb00c-ea86-4b72-8f62-570820edfa1b",
       "name": "Arcane Subtraction",
       "manaCost": {
@@ -17037,6 +17129,57 @@
         "normal": "https://cards.scryfall.io/normal/front/b/e/be2ef728-a2c7-45ee-8594-372ed135b482.jpg?1783917046",
         "large": "https://cards.scryfall.io/large/front/b/e/be2ef728-a2c7-45ee-8594-372ed135b482.jpg?1783917046",
         "art_crop": "https://cards.scryfall.io/art_crop/front/b/e/be2ef728-a2c7-45ee-8594-372ed135b482.jpg?1783917046"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c66988ca-29d5-45ea-8d68-c8e0e4c3ffb1",
+      "name": "Atmosphere Surgeon",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Wizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Wizard",
+      "oracleText": "Whenever you cast a noncreature spell, put an oil counter on this creature.\nRemove an oil counter from this creature: Target creature gains flying until end of turn. Activate only as a sorcery.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "41",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/6/c66988ca-29d5-45ea-8d68-c8e0e4c3ffb1.jpg?1783918069",
+        "normal": "https://cards.scryfall.io/normal/front/c/6/c66988ca-29d5-45ea-8d68-c8e0e4c3ffb1.jpg?1783918069",
+        "large": "https://cards.scryfall.io/large/front/c/6/c66988ca-29d5-45ea-8d68-c8e0e4c3ffb1.jpg?1783918069",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/6/c66988ca-29d5-45ea-8d68-c8e0e4c3ffb1.jpg?1783918069"
       },
       "localImages": {},
       "layout": "normal",
@@ -23592,6 +23735,52 @@
       "faces": []
     },
     {
+      "id": "8e2f0ae2-db68-4338-93f9-9d9268cec41e",
+      "name": "Basilica Skullbomb",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{1}, Sacrifice this artifact: Draw a card.\n{2}{W}, Sacrifice this artifact: Target creature you control gets +2/+2 and gains flying until end of turn. Draw a card. Activate only as a sorcery.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "224",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/e/8e2f0ae2-db68-4338-93f9-9d9268cec41e.jpg?1783917994",
+        "normal": "https://cards.scryfall.io/normal/front/8/e/8e2f0ae2-db68-4338-93f9-9d9268cec41e.jpg?1783917994",
+        "large": "https://cards.scryfall.io/large/front/8/e/8e2f0ae2-db68-4338-93f9-9d9268cec41e.jpg?1783917994",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/e/8e2f0ae2-db68-4338-93f9-9d9268cec41e.jpg?1783917994"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "f5f4dd28-f4ae-4d39-b9b8-6ebfd63c93fe",
       "name": "Basilisk Collar",
       "manaCost": {
@@ -25320,6 +25509,54 @@
         "normal": "https://cards.scryfall.io/normal/front/b/e/be04ea4a-087e-4a6d-9973-0778a1ed2b7e.jpg?1783943449",
         "large": "https://cards.scryfall.io/large/front/b/e/be04ea4a-087e-4a6d-9973-0778a1ed2b7e.jpg?1783943449",
         "art_crop": "https://cards.scryfall.io/art_crop/front/b/e/be04ea4a-087e-4a6d-9973-0778a1ed2b7e.jpg?1783943449"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7e22411c-11c1-4770-8491-7952dd406e01",
+      "name": "Beaming Defiance",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +2/+2 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "stx",
+      "collectorNumber": "9",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/e/7e22411c-11c1-4770-8491-7952dd406e01.jpg?1783927395",
+        "normal": "https://cards.scryfall.io/normal/front/7/e/7e22411c-11c1-4770-8491-7952dd406e01.jpg?1783927395",
+        "large": "https://cards.scryfall.io/large/front/7/e/7e22411c-11c1-4770-8491-7952dd406e01.jpg?1783927395",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/e/7e22411c-11c1-4770-8491-7952dd406e01.jpg?1783927395"
       },
       "localImages": {},
       "layout": "normal",
@@ -33734,6 +33971,54 @@
       "faces": []
     },
     {
+      "id": "3cce80d0-b937-4325-a603-1278c110f244",
+      "name": "Blossoming Defense",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +2/+2 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "ecl",
+      "collectorNumber": "167",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/c/3cce80d0-b937-4325-a603-1278c110f244.jpg?1783904434",
+        "normal": "https://cards.scryfall.io/normal/front/3/c/3cce80d0-b937-4325-a603-1278c110f244.jpg?1783904434",
+        "large": "https://cards.scryfall.io/large/front/3/c/3cce80d0-b937-4325-a603-1278c110f244.jpg?1783904434",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/c/3cce80d0-b937-4325-a603-1278c110f244.jpg?1783904434"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "45429b2c-be3b-4b2e-9bab-a059ccbda8cd",
       "name": "Blossoming Sands",
       "manaCost": {
@@ -38805,6 +39090,118 @@
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
+    },
+    {
+      "id": "25d309d6-9e56-441e-bd29-5c903d5221bf",
+      "name": "Brazen Borrower // Petty Theft",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Faerie",
+          "Rogue"
+        ]
+      },
+      "rawTypeLine": "Creature — Faerie Rogue // Instant — Adventure",
+      "oracleText": "Flash\nFlying\nThis creature can block only creatures with flying.",
+      "power": 3,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying",
+        "Flash"
+      ],
+      "set": "soc",
+      "collectorNumber": "190",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/5/25d309d6-9e56-441e-bd29-5c903d5221bf.jpg?1783903792",
+        "normal": "https://cards.scryfall.io/normal/front/2/5/25d309d6-9e56-441e-bd29-5c903d5221bf.jpg?1783903792",
+        "large": "https://cards.scryfall.io/large/front/2/5/25d309d6-9e56-441e-bd29-5c903d5221bf.jpg?1783903792",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/5/25d309d6-9e56-441e-bd29-5c903d5221bf.jpg?1783903792"
+      },
+      "localImages": {},
+      "layout": "adventure",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Brazen Borrower",
+          "manaCost": {
+            "generic": 1,
+            "W": 0,
+            "U": 2,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Creature"
+            ],
+            "subtypes": [
+              "Faerie",
+              "Rogue"
+            ]
+          },
+          "rawTypeLine": "Creature — Faerie Rogue",
+          "oracleText": "Flash\nFlying\nThis creature can block only creatures with flying.",
+          "power": 3,
+          "toughness": 1,
+          "colors": [],
+          "imageUris": {}
+        },
+        {
+          "name": "Petty Theft",
+          "manaCost": {
+            "generic": 1,
+            "W": 0,
+            "U": 1,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Instant"
+            ],
+            "subtypes": [
+              "Adventure"
+            ]
+          },
+          "rawTypeLine": "Instant — Adventure",
+          "oracleText": "Return target nonland permanent an opponent controls to its owner's hand.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {}
+        }
+      ]
     },
     {
       "id": "9ca29a73-9606-4422-9187-67e00dcd52aa",
@@ -50983,6 +51380,54 @@
       "faces": []
     },
     {
+      "id": "06f9f257-c7ef-44b7-8b2b-f038fba900af",
+      "name": "Chase Inspiration",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +0/+3 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "sos",
+      "collectorNumber": "41",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/6/06f9f257-c7ef-44b7-8b2b-f038fba900af.jpg?1783903695",
+        "normal": "https://cards.scryfall.io/normal/front/0/6/06f9f257-c7ef-44b7-8b2b-f038fba900af.jpg?1783903695",
+        "large": "https://cards.scryfall.io/large/front/0/6/06f9f257-c7ef-44b7-8b2b-f038fba900af.jpg?1783903695",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/6/06f9f257-c7ef-44b7-8b2b-f038fba900af.jpg?1783903695"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b0aaa4b1-5188-43a6-997d-7a9b2ad452bc",
       "name": "Chatter of the Squirrel",
       "manaCost": {
@@ -57817,6 +58262,59 @@
         "normal": "https://cards.scryfall.io/normal/front/9/7/97cc7e09-315f-44fd-b7ce-03d4c18d88be.jpg?1783942643",
         "large": "https://cards.scryfall.io/large/front/9/7/97cc7e09-315f-44fd-b7ce-03d4c18d88be.jpg?1783942643",
         "art_crop": "https://cards.scryfall.io/art_crop/front/9/7/97cc7e09-315f-44fd-b7ce-03d4c18d88be.jpg?1783942643"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3f669ac4-98ed-4e23-91a9-281f8277ab04",
+      "name": "Combat Professor",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Bird",
+          "Cleric"
+        ]
+      },
+      "rawTypeLine": "Creature — Bird Cleric",
+      "oracleText": "Flying\nAt the beginning of combat on your turn, target creature you control gets +1/+0 and gains vigilance until end of turn.",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "stx",
+      "collectorNumber": "11",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/f/3f669ac4-98ed-4e23-91a9-281f8277ab04.jpg?1783927394",
+        "normal": "https://cards.scryfall.io/normal/front/3/f/3f669ac4-98ed-4e23-91a9-281f8277ab04.jpg?1783927394",
+        "large": "https://cards.scryfall.io/large/front/3/f/3f669ac4-98ed-4e23-91a9-281f8277ab04.jpg?1783927394",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/f/3f669ac4-98ed-4e23-91a9-281f8277ab04.jpg?1783927394"
       },
       "localImages": {},
       "layout": "normal",
@@ -68701,6 +69199,56 @@
         "normal": "https://cards.scryfall.io/normal/front/3/d/3d09dbcd-188b-4b52-943e-947cbf2c0002.jpg?1783923120",
         "large": "https://cards.scryfall.io/large/front/3/d/3d09dbcd-188b-4b52-943e-947cbf2c0002.jpg?1783923120",
         "art_crop": "https://cards.scryfall.io/art_crop/front/3/d/3d09dbcd-188b-4b52-943e-947cbf2c0002.jpg?1783923120"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "37ec6c4b-2de0-4759-a25d-007706cb18cc",
+      "name": "Daring Leap",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +1/+1 and gains flying and first strike until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U",
+        "W"
+      ],
+      "colorIdentity": [
+        "U",
+        "W"
+      ],
+      "keywords": [],
+      "set": "pls",
+      "collectorNumber": "101",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/7/37ec6c4b-2de0-4759-a25d-007706cb18cc.jpg?1783945608",
+        "normal": "https://cards.scryfall.io/normal/front/3/7/37ec6c4b-2de0-4759-a25d-007706cb18cc.jpg?1783945608",
+        "large": "https://cards.scryfall.io/large/front/3/7/37ec6c4b-2de0-4759-a25d-007706cb18cc.jpg?1783945608",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/7/37ec6c4b-2de0-4759-a25d-007706cb18cc.jpg?1783945608"
       },
       "localImages": {},
       "layout": "normal",
@@ -81442,6 +81990,54 @@
       "faces": []
     },
     {
+      "id": "65d5cff9-a3ec-432d-9ce5-68949e524279",
+      "name": "Dive Down",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +0/+3 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "588",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/5/65d5cff9-a3ec-432d-9ce5-68949e524279.jpg?1783908935",
+        "normal": "https://cards.scryfall.io/normal/front/6/5/65d5cff9-a3ec-432d-9ce5-68949e524279.jpg?1783908935",
+        "large": "https://cards.scryfall.io/large/front/6/5/65d5cff9-a3ec-432d-9ce5-68949e524279.jpg?1783908935",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/5/65d5cff9-a3ec-432d-9ce5-68949e524279.jpg?1783908935"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "273b339c-964b-4a18-8eb5-ceb8abcdfd9e",
       "name": "Divination",
       "manaCost": {
@@ -83851,6 +84447,50 @@
         "normal": "https://cards.scryfall.io/normal/front/7/5/750880cd-59bf-4b67-a2d5-9b66e4d05665.jpg?1783938619",
         "large": "https://cards.scryfall.io/large/front/7/5/750880cd-59bf-4b67-a2d5-9b66e4d05665.jpg?1783938619",
         "art_crop": "https://cards.scryfall.io/art_crop/front/7/5/750880cd-59bf-4b67-a2d5-9b66e4d05665.jpg?1783938619"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3ee80876-6e87-46c4-a6fd-ff6752db3032",
+      "name": "Dragon's Hoard",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Whenever a Dragon you control enters, put a gold counter on this artifact.\n{T}, Remove a gold counter from this artifact: Draw a card.\n{T}: Add one mana of any color.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "tdc",
+      "collectorNumber": "317",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/e/3ee80876-6e87-46c4-a6fd-ff6752db3032.jpg?1783907014",
+        "normal": "https://cards.scryfall.io/normal/front/3/e/3ee80876-6e87-46c4-a6fd-ff6752db3032.jpg?1783907014",
+        "large": "https://cards.scryfall.io/large/front/3/e/3ee80876-6e87-46c4-a6fd-ff6752db3032.jpg?1783907014",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/e/3ee80876-6e87-46c4-a6fd-ff6752db3032.jpg?1783907014"
       },
       "localImages": {},
       "layout": "normal",
@@ -90682,6 +91322,57 @@
         "normal": "https://cards.scryfall.io/normal/front/a/f/af4d2f70-816c-4410-b3a3-9b9a4b69df52.jpg?1783915701",
         "large": "https://cards.scryfall.io/large/front/a/f/af4d2f70-816c-4410-b3a3-9b9a4b69df52.jpg?1783915701",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/f/af4d2f70-816c-4410-b3a3-9b9a4b69df52.jpg?1783915701"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "53343a0c-d97c-4d6f-b696-5343a962e3dd",
+      "name": "Eidolon of Inspiration",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Enchantment Creature — Spirit",
+      "oracleText": "At the beginning of combat on your turn, target creature you control gets +2/+0 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "thb",
+      "collectorNumber": "271",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/3/53343a0c-d97c-4d6f-b696-5343a962e3dd.jpg?1783931501",
+        "normal": "https://cards.scryfall.io/normal/front/5/3/53343a0c-d97c-4d6f-b696-5343a962e3dd.jpg?1783931501",
+        "large": "https://cards.scryfall.io/large/front/5/3/53343a0c-d97c-4d6f-b696-5343a962e3dd.jpg?1783931501",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/3/53343a0c-d97c-4d6f-b696-5343a962e3dd.jpg?1783931501"
       },
       "localImages": {},
       "layout": "normal",
@@ -105306,6 +105997,58 @@
       "faces": []
     },
     {
+      "id": "72f77884-6cec-4ccc-b619-3492b04bc3f7",
+      "name": "Feral Thallid",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 3,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Fungus"
+        ]
+      },
+      "rawTypeLine": "Creature — Fungus",
+      "oracleText": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Regenerate this creature.",
+      "power": 6,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Regenerate"
+      ],
+      "set": "me2",
+      "collectorNumber": "161",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/2/72f77884-6cec-4ccc-b619-3492b04bc3f7.jpg?1783942605",
+        "normal": "https://cards.scryfall.io/normal/front/7/2/72f77884-6cec-4ccc-b619-3492b04bc3f7.jpg?1783942605",
+        "large": "https://cards.scryfall.io/large/front/7/2/72f77884-6cec-4ccc-b619-3492b04bc3f7.jpg?1783942605",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/2/72f77884-6cec-4ccc-b619-3492b04bc3f7.jpg?1783942605"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3749181f-7b4e-4b9d-aaf3-94f707c306aa",
       "name": "Ferocious Charge",
       "manaCost": {
@@ -105598,6 +106341,54 @@
         "normal": "https://cards.scryfall.io/normal/front/7/b/7b15428e-946e-490d-93bb-9888bfd3a1df.jpg?1783932781",
         "large": "https://cards.scryfall.io/large/front/7/b/7b15428e-946e-490d-93bb-9888bfd3a1df.jpg?1783932781",
         "art_crop": "https://cards.scryfall.io/art_crop/front/7/b/7b15428e-946e-490d-93bb-9888bfd3a1df.jpg?1783932781"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e4f76e51-a726-4a5f-ae2b-2e826e89f5f7",
+      "name": "Fervent Strike",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +1/+0 and gains first strike and haste until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "dom",
+      "collectorNumber": "117",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/4/e4f76e51-a726-4a5f-ae2b-2e826e89f5f7.jpg?1783934997",
+        "normal": "https://cards.scryfall.io/normal/front/e/4/e4f76e51-a726-4a5f-ae2b-2e826e89f5f7.jpg?1783934997",
+        "large": "https://cards.scryfall.io/large/front/e/4/e4f76e51-a726-4a5f-ae2b-2e826e89f5f7.jpg?1783934997",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/4/e4f76e51-a726-4a5f-ae2b-2e826e89f5f7.jpg?1783934997"
       },
       "localImages": {},
       "layout": "normal",
@@ -115543,6 +116334,56 @@
       "faces": []
     },
     {
+      "id": "725bc6de-140e-4b28-a781-daf17c465a53",
+      "name": "Frantic Confrontation",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": [
+          "X"
+        ]
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +X/+0 and gains first strike and trample until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "tle",
+      "collectorNumber": "117",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/2/725bc6de-140e-4b28-a781-daf17c465a53.jpg?1783904822",
+        "normal": "https://cards.scryfall.io/normal/front/7/2/725bc6de-140e-4b28-a781-daf17c465a53.jpg?1783904822",
+        "large": "https://cards.scryfall.io/large/front/7/2/725bc6de-140e-4b28-a781-daf17c465a53.jpg?1783904822",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/2/725bc6de-140e-4b28-a781-daf17c465a53.jpg?1783904822"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "04f156d1-2655-42aa-a785-d8eb15cb5422",
       "name": "Frantic Purification",
       "manaCost": {
@@ -125357,6 +126198,59 @@
       "faces": []
     },
     {
+      "id": "4f5e95f8-c04d-405f-bba4-e83a8f6bf463",
+      "name": "Gitaxian Raptor",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Bird"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Bird",
+      "oracleText": "Flying\nThis creature enters with three oil counters on it.\nRemove an oil counter from this creature: This creature gets +1/-1 until end of turn.",
+      "power": 1,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "one",
+      "collectorNumber": "53",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/f/4f5e95f8-c04d-405f-bba4-e83a8f6bf463.jpg?1783918064",
+        "normal": "https://cards.scryfall.io/normal/front/4/f/4f5e95f8-c04d-405f-bba4-e83a8f6bf463.jpg?1783918064",
+        "large": "https://cards.scryfall.io/large/front/4/f/4f5e95f8-c04d-405f-bba4-e83a8f6bf463.jpg?1783918064",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/f/4f5e95f8-c04d-405f-bba4-e83a8f6bf463.jpg?1783918064"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "00ac1759-d4cc-41d5-a9b7-a89b80d2190c",
       "name": "Give In to Violence",
       "manaCost": {
@@ -126746,6 +127640,54 @@
       "faces": []
     },
     {
+      "id": "35fa105f-c76b-4fd0-9b83-34b46648e0d6",
+      "name": "Glint",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +0/+3 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "dtk",
+      "collectorNumber": "55",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/5/35fa105f-c76b-4fd0-9b83-34b46648e0d6.jpg?1783938608",
+        "normal": "https://cards.scryfall.io/normal/front/3/5/35fa105f-c76b-4fd0-9b83-34b46648e0d6.jpg?1783938608",
+        "large": "https://cards.scryfall.io/large/front/3/5/35fa105f-c76b-4fd0-9b83-34b46648e0d6.jpg?1783938608",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/5/35fa105f-c76b-4fd0-9b83-34b46648e0d6.jpg?1783938608"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "1c2fd5ac-963b-49ea-bd72-d0958ef8eb3e",
       "name": "Glint-Sleeve Artisan",
       "manaCost": {
@@ -126959,6 +127901,59 @@
         "normal": "https://cards.scryfall.io/normal/front/8/b/8b94f4c6-b518-43b3-be52-e889d1f3ea38.jpg?1783941301",
         "large": "https://cards.scryfall.io/large/front/8/b/8b94f4c6-b518-43b3-be52-e889d1f3ea38.jpg?1783941301",
         "art_crop": "https://cards.scryfall.io/art_crop/front/8/b/8b94f4c6-b518-43b3-be52-e889d1f3ea38.jpg?1783941301"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c22aaaec-bad5-43e9-8e92-9c4bde95fcfd",
+      "name": "Glistener Seer",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Advisor"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Advisor",
+      "oracleText": "This creature enters with three oil counters on it.\n{T}, Remove an oil counter from this creature: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+      "power": 0,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Scry"
+      ],
+      "set": "one",
+      "collectorNumber": "54",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/2/c22aaaec-bad5-43e9-8e92-9c4bde95fcfd.jpg?1783918064",
+        "normal": "https://cards.scryfall.io/normal/front/c/2/c22aaaec-bad5-43e9-8e92-9c4bde95fcfd.jpg?1783918064",
+        "large": "https://cards.scryfall.io/large/front/c/2/c22aaaec-bad5-43e9-8e92-9c4bde95fcfd.jpg?1783918064",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/2/c22aaaec-bad5-43e9-8e92-9c4bde95fcfd.jpg?1783918064"
       },
       "localImages": {},
       "layout": "normal",
@@ -132097,6 +133092,50 @@
         "normal": "https://cards.scryfall.io/normal/front/a/2/a241317d-2277-467e-a8f9-aa71c944e244.jpg?1783909048",
         "large": "https://cards.scryfall.io/large/front/a/2/a241317d-2277-467e-a8f9-aa71c944e244.jpg?1783909048",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/2/a241317d-2277-467e-a8f9-aa71c944e244.jpg?1783909048"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "18724f37-d50b-4b00-bd47-c5bc6e62697a",
+      "name": "Golem Foundry",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Whenever you cast an artifact spell, you may put a charge counter on this artifact.\nRemove three charge counters from this artifact: Create a 3/3 colorless Golem artifact creature token.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "eoc",
+      "collectorNumber": "138",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/8/18724f37-d50b-4b00-bd47-c5bc6e62697a.jpg?1783906020",
+        "normal": "https://cards.scryfall.io/normal/front/1/8/18724f37-d50b-4b00-bd47-c5bc6e62697a.jpg?1783906020",
+        "large": "https://cards.scryfall.io/large/front/1/8/18724f37-d50b-4b00-bd47-c5bc6e62697a.jpg?1783906020",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/8/18724f37-d50b-4b00-bd47-c5bc6e62697a.jpg?1783906020"
       },
       "localImages": {},
       "layout": "normal",
@@ -139964,6 +141003,57 @@
       "faces": []
     },
     {
+      "id": "f766418a-eb1d-4536-ae51-7f3e8969bb78",
+      "name": "Haazda Officer",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier",
+      "oracleText": "When this creature enters, target creature you control gets +1/+1 until end of turn.",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "m20",
+      "collectorNumber": "305",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/7/f766418a-eb1d-4536-ae51-7f3e8969bb78.jpg?1783932914",
+        "normal": "https://cards.scryfall.io/normal/front/f/7/f766418a-eb1d-4536-ae51-7f3e8969bb78.jpg?1783932914",
+        "large": "https://cards.scryfall.io/large/front/f/7/f766418a-eb1d-4536-ae51-7f3e8969bb78.jpg?1783932914",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/7/f766418a-eb1d-4536-ae51-7f3e8969bb78.jpg?1783932914"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "9079b01a-d595-4085-9e75-59e31827efeb",
       "name": "Hag of Death's Legion",
       "manaCost": {
@@ -145403,6 +146493,56 @@
       "faces": []
     },
     {
+      "id": "ce9ed217-8378-4a58-a00d-fa4e4cb27c9d",
+      "name": "Herald of the Fair",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human"
+        ]
+      },
+      "rawTypeLine": "Creature — Human",
+      "oracleText": "When this creature enters, target creature you control gets +1/+1 until end of turn.",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "kld",
+      "collectorNumber": "18",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/e/ce9ed217-8378-4a58-a00d-fa4e4cb27c9d.jpg?1783937232",
+        "normal": "https://cards.scryfall.io/normal/front/c/e/ce9ed217-8378-4a58-a00d-fa4e4cb27c9d.jpg?1783937232",
+        "large": "https://cards.scryfall.io/large/front/c/e/ce9ed217-8378-4a58-a00d-fa4e4cb27c9d.jpg?1783937232",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/e/ce9ed217-8378-4a58-a00d-fa4e4cb27c9d.jpg?1783937232"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e8d57d75-275d-45c8-85f4-aab230af35b2",
       "name": "Herald of the Host",
       "manaCost": {
@@ -149971,6 +151111,59 @@
         "normal": "https://cards.scryfall.io/normal/front/6/e/6ee3b883-e9f5-426f-a2ea-96fe9ff3aba9.jpg?1783905305",
         "large": "https://cards.scryfall.io/large/front/6/e/6ee3b883-e9f5-426f-a2ea-96fe9ff3aba9.jpg?1783905305",
         "art_crop": "https://cards.scryfall.io/art_crop/front/6/e/6ee3b883-e9f5-426f-a2ea-96fe9ff3aba9.jpg?1783905305"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "87468b6b-6f78-42e4-ab0d-6730aeecdc3f",
+      "name": "Hotfoot Gnome",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Gnome"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Gnome",
+      "oracleText": "Haste\n{T}: Another target creature gains haste until end of turn.",
+      "power": 3,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "lci",
+      "collectorNumber": "154",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/7/87468b6b-6f78-42e4-ab0d-6730aeecdc3f.jpg?1783913759",
+        "normal": "https://cards.scryfall.io/normal/front/8/7/87468b6b-6f78-42e4-ab0d-6730aeecdc3f.jpg?1783913759",
+        "large": "https://cards.scryfall.io/large/front/8/7/87468b6b-6f78-42e4-ab0d-6730aeecdc3f.jpg?1783913759",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/7/87468b6b-6f78-42e4-ab0d-6730aeecdc3f.jpg?1783913759"
       },
       "localImages": {},
       "layout": "normal",
@@ -155095,6 +156288,54 @@
         "normal": "incorrigible-youths-normal.jpg",
         "art_crop": "incorrigible-youths-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a6b36e23-a414-400c-a3a5-e23883e866d3",
+      "name": "Incubation Sac",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three oil counters on it.\n{4}, {T}, Remove an oil counter from this artifact: Create a 3/3 colorless Phyrexian Golem artifact creature token. Activate only as a sorcery.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "171",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/6/a6b36e23-a414-400c-a3a5-e23883e866d3.jpg?1783918015",
+        "normal": "https://cards.scryfall.io/normal/front/a/6/a6b36e23-a414-400c-a3a5-e23883e866d3.jpg?1783918015",
+        "large": "https://cards.scryfall.io/large/front/a/6/a6b36e23-a414-400c-a3a5-e23883e866d3.jpg?1783918015",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/6/a6b36e23-a414-400c-a3a5-e23883e866d3.jpg?1783918015"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -166439,6 +167680,61 @@
       "faces": []
     },
     {
+      "id": "f7c41011-a9eb-451c-a76d-67d2dcf47c52",
+      "name": "Karlov of the Ghost Council",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit",
+          "Advisor"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Spirit Advisor",
+      "oracleText": "Whenever you gain life, put two +1/+1 counters on Karlov.\n{W}{B}, Remove six +1/+1 counters from Karlov: Exile target creature.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "W"
+      ],
+      "colorIdentity": [
+        "B",
+        "W"
+      ],
+      "keywords": [],
+      "set": "rvr",
+      "collectorNumber": "193",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/7/f7c41011-a9eb-451c-a76d-67d2dcf47c52.jpg?1783913286",
+        "normal": "https://cards.scryfall.io/normal/front/f/7/f7c41011-a9eb-451c-a76d-67d2dcf47c52.jpg?1783913286",
+        "large": "https://cards.scryfall.io/large/front/f/7/f7c41011-a9eb-451c-a76d-67d2dcf47c52.jpg?1783913286",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/7/f7c41011-a9eb-451c-a76d-67d2dcf47c52.jpg?1783913286"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b26d50dd-54a1-43ce-9884-3999f698d97b",
       "name": "Karmic Guide",
       "manaCost": {
@@ -166803,6 +168099,58 @@
         "normal": "https://cards.scryfall.io/normal/front/1/5/150cf865-79e2-4f74-a872-44e1e5bc73c4.jpg?1783942573",
         "large": "https://cards.scryfall.io/large/front/1/5/150cf865-79e2-4f74-a872-44e1e5bc73c4.jpg?1783942573",
         "art_crop": "https://cards.scryfall.io/art_crop/front/1/5/150cf865-79e2-4f74-a872-44e1e5bc73c4.jpg?1783942573"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f5e92cdd-75df-499e-94f7-22287f1000b3",
+      "name": "Kavaron Turbodrone",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Robot",
+          "Scout"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Robot Scout",
+      "oracleText": "{T}: Target creature you control gets +1/+1 and gains haste until end of turn. Activate only as a sorcery.",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "eoe",
+      "collectorNumber": "141",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/5/f5e92cdd-75df-499e-94f7-22287f1000b3.jpg?1783905953",
+        "normal": "https://cards.scryfall.io/normal/front/f/5/f5e92cdd-75df-499e-94f7-22287f1000b3.jpg?1783905953",
+        "large": "https://cards.scryfall.io/large/front/f/5/f5e92cdd-75df-499e-94f7-22287f1000b3.jpg?1783905953",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/5/f5e92cdd-75df-499e-94f7-22287f1000b3.jpg?1783905953"
       },
       "localImages": {},
       "layout": "normal",
@@ -184248,6 +185596,56 @@
       "faces": []
     },
     {
+      "id": "b5fb18c4-1386-4ea0-97c1-4bdd1e7eb5a6",
+      "name": "Lunar Frenzy",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": [
+          "X"
+        ]
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +X/+0 and gains first strike and trample until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "mid",
+      "collectorNumber": "147",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/5/b5fb18c4-1386-4ea0-97c1-4bdd1e7eb5a6.jpg?1783925597",
+        "normal": "https://cards.scryfall.io/normal/front/b/5/b5fb18c4-1386-4ea0-97c1-4bdd1e7eb5a6.jpg?1783925597",
+        "large": "https://cards.scryfall.io/large/front/b/5/b5fb18c4-1386-4ea0-97c1-4bdd1e7eb5a6.jpg?1783925597",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/5/b5fb18c4-1386-4ea0-97c1-4bdd1e7eb5a6.jpg?1783925597"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d6e1e3e7-20d4-42cb-ad22-60356b9e8fdc",
       "name": "Lunatic Pandora",
       "manaCost": {
@@ -184604,6 +186002,50 @@
         "normal": "lush-portico-normal.jpg",
         "art_crop": "lush-portico-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d477db7e-d964-45b2-95ee-d6a382dd2aa9",
+      "name": "Lux Cannon",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{T}: Put a charge counter on this artifact.\n{T}, Remove three charge counters from this artifact: Destroy target permanent.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "eoc",
+      "collectorNumber": "141",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/4/d477db7e-d964-45b2-95ee-d6a382dd2aa9.jpg?1783906019",
+        "normal": "https://cards.scryfall.io/normal/front/d/4/d477db7e-d964-45b2-95ee-d6a382dd2aa9.jpg?1783906019",
+        "large": "https://cards.scryfall.io/large/front/d/4/d477db7e-d964-45b2-95ee-d6a382dd2aa9.jpg?1783906019",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/4/d477db7e-d964-45b2-95ee-d6a382dd2aa9.jpg?1783906019"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -190426,6 +191868,54 @@
       "faces": []
     },
     {
+      "id": "8d93d14d-7760-4af2-a237-2df326dd28d3",
+      "name": "Masterful Flourish",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +1/+0 and gains indestructible until end of turn. (Damage and effects that say \"destroy\" don't destroy it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "sos",
+      "collectorNumber": "89",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/d/8d93d14d-7760-4af2-a237-2df326dd28d3.jpg?1783903678",
+        "normal": "https://cards.scryfall.io/normal/front/8/d/8d93d14d-7760-4af2-a237-2df326dd28d3.jpg?1783903678",
+        "large": "https://cards.scryfall.io/large/front/8/d/8d93d14d-7760-4af2-a237-2df326dd28d3.jpg?1783903678",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/d/8d93d14d-7760-4af2-a237-2df326dd28d3.jpg?1783903678"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "5e4cd13a-66b6-4c65-a5a0-82f93145d16a",
       "name": "Maulfist Squad",
       "manaCost": {
@@ -190986,6 +192476,52 @@
         "normal": "https://cards.scryfall.io/normal/front/5/0/50162cdd-ba30-48df-93ff-197c7f4a2913.jpg?1783923117",
         "large": "https://cards.scryfall.io/large/front/5/0/50162cdd-ba30-48df-93ff-197c7f4a2913.jpg?1783923117",
         "art_crop": "https://cards.scryfall.io/art_crop/front/5/0/50162cdd-ba30-48df-93ff-197c7f4a2913.jpg?1783923117"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1073aee2-aea6-473d-97c6-248778d79d80",
+      "name": "Maze Skullbomb",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{1}, Sacrifice this artifact: Draw a card.\n{2}{G}, Sacrifice this artifact: Target creature you control gets +3/+3 and gains trample until end of turn. Draw a card. Activate only as a sorcery.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "231",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/0/1073aee2-aea6-473d-97c6-248778d79d80.jpg?1783917990",
+        "normal": "https://cards.scryfall.io/normal/front/1/0/1073aee2-aea6-473d-97c6-248778d79d80.jpg?1783917990",
+        "large": "https://cards.scryfall.io/large/front/1/0/1073aee2-aea6-473d-97c6-248778d79d80.jpg?1783917990",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/0/1073aee2-aea6-473d-97c6-248778d79d80.jpg?1783917990"
       },
       "localImages": {},
       "layout": "normal",
@@ -193792,6 +195328,53 @@
       "faces": []
     },
     {
+      "id": "a1a1cfec-72ca-499b-b621-fa2d8502ea20",
+      "name": "Meteor Golem",
+      "manaCost": {
+        "generic": 7,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Golem"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Golem",
+      "oracleText": "When this creature enters, destroy target nonland permanent an opponent controls.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "msc",
+      "collectorNumber": "205",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/1/a1a1cfec-72ca-499b-b621-fa2d8502ea20.jpg?1783903217",
+        "normal": "https://cards.scryfall.io/normal/front/a/1/a1a1cfec-72ca-499b-b621-fa2d8502ea20.jpg?1783903217",
+        "large": "https://cards.scryfall.io/large/front/a/1/a1a1cfec-72ca-499b-b621-fa2d8502ea20.jpg?1783903217",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/1/a1a1cfec-72ca-499b-b621-fa2d8502ea20.jpg?1783903217"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "68b1c746-a4b8-4a45-9f0e-3962f0ae40e3",
       "name": "Meteor Sword",
       "manaCost": {
@@ -194607,6 +196190,54 @@
         "normal": "might-of-oaks-normal.jpg",
         "art_crop": "might-of-oaks-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "54f82c95-8bc1-4df9-9120-86ffc059c7dd",
+      "name": "Might of the Ancestors",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "At the beginning of combat on your turn, target creature you control gets +2/+0 and gains vigilance until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "lci",
+      "collectorNumber": "23",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/4/54f82c95-8bc1-4df9-9120-86ffc059c7dd.jpg?1783913810",
+        "normal": "https://cards.scryfall.io/normal/front/5/4/54f82c95-8bc1-4df9-9120-86ffc059c7dd.jpg?1783913810",
+        "large": "https://cards.scryfall.io/large/front/5/4/54f82c95-8bc1-4df9-9120-86ffc059c7dd.jpg?1783913810",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/4/54f82c95-8bc1-4df9-9120-86ffc059c7dd.jpg?1783913810"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -195656,6 +197287,56 @@
         "normal": "https://cards.scryfall.io/normal/front/5/5/55d3fad5-a12a-4b41-9c7b-c1af5e0b5ca8.jpg?1783940042",
         "large": "https://cards.scryfall.io/large/front/5/5/55d3fad5-a12a-4b41-9c7b-c1af5e0b5ca8.jpg?1783940042",
         "art_crop": "https://cards.scryfall.io/art_crop/front/5/5/55d3fad5-a12a-4b41-9c7b-c1af5e0b5ca8.jpg?1783940042"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "ebe796e1-97f9-469a-a6b6-a09161058e12",
+      "name": "Mindwarper",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "This creature enters with three +1/+1 counters on it.\n{2}{B}, Remove a +1/+1 counter from this creature: Target player discards a card. Activate only as a sorcery.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "sth",
+      "collectorNumber": "64",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/b/ebe796e1-97f9-469a-a6b6-a09161058e12.jpg?1783946561",
+        "normal": "https://cards.scryfall.io/normal/front/e/b/ebe796e1-97f9-469a-a6b6-a09161058e12.jpg?1783946561",
+        "large": "https://cards.scryfall.io/large/front/e/b/ebe796e1-97f9-469a-a6b6-a09161058e12.jpg?1783946561",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/b/ebe796e1-97f9-469a-a6b6-a09161058e12.jpg?1783946561"
       },
       "localImages": {},
       "layout": "normal",
@@ -198924,6 +200605,57 @@
         "normal": "https://cards.scryfall.io/normal/front/f/3/f3e93085-ffcb-4f48-8649-3fcbc5e97699.jpg?1783903749",
         "large": "https://cards.scryfall.io/large/front/f/3/f3e93085-ffcb-4f48-8649-3fcbc5e97699.jpg?1783903749",
         "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f3e93085-ffcb-4f48-8649-3fcbc5e97699.jpg?1783903749"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7b80b9c9-a871-4c04-b8be-feb81a900591",
+      "name": "Molecular Modifier",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Kavu",
+          "Artificer"
+        ]
+      },
+      "rawTypeLine": "Creature — Kavu Artificer",
+      "oracleText": "At the beginning of combat on your turn, target creature you control gets +1/+0 and gains first strike until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "eoe",
+      "collectorNumber": "146",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/b/7b80b9c9-a871-4c04-b8be-feb81a900591.jpg?1783905951",
+        "normal": "https://cards.scryfall.io/normal/front/7/b/7b80b9c9-a871-4c04-b8be-feb81a900591.jpg?1783905951",
+        "large": "https://cards.scryfall.io/large/front/7/b/7b80b9c9-a871-4c04-b8be-feb81a900591.jpg?1783905951",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/b/7b80b9c9-a871-4c04-b8be-feb81a900591.jpg?1783905951"
       },
       "localImages": {},
       "layout": "normal",
@@ -206365,6 +208097,50 @@
       "faces": []
     },
     {
+      "id": "4f707119-ede9-4697-b723-d6cea96e6f2b",
+      "name": "Necrogen Censer",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with two charge counters on it.\n{T}, Remove a charge counter from this artifact: Target player loses 2 life.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "som",
+      "collectorNumber": "184",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/f/4f707119-ede9-4697-b723-d6cea96e6f2b.jpg?1783941702",
+        "normal": "https://cards.scryfall.io/normal/front/4/f/4f707119-ede9-4697-b723-d6cea96e6f2b.jpg?1783941702",
+        "large": "https://cards.scryfall.io/large/front/4/f/4f707119-ede9-4697-b723-d6cea96e6f2b.jpg?1783941702",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/f/4f707119-ede9-4697-b723-d6cea96e6f2b.jpg?1783941702"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "c2045ddd-fa05-4769-aa7a-17b9ab8d6fc0",
       "name": "Necrogen Scudder",
       "manaCost": {
@@ -207133,6 +208909,56 @@
         "normal": "https://cards.scryfall.io/normal/front/5/2/52d58fe4-6070-4022-9cd7-c35a11b44525.jpg?1783904112",
         "large": "https://cards.scryfall.io/large/front/5/2/52d58fe4-6070-4022-9cd7-c35a11b44525.jpg?1783904112",
         "art_crop": "https://cards.scryfall.io/art_crop/front/5/2/52d58fe4-6070-4022-9cd7-c35a11b44525.jpg?1783904112"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0438d482-b74c-4d5e-a2bc-7063c1ae73fa",
+      "name": "Neighborhood Guardian",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Unicorn"
+        ]
+      },
+      "rawTypeLine": "Creature — Unicorn",
+      "oracleText": "Whenever another creature you control with power 2 or less enters, target creature you control gets +1/+1 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "mkm",
+      "collectorNumber": "26",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/4/0438d482-b74c-4d5e-a2bc-7063c1ae73fa.jpg?1783912928",
+        "normal": "https://cards.scryfall.io/normal/front/0/4/0438d482-b74c-4d5e-a2bc-7063c1ae73fa.jpg?1783912928",
+        "large": "https://cards.scryfall.io/large/front/0/4/0438d482-b74c-4d5e-a2bc-7063c1ae73fa.jpg?1783912928",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/4/0438d482-b74c-4d5e-a2bc-7063c1ae73fa.jpg?1783912928"
       },
       "localImages": {},
       "layout": "normal",
@@ -210513,6 +212339,56 @@
         "normal": "https://cards.scryfall.io/normal/front/a/6/a68fbeaa-941f-4d53-becd-f93ed22b9a54.jpg?1783907273",
         "large": "https://cards.scryfall.io/large/front/a/6/a68fbeaa-941f-4d53-becd-f93ed22b9a54.jpg?1783907273",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/6/a68fbeaa-941f-4d53-becd-f93ed22b9a54.jpg?1783907273"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "eeebc0ab-89fb-47d5-a20f-8f1fe5e3c149",
+      "name": "Norn's Wellspring",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Whenever a creature you control dies, scry 1 and put an oil counter on this artifact.\n{1}, {T}, Remove two oil counters from this artifact: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Scry"
+      ],
+      "set": "one",
+      "collectorNumber": "24",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/e/eeebc0ab-89fb-47d5-a20f-8f1fe5e3c149.jpg?1783918076",
+        "normal": "https://cards.scryfall.io/normal/front/e/e/eeebc0ab-89fb-47d5-a20f-8f1fe5e3c149.jpg?1783918076",
+        "large": "https://cards.scryfall.io/large/front/e/e/eeebc0ab-89fb-47d5-a20f-8f1fe5e3c149.jpg?1783918076",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/e/eeebc0ab-89fb-47d5-a20f-8f1fe5e3c149.jpg?1783918076"
       },
       "localImages": {},
       "layout": "normal",
@@ -218165,6 +220041,54 @@
         "normal": "https://cards.scryfall.io/normal/front/a/e/ae075e71-d33d-4d6c-b4a5-0b47dd6fd196.jpg?1783906615",
         "large": "https://cards.scryfall.io/large/front/a/e/ae075e71-d33d-4d6c-b4a5-0b47dd6fd196.jpg?1783906615",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/e/ae075e71-d33d-4d6c-b4a5-0b47dd6fd196.jpg?1783906615"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "079e979f-b618-4625-989c-e0ea5b61ed8a",
+      "name": "Overprotect",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +3/+3 and gains trample, hexproof, and indestructible until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "blb",
+      "collectorNumber": "185",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/7/079e979f-b618-4625-989c-e0ea5b61ed8a.jpg?1783910806",
+        "normal": "https://cards.scryfall.io/normal/front/0/7/079e979f-b618-4625-989c-e0ea5b61ed8a.jpg?1783910806",
+        "large": "https://cards.scryfall.io/large/front/0/7/079e979f-b618-4625-989c-e0ea5b61ed8a.jpg?1783910806",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/7/079e979f-b618-4625-989c-e0ea5b61ed8a.jpg?1783910806"
       },
       "localImages": {},
       "layout": "normal",
@@ -228430,6 +230354,50 @@
       "faces": []
     },
     {
+      "id": "a578599c-7d90-4881-b59a-9cf64b90d917",
+      "name": "Power Matrix",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{T}: Target creature gets +1/+1 and gains flying, first strike, and trample until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "309",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/5/a578599c-7d90-4881-b59a-9cf64b90d917.jpg?1783945909",
+        "normal": "https://cards.scryfall.io/normal/front/a/5/a578599c-7d90-4881-b59a-9cf64b90d917.jpg?1783945909",
+        "large": "https://cards.scryfall.io/large/front/a/5/a578599c-7d90-4881-b59a-9cf64b90d917.jpg?1783945909",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/5/a578599c-7d90-4881-b59a-9cf64b90d917.jpg?1783945909"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "094553a7-9513-4be5-aa24-4dbd939412c2",
       "name": "Power of Fire",
       "manaCost": {
@@ -228825,6 +230793,58 @@
         "normal": "https://cards.scryfall.io/normal/front/a/5/a59b4e5b-e9e0-4507-b9e7-8fba7e3a54f9.jpg?1783934094",
         "large": "https://cards.scryfall.io/large/front/a/5/a59b4e5b-e9e0-4507-b9e7-8fba7e3a54f9.jpg?1783934094",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/5/a59b4e5b-e9e0-4507-b9e7-8fba7e3a54f9.jpg?1783934094"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "419fab07-f921-4eff-91e2-1974ae121077",
+      "name": "Predation Steward",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Elf",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Elf Warrior",
+      "oracleText": "This creature enters with two oil counters on it.\n{2}{G}, {T}, Remove an oil counter from this creature: Target creature gets +2/+2 until end of turn. Activate only as a sorcery.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "180",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/1/419fab07-f921-4eff-91e2-1974ae121077.jpg?1783918011",
+        "normal": "https://cards.scryfall.io/normal/front/4/1/419fab07-f921-4eff-91e2-1974ae121077.jpg?1783918011",
+        "large": "https://cards.scryfall.io/large/front/4/1/419fab07-f921-4eff-91e2-1974ae121077.jpg?1783918011",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/1/419fab07-f921-4eff-91e2-1974ae121077.jpg?1783918011"
       },
       "localImages": {},
       "layout": "normal",
@@ -236043,6 +238063,57 @@
       "faces": []
     },
     {
+      "id": "1f76d7c4-a5d6-4144-b5f3-e43b96b695b7",
+      "name": "Rage-Scarred Berserker",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Minotaur",
+          "Berserker"
+        ]
+      },
+      "rawTypeLine": "Creature — Minotaur Berserker",
+      "oracleText": "When this creature enters, target creature you control gets +1/+0 and gains indestructible until end of turn. (Damage and effects that say \"destroy\" don't destroy it.)",
+      "power": 5,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "thb",
+      "collectorNumber": "113",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/f/1f76d7c4-a5d6-4144-b5f3-e43b96b695b7.jpg?1783931562",
+        "normal": "https://cards.scryfall.io/normal/front/1/f/1f76d7c4-a5d6-4144-b5f3-e43b96b695b7.jpg?1783931562",
+        "large": "https://cards.scryfall.io/large/front/1/f/1f76d7c4-a5d6-4144-b5f3-e43b96b695b7.jpg?1783931562",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/f/1f76d7c4-a5d6-4144-b5f3-e43b96b695b7.jpg?1783931562"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "cb13420d-d295-4000-9c38-fa5d10e06ece",
       "name": "Ragefire",
       "manaCost": {
@@ -238418,6 +240489,61 @@
       "faces": []
     },
     {
+      "id": "aad0adcb-80e5-4c6d-bcdd-9e5d18c017b3",
+      "name": "Rampaging Spiketail",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dinosaur"
+        ]
+      },
+      "rawTypeLine": "Creature — Dinosaur",
+      "oracleText": "When this creature enters, target creature you control gets +2/+0 and gains indestructible until end of turn.\nSwampcycling {2} ({2}, Discard this card: Search your library for a Swamp card, reveal it, put it into your hand, then shuffle.)",
+      "power": 5,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Landcycling",
+        "Typecycling",
+        "Cycling",
+        "Swampcycling"
+      ],
+      "set": "lci",
+      "collectorNumber": "116",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/a/aad0adcb-80e5-4c6d-bcdd-9e5d18c017b3.jpg?1783913773",
+        "normal": "https://cards.scryfall.io/normal/front/a/a/aad0adcb-80e5-4c6d-bcdd-9e5d18c017b3.jpg?1783913773",
+        "large": "https://cards.scryfall.io/large/front/a/a/aad0adcb-80e5-4c6d-bcdd-9e5d18c017b3.jpg?1783913773",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/a/aad0adcb-80e5-4c6d-bcdd-9e5d18c017b3.jpg?1783913773"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8539f295-5d58-4436-a73a-b9277c4c7795",
       "name": "Rampant Growth",
       "manaCost": {
@@ -238778,6 +240904,54 @@
         "normal": "https://cards.scryfall.io/normal/front/4/a/4a89e82c-7206-4d74-95c6-ad3627e5a9ce.jpg?1783946608",
         "large": "https://cards.scryfall.io/large/front/4/a/4a89e82c-7206-4d74-95c6-ad3627e5a9ce.jpg?1783946608",
         "art_crop": "https://cards.scryfall.io/art_crop/front/4/a/4a89e82c-7206-4d74-95c6-ad3627e5a9ce.jpg?1783946608"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "02392840-f0c4-462e-84ce-9a7cdd9f5efb",
+      "name": "Ranger's Guile",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +1/+1 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "m21",
+      "collectorNumber": "199",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/2/02392840-f0c4-462e-84ce-9a7cdd9f5efb.jpg?1783930670",
+        "normal": "https://cards.scryfall.io/normal/front/0/2/02392840-f0c4-462e-84ce-9a7cdd9f5efb.jpg?1783930670",
+        "large": "https://cards.scryfall.io/large/front/0/2/02392840-f0c4-462e-84ce-9a7cdd9f5efb.jpg?1783930670",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/2/02392840-f0c4-462e-84ce-9a7cdd9f5efb.jpg?1783930670"
       },
       "localImages": {},
       "layout": "normal",
@@ -247456,6 +249630,54 @@
       "faces": []
     },
     {
+      "id": "3edd0515-dcc4-4cb5-8b54-9c00173d8a6d",
+      "name": "Rig for War",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +3/+0 and gains reach and first strike until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "eoe",
+      "collectorNumber": "156",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/e/3edd0515-dcc4-4cb5-8b54-9c00173d8a6d.jpg?1783905947",
+        "normal": "https://cards.scryfall.io/normal/front/3/e/3edd0515-dcc4-4cb5-8b54-9c00173d8a6d.jpg?1783905947",
+        "large": "https://cards.scryfall.io/large/front/3/e/3edd0515-dcc4-4cb5-8b54-9c00173d8a6d.jpg?1783905947",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/e/3edd0515-dcc4-4cb5-8b54-9c00173d8a6d.jpg?1783905947"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3d5e7afd-57b9-4052-a1b9-45d324955d72",
       "name": "Righteous Avengers",
       "manaCost": {
@@ -247925,6 +250147,50 @@
           "imageUris": {}
         }
       ]
+    },
+    {
+      "id": "219ab03a-2b3b-4eef-8a42-2cbe793d2f33",
+      "name": "Ring of Three Wishes",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three wish counters on it.\n{5}, {T}, Remove a wish counter from this artifact: Search your library for a card, put that card into your hand, then shuffle.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "m14",
+      "collectorNumber": "216",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/1/219ab03a-2b3b-4eef-8a42-2cbe793d2f33.jpg?1783939894",
+        "normal": "https://cards.scryfall.io/normal/front/2/1/219ab03a-2b3b-4eef-8a42-2cbe793d2f33.jpg?1783939894",
+        "large": "https://cards.scryfall.io/large/front/2/1/219ab03a-2b3b-4eef-8a42-2cbe793d2f33.jpg?1783939894",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/1/219ab03a-2b3b-4eef-8a42-2cbe793d2f33.jpg?1783939894"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "1acf216d-ef8f-431b-9b65-1e2e91285517",
@@ -254282,6 +256548,54 @@
       "faces": []
     },
     {
+      "id": "1e53cd8b-18f8-4950-84d4-7aafa26c7ae4",
+      "name": "Rush of Vitality",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +1/+0 and gains lifelink and indestructible until end of turn. (Damage dealt by that creature also causes its controller to gain that much life, and it can't be destroyed by damage or effects that say \"destroy.\")",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "kld",
+      "collectorNumber": "99",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/e/1e53cd8b-18f8-4950-84d4-7aafa26c7ae4.jpg?1783937201",
+        "normal": "https://cards.scryfall.io/normal/front/1/e/1e53cd8b-18f8-4950-84d4-7aafa26c7ae4.jpg?1783937201",
+        "large": "https://cards.scryfall.io/large/front/1/e/1e53cd8b-18f8-4950-84d4-7aafa26c7ae4.jpg?1783937201",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/e/1e53cd8b-18f8-4950-84d4-7aafa26c7ae4.jpg?1783937201"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3ed23582-3260-44c6-9884-904d294442ad",
       "name": "Rushwood Dryad",
       "manaCost": {
@@ -254742,6 +257056,58 @@
         "normal": "rustvale-bridge-normal.jpg",
         "art_crop": "rustvale-bridge-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6b71fd8f-e688-4210-bc5b-a3f19b5b3497",
+      "name": "Rustvine Cultivator",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Elf",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Elf Druid",
+      "oracleText": "{T}: Put an oil counter on this creature.\n{T}, Remove an oil counter from this creature: Untap target land.",
+      "power": 1,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "181",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/b/6b71fd8f-e688-4210-bc5b-a3f19b5b3497.jpg?1783918010",
+        "normal": "https://cards.scryfall.io/normal/front/6/b/6b71fd8f-e688-4210-bc5b-a3f19b5b3497.jpg?1783918010",
+        "large": "https://cards.scryfall.io/large/front/6/b/6b71fd8f-e688-4210-bc5b-a3f19b5b3497.jpg?1783918010",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/b/6b71fd8f-e688-4210-bc5b-a3f19b5b3497.jpg?1783918010"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -256672,6 +259038,57 @@
         "normal": "https://cards.scryfall.io/normal/front/2/c/2c5ee84d-e5b9-4103-8ba7-ccd79a272c0f.jpg?1783939093",
         "large": "https://cards.scryfall.io/large/front/2/c/2c5ee84d-e5b9-4103-8ba7-ccd79a272c0f.jpg?1783939093",
         "art_crop": "https://cards.scryfall.io/art_crop/front/2/c/2c5ee84d-e5b9-4103-8ba7-ccd79a272c0f.jpg?1783939093"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4076bf6b-c8b1-49ef-8f23-afaf7a234e2d",
+      "name": "Salt Road Quartermasters",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier",
+      "oracleText": "This creature enters with two +1/+1 counters on it.\n{2}{G}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "dtk",
+      "collectorNumber": "199",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/0/4076bf6b-c8b1-49ef-8f23-afaf7a234e2d.jpg?1783938577",
+        "normal": "https://cards.scryfall.io/normal/front/4/0/4076bf6b-c8b1-49ef-8f23-afaf7a234e2d.jpg?1783938577",
+        "large": "https://cards.scryfall.io/large/front/4/0/4076bf6b-c8b1-49ef-8f23-afaf7a234e2d.jpg?1783938577",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/0/4076bf6b-c8b1-49ef-8f23-afaf7a234e2d.jpg?1783938577"
       },
       "localImages": {},
       "layout": "normal",
@@ -260158,6 +262575,56 @@
         "normal": "https://cards.scryfall.io/normal/front/b/d/bd17b2c1-c3dd-4f6f-a44c-dc81c6bc1c94.jpg?1783939341",
         "large": "https://cards.scryfall.io/large/front/b/d/bd17b2c1-c3dd-4f6f-a44c-dc81c6bc1c94.jpg?1783939341",
         "art_crop": "https://cards.scryfall.io/art_crop/front/b/d/bd17b2c1-c3dd-4f6f-a44c-dc81c6bc1c94.jpg?1783939341"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9ae14276-dbbd-4257-80e9-accd6c19f5b2",
+      "name": "Scales of Shale",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Affinity for Lizards (This spell costs {1} less to cast for each Lizard you control.)\nTarget creature gets +2/+0 and gains lifelink and indestructible until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Affinity"
+      ],
+      "set": "blb",
+      "collectorNumber": "110",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/a/9ae14276-dbbd-4257-80e9-accd6c19f5b2.jpg?1783910830",
+        "normal": "https://cards.scryfall.io/normal/front/9/a/9ae14276-dbbd-4257-80e9-accd6c19f5b2.jpg?1783910830",
+        "large": "https://cards.scryfall.io/large/front/9/a/9ae14276-dbbd-4257-80e9-accd6c19f5b2.jpg?1783910830",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/a/9ae14276-dbbd-4257-80e9-accd6c19f5b2.jpg?1783910830"
       },
       "localImages": {},
       "layout": "normal",
@@ -265682,6 +268149,63 @@
       "faces": []
     },
     {
+      "id": "f3684577-51ce-490e-9b59-b19c733be466",
+      "name": "Seedpod Squire",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [
+          "W/U"
+        ]
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Bird",
+          "Scout"
+        ]
+      },
+      "rawTypeLine": "Creature — Bird Scout",
+      "oracleText": "Flying\nWhenever this creature attacks, target creature you control without flying gets +1/+1 until end of turn.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U",
+        "W"
+      ],
+      "colorIdentity": [
+        "U",
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "blb",
+      "collectorNumber": "232",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/3/f3684577-51ce-490e-9b59-b19c733be466.jpg?1783910791",
+        "normal": "https://cards.scryfall.io/normal/front/f/3/f3684577-51ce-490e-9b59-b19c733be466.jpg?1783910791",
+        "large": "https://cards.scryfall.io/large/front/f/3/f3684577-51ce-490e-9b59-b19c733be466.jpg?1783910791",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f3684577-51ce-490e-9b59-b19c733be466.jpg?1783910791"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "bfa1ac13-adbd-439a-90b2-9c506aec0836",
       "name": "Seeds of Strength",
       "manaCost": {
@@ -268782,6 +271306,60 @@
         "normal": "https://cards.scryfall.io/normal/front/f/1/f157d08a-7cd7-4120-a8bb-1b50fa0ba99b.jpg?1783941387",
         "large": "https://cards.scryfall.io/large/front/f/1/f157d08a-7cd7-4120-a8bb-1b50fa0ba99b.jpg?1783941387",
         "art_crop": "https://cards.scryfall.io/art_crop/front/f/1/f157d08a-7cd7-4120-a8bb-1b50fa0ba99b.jpg?1783941387"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "70d562aa-8b49-40a3-a5c1-3af8afa98edc",
+      "name": "Serum Sovereign",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Sphinx"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Sphinx",
+      "oracleText": "Flying\nWhenever you cast a noncreature spell, put an oil counter on this creature.\n{U}, Remove an oil counter from this creature: Draw a card, then scry 2.",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Scry",
+        "Flying"
+      ],
+      "set": "one",
+      "collectorNumber": "405",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/0/70d562aa-8b49-40a3-a5c1-3af8afa98edc.jpg?1783917920",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/70d562aa-8b49-40a3-a5c1-3af8afa98edc.jpg?1783917920",
+        "large": "https://cards.scryfall.io/large/front/7/0/70d562aa-8b49-40a3-a5c1-3af8afa98edc.jpg?1783917920",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/70d562aa-8b49-40a3-a5c1-3af8afa98edc.jpg?1783917920"
       },
       "localImages": {},
       "layout": "normal",
@@ -272760,6 +275338,58 @@
       "faces": []
     },
     {
+      "id": "85dbd4a4-2a6f-477a-a267-27859ad73369",
+      "name": "Shinewend",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elemental"
+        ]
+      },
+      "rawTypeLine": "Creature — Elemental",
+      "oracleText": "Flying\nThis creature enters with a +1/+1 counter on it.\n{1}{W}, Remove a +1/+1 counter from this creature: Destroy target enchantment.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "mor",
+      "collectorNumber": "23",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/5/85dbd4a4-2a6f-477a-a267-27859ad73369.jpg?1783942802",
+        "normal": "https://cards.scryfall.io/normal/front/8/5/85dbd4a4-2a6f-477a-a267-27859ad73369.jpg?1783942802",
+        "large": "https://cards.scryfall.io/large/front/8/5/85dbd4a4-2a6f-477a-a267-27859ad73369.jpg?1783942802",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/5/85dbd4a4-2a6f-477a-a267-27859ad73369.jpg?1783942802"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8e900d0d-6f35-4e5d-9365-6ade227d218d",
       "name": "Shining Aerosaur",
       "manaCost": {
@@ -274548,6 +277178,52 @@
         "normal": "https://cards.scryfall.io/normal/front/7/3/73071a3b-9329-418e-9285-fa4765463d1f.jpg?1783941323",
         "large": "https://cards.scryfall.io/large/front/7/3/73071a3b-9329-418e-9285-fa4765463d1f.jpg?1783941323",
         "art_crop": "https://cards.scryfall.io/art_crop/front/7/3/73071a3b-9329-418e-9285-fa4765463d1f.jpg?1783941323"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "bb41269f-007d-43ba-a682-d3929cc69696",
+      "name": "Shriekhorn",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three charge counters on it.\n{T}, Remove a charge counter from this artifact: Target player mills two cards.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Mill"
+      ],
+      "set": "mbs",
+      "collectorNumber": "130",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/b/bb41269f-007d-43ba-a682-d3929cc69696.jpg?1783941363",
+        "normal": "https://cards.scryfall.io/normal/front/b/b/bb41269f-007d-43ba-a682-d3929cc69696.jpg?1783941363",
+        "large": "https://cards.scryfall.io/large/front/b/b/bb41269f-007d-43ba-a682-d3929cc69696.jpg?1783941363",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/b/bb41269f-007d-43ba-a682-d3929cc69696.jpg?1783941363"
       },
       "localImages": {},
       "layout": "normal",
@@ -280621,6 +283297,57 @@
       "faces": []
     },
     {
+      "id": "e671de25-c47c-48a1-919b-6aa30dab142f",
+      "name": "Skyclave Apparition",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Kor",
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Kor Spirit",
+      "oracleText": "When this creature enters, exile up to one target nonland, nontoken permanent you don't control with mana value 4 or less.\nWhen this creature leaves the battlefield, the exiled card's owner creates an X/X blue Illusion creature token, where X is the mana value of the exiled card.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "173",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/6/e671de25-c47c-48a1-919b-6aa30dab142f.jpg?1783903800",
+        "normal": "https://cards.scryfall.io/normal/front/e/6/e671de25-c47c-48a1-919b-6aa30dab142f.jpg?1783903800",
+        "large": "https://cards.scryfall.io/large/front/e/6/e671de25-c47c-48a1-919b-6aa30dab142f.jpg?1783903800",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/6/e671de25-c47c-48a1-919b-6aa30dab142f.jpg?1783903800"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "da9e3910-9a1c-43a9-9138-ca971b2bccae",
       "name": "Skyclave Cleric // Skyclave Basilica",
       "manaCost": {
@@ -282913,6 +285640,54 @@
       "faces": []
     },
     {
+      "id": "3b2c82ea-6793-407c-ac9f-5fc14d4d09ea",
+      "name": "Slayers' Stronghold",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [],
+        "absent": true
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "{T}: Add {C}.\n{R}{W}, {T}: Target creature gets +2/+0 and gains vigilance and haste until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R",
+        "W"
+      ],
+      "keywords": [],
+      "set": "mkc",
+      "collectorNumber": "295",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/b/3b2c82ea-6793-407c-ac9f-5fc14d4d09ea.jpg?1783912951",
+        "normal": "https://cards.scryfall.io/normal/front/3/b/3b2c82ea-6793-407c-ac9f-5fc14d4d09ea.jpg?1783912951",
+        "large": "https://cards.scryfall.io/large/front/3/b/3b2c82ea-6793-407c-ac9f-5fc14d4d09ea.jpg?1783912951",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/b/3b2c82ea-6793-407c-ac9f-5fc14d4d09ea.jpg?1783912951"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d3e0f159-029d-4177-8f20-c96eca0a421c",
       "name": "Sledding Otter-Penguin",
       "manaCost": {
@@ -283364,6 +286139,56 @@
         "normal": "https://cards.scryfall.io/normal/front/c/b/cb12173d-3afb-4e8b-b612-fa7737a8c6c2.jpg?1783915609",
         "large": "https://cards.scryfall.io/large/front/c/b/cb12173d-3afb-4e8b-b612-fa7737a8c6c2.jpg?1783915609",
         "art_crop": "https://cards.scryfall.io/art_crop/front/c/b/cb12173d-3afb-4e8b-b612-fa7737a8c6c2.jpg?1783915609"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4bc803ad-f8a2-4198-a8a6-8d987b3d00fb",
+      "name": "Slimy Dualleech",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Leech"
+        ]
+      },
+      "rawTypeLine": "Creature — Leech",
+      "oracleText": "At the beginning of combat on your turn, target creature you control with power 2 or less gets +1/+0 and gains deathtouch until end of turn.",
+      "power": 2,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "mkm",
+      "collectorNumber": "104",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/b/4bc803ad-f8a2-4198-a8a6-8d987b3d00fb.jpg?1783912890",
+        "normal": "https://cards.scryfall.io/normal/front/4/b/4bc803ad-f8a2-4198-a8a6-8d987b3d00fb.jpg?1783912890",
+        "large": "https://cards.scryfall.io/large/front/4/b/4bc803ad-f8a2-4198-a8a6-8d987b3d00fb.jpg?1783912890",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/b/4bc803ad-f8a2-4198-a8a6-8d987b3d00fb.jpg?1783912890"
       },
       "localImages": {},
       "layout": "normal",
@@ -284791,6 +287616,54 @@
           "imageUris": {}
         }
       ]
+    },
+    {
+      "id": "a16f203a-785e-4c78-9410-fb9f8a0ffa01",
+      "name": "Smaug's Fury",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +3/+0 and gains reach and first strike until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "hob",
+      "collectorNumber": "111",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/1/a16f203a-785e-4c78-9410-fb9f8a0ffa01.jpg?1785497138",
+        "normal": "https://cards.scryfall.io/normal/front/a/1/a16f203a-785e-4c78-9410-fb9f8a0ffa01.jpg?1785497138",
+        "large": "https://cards.scryfall.io/large/front/a/1/a16f203a-785e-4c78-9410-fb9f8a0ffa01.jpg?1785497138",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/1/a16f203a-785e-4c78-9410-fb9f8a0ffa01.jpg?1785497138"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "9a13293d-89a7-400c-8309-9f62eeb4769c",
@@ -289634,6 +292507,50 @@
       "faces": []
     },
     {
+      "id": "e9a8ca49-fc8f-49c1-a7c6-c8326b2deb52",
+      "name": "Spawning Pit",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Sacrifice a creature: Put a charge counter on this artifact.\n{1}, Remove two charge counters from this artifact: Create a 2/2 colorless Spawn artifact creature token.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "td2",
+      "collectorNumber": "69",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/9/e9a8ca49-fc8f-49c1-a7c6-c8326b2deb52.jpg?1783941267",
+        "normal": "https://cards.scryfall.io/normal/front/e/9/e9a8ca49-fc8f-49c1-a7c6-c8326b2deb52.jpg?1783941267",
+        "large": "https://cards.scryfall.io/large/front/e/9/e9a8ca49-fc8f-49c1-a7c6-c8326b2deb52.jpg?1783941267",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/9/e9a8ca49-fc8f-49c1-a7c6-c8326b2deb52.jpg?1783941267"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "5ba6ee29-fc77-4300-9c5e-1557cabd05e5",
       "name": "Spawnwrithe",
       "manaCost": {
@@ -291137,6 +294054,259 @@
       "faces": []
     },
     {
+      "id": "89e7d5ba-872d-4ca1-9dfb-4ce67c432a8b",
+      "name": "Spike Breeder",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike",
+      "oracleText": "This creature enters with three +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.\n{2}, Remove a +1/+1 counter from this creature: Create a 1/1 green Spike creature token.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "194",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/9/89e7d5ba-872d-4ca1-9dfb-4ce67c432a8b.jpg?1783938454",
+        "normal": "https://cards.scryfall.io/normal/front/8/9/89e7d5ba-872d-4ca1-9dfb-4ce67c432a8b.jpg?1783938454",
+        "large": "https://cards.scryfall.io/large/front/8/9/89e7d5ba-872d-4ca1-9dfb-4ce67c432a8b.jpg?1783938454",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/9/89e7d5ba-872d-4ca1-9dfb-4ce67c432a8b.jpg?1783938454"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a45a1cbd-329b-4a76-92b4-1f0f60fc06e6",
+      "name": "Spike Colony",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike",
+      "oracleText": "This creature enters with four +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "195",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/4/a45a1cbd-329b-4a76-92b4-1f0f60fc06e6.jpg?1783938455",
+        "normal": "https://cards.scryfall.io/normal/front/a/4/a45a1cbd-329b-4a76-92b4-1f0f60fc06e6.jpg?1783938455",
+        "large": "https://cards.scryfall.io/large/front/a/4/a45a1cbd-329b-4a76-92b4-1f0f60fc06e6.jpg?1783938455",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/4/a45a1cbd-329b-4a76-92b4-1f0f60fc06e6.jpg?1783938455"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "5d45a3d3-a114-496e-b575-504179a297cc",
+      "name": "Spike Drone",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike",
+          "Drone"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike Drone",
+      "oracleText": "This creature enters with a +1/+1 counter on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tmp",
+      "collectorNumber": "258",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/d/5d45a3d3-a114-496e-b575-504179a297cc.jpg?1783946611",
+        "normal": "https://cards.scryfall.io/normal/front/5/d/5d45a3d3-a114-496e-b575-504179a297cc.jpg?1783946611",
+        "large": "https://cards.scryfall.io/large/front/5/d/5d45a3d3-a114-496e-b575-504179a297cc.jpg?1783946611",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/d/5d45a3d3-a114-496e-b575-504179a297cc.jpg?1783946611"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "090a5f1f-9a1a-4e93-8c33-a0204c2917d5",
+      "name": "Spike Feeder",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike",
+      "oracleText": "This creature enters with two +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.\nRemove a +1/+1 counter from this creature: You gain 2 life.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "196",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/9/090a5f1f-9a1a-4e93-8c33-a0204c2917d5.jpg?1783938454",
+        "normal": "https://cards.scryfall.io/normal/front/0/9/090a5f1f-9a1a-4e93-8c33-a0204c2917d5.jpg?1783938454",
+        "large": "https://cards.scryfall.io/large/front/0/9/090a5f1f-9a1a-4e93-8c33-a0204c2917d5.jpg?1783938454",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/9/090a5f1f-9a1a-4e93-8c33-a0204c2917d5.jpg?1783938454"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3c7d3854-c895-448e-ada9-8ebfaa689049",
+      "name": "Spike Hatcher",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike",
+      "oracleText": "This creature enters with six +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.\n{1}, Remove a +1/+1 counter from this creature: Regenerate this creature.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Regenerate"
+      ],
+      "set": "tpr",
+      "collectorNumber": "197",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/c/3c7d3854-c895-448e-ada9-8ebfaa689049.jpg?1783938454",
+        "normal": "https://cards.scryfall.io/normal/front/3/c/3c7d3854-c895-448e-ada9-8ebfaa689049.jpg?1783938454",
+        "large": "https://cards.scryfall.io/large/front/3/c/3c7d3854-c895-448e-ada9-8ebfaa689049.jpg?1783938454",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/c/3c7d3854-c895-448e-ada9-8ebfaa689049.jpg?1783938454"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "7f82ff29-2b2c-4e4f-a6ac-e307e2921da0",
       "name": "Spike Jester",
       "manaCost": {
@@ -291185,6 +294355,157 @@
         "normal": "https://cards.scryfall.io/normal/front/7/f/7f82ff29-2b2c-4e4f-a6ac-e307e2921da0.jpg?1783936608",
         "large": "https://cards.scryfall.io/large/front/7/f/7f82ff29-2b2c-4e4f-a6ac-e307e2921da0.jpg?1783936608",
         "art_crop": "https://cards.scryfall.io/art_crop/front/7/f/7f82ff29-2b2c-4e4f-a6ac-e307e2921da0.jpg?1783936608"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "aa45664c-ac39-40f8-9f56-cf25ed60a84a",
+      "name": "Spike Soldier",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike Soldier",
+      "oracleText": "This creature enters with three +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.\nRemove a +1/+1 counter from this creature: This creature gets +2/+2 until end of turn.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "sth",
+      "collectorNumber": "119",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/a/aa45664c-ac39-40f8-9f56-cf25ed60a84a.jpg?1783946546",
+        "normal": "https://cards.scryfall.io/normal/front/a/a/aa45664c-ac39-40f8-9f56-cf25ed60a84a.jpg?1783946546",
+        "large": "https://cards.scryfall.io/large/front/a/a/aa45664c-ac39-40f8-9f56-cf25ed60a84a.jpg?1783946546",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/a/aa45664c-ac39-40f8-9f56-cf25ed60a84a.jpg?1783946546"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9c561a2a-91c6-4d4b-9f96-bffd43a00478",
+      "name": "Spike Weaver",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike",
+      "oracleText": "This creature enters with three +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.\n{1}, Remove a +1/+1 counter from this creature: Prevent all combat damage that would be dealt this turn.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "exo",
+      "collectorNumber": "128",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/c/9c561a2a-91c6-4d4b-9f96-bffd43a00478.jpg?1783946500",
+        "normal": "https://cards.scryfall.io/normal/front/9/c/9c561a2a-91c6-4d4b-9f96-bffd43a00478.jpg?1783946500",
+        "large": "https://cards.scryfall.io/large/front/9/c/9c561a2a-91c6-4d4b-9f96-bffd43a00478.jpg?1783946500",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/c/9c561a2a-91c6-4d4b-9f96-bffd43a00478.jpg?1783946500"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2713de6c-b754-435c-8d11-5215fd602a40",
+      "name": "Spike Worker",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spike"
+        ]
+      },
+      "rawTypeLine": "Creature — Spike",
+      "oracleText": "This creature enters with two +1/+1 counters on it.\n{2}, Remove a +1/+1 counter from this creature: Put a +1/+1 counter on target creature.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "sth",
+      "collectorNumber": "120",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/7/2713de6c-b754-435c-8d11-5215fd602a40.jpg?1783946546",
+        "normal": "https://cards.scryfall.io/normal/front/2/7/2713de6c-b754-435c-8d11-5215fd602a40.jpg?1783946546",
+        "large": "https://cards.scryfall.io/large/front/2/7/2713de6c-b754-435c-8d11-5215fd602a40.jpg?1783946546",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/7/2713de6c-b754-435c-8d11-5215fd602a40.jpg?1783946546"
       },
       "localImages": {},
       "layout": "normal",
@@ -292251,6 +295572,59 @@
         "normal": "https://cards.scryfall.io/normal/front/b/2/b299c599-1a10-4122-ac0b-8f52a9cec7b6.jpg?1783938744",
         "large": "https://cards.scryfall.io/large/front/b/2/b299c599-1a10-4122-ac0b-8f52a9cec7b6.jpg?1783938744",
         "art_crop": "https://cards.scryfall.io/art_crop/front/b/2/b299c599-1a10-4122-ac0b-8f52a9cec7b6.jpg?1783938744"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a3ce548d-764a-4397-bae3-d348dca78421",
+      "name": "Spire Mangler",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Insect"
+        ]
+      },
+      "rawTypeLine": "Creature — Insect",
+      "oracleText": "Flash\nFlying\nWhen this creature enters, target creature you control with flying gets +2/+0 until end of turn.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying",
+        "Flash"
+      ],
+      "set": "rna",
+      "collectorNumber": "86",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/3/a3ce548d-764a-4397-bae3-d348dca78421.jpg?1783933688",
+        "normal": "https://cards.scryfall.io/normal/front/a/3/a3ce548d-764a-4397-bae3-d348dca78421.jpg?1783933688",
+        "large": "https://cards.scryfall.io/large/front/a/3/a3ce548d-764a-4397-bae3-d348dca78421.jpg?1783933688",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/3/a3ce548d-764a-4397-bae3-d348dca78421.jpg?1783933688"
       },
       "localImages": {},
       "layout": "normal",
@@ -293564,6 +296938,56 @@
       "faces": []
     },
     {
+      "id": "0c8adf5d-db30-433a-a0f0-89566d8bef28",
+      "name": "Spore Flower",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Fungus"
+        ]
+      },
+      "rawTypeLine": "Creature — Fungus",
+      "oracleText": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Prevent all combat damage that would be dealt this turn.",
+      "power": 0,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "me2",
+      "collectorNumber": "177",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/c/0c8adf5d-db30-433a-a0f0-89566d8bef28.jpg?1783942602",
+        "normal": "https://cards.scryfall.io/normal/front/0/c/0c8adf5d-db30-433a-a0f0-89566d8bef28.jpg?1783942602",
+        "large": "https://cards.scryfall.io/large/front/0/c/0c8adf5d-db30-433a-a0f0-89566d8bef28.jpg?1783942602",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/c/0c8adf5d-db30-433a-a0f0-89566d8bef28.jpg?1783942602"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "6d42fd52-34ea-4d1b-80dc-58fb0593bb5b",
       "name": "Spore Frog",
       "manaCost": {
@@ -293759,6 +297183,56 @@
         "normal": "https://cards.scryfall.io/normal/front/0/9/092bfc5f-8002-43da-8e70-c19fccfe54ac.jpg?1783928702",
         "large": "https://cards.scryfall.io/large/front/0/9/092bfc5f-8002-43da-8e70-c19fccfe54ac.jpg?1783928702",
         "art_crop": "https://cards.scryfall.io/art_crop/front/0/9/092bfc5f-8002-43da-8e70-c19fccfe54ac.jpg?1783928702"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "57a96041-1b20-464e-9119-93c19675ac46",
+      "name": "Sporoloth Ancient",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Fungus"
+        ]
+      },
+      "rawTypeLine": "Creature — Fungus",
+      "oracleText": "At the beginning of your upkeep, put a spore counter on this creature.\nCreatures you control have \"Remove two spore counters from this creature: Create a 1/1 green Saproling creature token.\"",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tsr",
+      "collectorNumber": "232",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/7/57a96041-1b20-464e-9119-93c19675ac46.jpg?1783927770",
+        "normal": "https://cards.scryfall.io/normal/front/5/7/57a96041-1b20-464e-9119-93c19675ac46.jpg?1783927770",
+        "large": "https://cards.scryfall.io/large/front/5/7/57a96041-1b20-464e-9119-93c19675ac46.jpg?1783927770",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/7/57a96041-1b20-464e-9119-93c19675ac46.jpg?1783927770"
       },
       "localImages": {},
       "layout": "normal",
@@ -297367,6 +300841,59 @@
         "normal": "steel-wall-normal.jpg",
         "art_crop": "steel-wall-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c9889a59-519c-4adb-9002-dbed400a0d33",
+      "name": "Steelbane Hydra",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": [
+          "X"
+        ]
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Turtle",
+          "Hydra"
+        ]
+      },
+      "rawTypeLine": "Creature — Turtle Hydra",
+      "oracleText": "This creature enters with X +1/+1 counters on it.\n{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or enchantment.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "288",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/9/c9889a59-519c-4adb-9002-dbed400a0d33.jpg?1783903760",
+        "normal": "https://cards.scryfall.io/normal/front/c/9/c9889a59-519c-4adb-9002-dbed400a0d33.jpg?1783903760",
+        "large": "https://cards.scryfall.io/large/front/c/9/c9889a59-519c-4adb-9002-dbed400a0d33.jpg?1783903760",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/9/c9889a59-519c-4adb-9002-dbed400a0d33.jpg?1783903760"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -301353,6 +304880,57 @@
         "normal": "https://cards.scryfall.io/normal/front/a/f/afda26e7-4fdd-45e1-bcd1-f0abf91979aa.jpg?1783945151",
         "large": "https://cards.scryfall.io/large/front/a/f/afda26e7-4fdd-45e1-bcd1-f0abf91979aa.jpg?1783945151",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/f/afda26e7-4fdd-45e1-bcd1-f0abf91979aa.jpg?1783945151"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8418c504-24fe-470f-8102-dcad68ba1520",
+      "name": "Strength of the Coalition",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Kicker {2}{W} (You may pay an additional {2}{W} as you cast this spell.)\nTarget creature you control gets +2/+2 until end of turn. If this spell was kicked, put a +1/+1 counter on each creature you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Kicker"
+      ],
+      "set": "dmu",
+      "collectorNumber": "180",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/4/8418c504-24fe-470f-8102-dcad68ba1520.jpg?1783921294",
+        "normal": "https://cards.scryfall.io/normal/front/8/4/8418c504-24fe-470f-8102-dcad68ba1520.jpg?1783921294",
+        "large": "https://cards.scryfall.io/large/front/8/4/8418c504-24fe-470f-8102-dcad68ba1520.jpg?1783921294",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/4/8418c504-24fe-470f-8102-dcad68ba1520.jpg?1783921294"
       },
       "localImages": {},
       "layout": "normal",
@@ -305565,6 +309143,52 @@
       "faces": []
     },
     {
+      "id": "5d346c67-744c-4605-be62-18d794e83049",
+      "name": "Sunset Pyramid",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three brick counters on it.\n{2}, {T}, Remove a brick counter from this artifact: Draw a card.\n{2}, {T}: Scry 1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Scry"
+      ],
+      "set": "cmr",
+      "collectorNumber": "345",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/d/5d346c67-744c-4605-be62-18d794e83049.jpg?1783928746",
+        "normal": "https://cards.scryfall.io/normal/front/5/d/5d346c67-744c-4605-be62-18d794e83049.jpg?1783928746",
+        "large": "https://cards.scryfall.io/large/front/5/d/5d346c67-744c-4605-be62-18d794e83049.jpg?1783928746",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/d/5d346c67-744c-4605-be62-18d794e83049.jpg?1783928746"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "7740abc5-54e1-478d-966e-0fa64e727995",
       "name": "Sunshower Druid",
       "manaCost": {
@@ -305819,6 +309443,52 @@
         "normal": "https://cards.scryfall.io/normal/front/1/d/1d24d200-63d4-44cf-8d3a-6c6ece5e16ff.jpg?1783902911",
         "large": "https://cards.scryfall.io/large/front/1/d/1d24d200-63d4-44cf-8d3a-6c6ece5e16ff.jpg?1783902911",
         "art_crop": "https://cards.scryfall.io/art_crop/front/1/d/1d24d200-63d4-44cf-8d3a-6c6ece5e16ff.jpg?1783902911"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "82a5d3e9-bada-448b-894d-9d4e7e0463c7",
+      "name": "Supply Drop",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Flash\nWhen this artifact enters, target creature you control gets +2/+2 until end of turn.\n{4}, {T}, Sacrifice this artifact: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Flash"
+      ],
+      "set": "bro",
+      "collectorNumber": "250",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/2/82a5d3e9-bada-448b-894d-9d4e7e0463c7.jpg?1783920011",
+        "normal": "https://cards.scryfall.io/normal/front/8/2/82a5d3e9-bada-448b-894d-9d4e7e0463c7.jpg?1783920011",
+        "large": "https://cards.scryfall.io/large/front/8/2/82a5d3e9-bada-448b-894d-9d4e7e0463c7.jpg?1783920011",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/2/82a5d3e9-bada-448b-894d-9d4e7e0463c7.jpg?1783920011"
       },
       "localImages": {},
       "layout": "normal",
@@ -306427,6 +310097,57 @@
         "normal": "https://cards.scryfall.io/normal/front/2/6/264d120a-d7e2-4b9e-ac85-c66e976c577b.jpg?1783943366",
         "large": "https://cards.scryfall.io/large/front/2/6/264d120a-d7e2-4b9e-ac85-c66e976c577b.jpg?1783943366",
         "art_crop": "https://cards.scryfall.io/art_crop/front/2/6/264d120a-d7e2-4b9e-ac85-c66e976c577b.jpg?1783943366"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "056f7f51-18a9-4d80-8928-decaf4d12c0d",
+      "name": "Surly Farrier",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Kithkin",
+          "Citizen"
+        ]
+      },
+      "rawTypeLine": "Creature — Kithkin Citizen",
+      "oracleText": "{T}: Target creature you control gets +1/+1 and gains vigilance until end of turn. Activate only as a sorcery.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "ecl",
+      "collectorNumber": "196",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/5/056f7f51-18a9-4d80-8928-decaf4d12c0d.jpg?1783904422",
+        "normal": "https://cards.scryfall.io/normal/front/0/5/056f7f51-18a9-4d80-8928-decaf4d12c0d.jpg?1783904422",
+        "large": "https://cards.scryfall.io/large/front/0/5/056f7f51-18a9-4d80-8928-decaf4d12c0d.jpg?1783904422",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/5/056f7f51-18a9-4d80-8928-decaf4d12c0d.jpg?1783904422"
       },
       "localImages": {},
       "layout": "normal",
@@ -316608,6 +320329,108 @@
       "faces": []
     },
     {
+      "id": "69d20d28-76e9-4e6e-95c3-f88c51dfabfd",
+      "name": "Thallid",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Fungus"
+        ]
+      },
+      "rawTypeLine": "Creature — Fungus",
+      "oracleText": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mma",
+      "collectorNumber": "167",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/9/69d20d28-76e9-4e6e-95c3-f88c51dfabfd.jpg?1783939970",
+        "normal": "https://cards.scryfall.io/normal/front/6/9/69d20d28-76e9-4e6e-95c3-f88c51dfabfd.jpg?1783939970",
+        "large": "https://cards.scryfall.io/large/front/6/9/69d20d28-76e9-4e6e-95c3-f88c51dfabfd.jpg?1783939970",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/9/69d20d28-76e9-4e6e-95c3-f88c51dfabfd.jpg?1783939970"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9e1fd5ff-79a2-43d9-bd69-94be175d19b4",
+      "name": "Thallid Shell-Dweller",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Fungus"
+        ]
+      },
+      "rawTypeLine": "Creature — Fungus",
+      "oracleText": "Defender\nAt the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.",
+      "power": 0,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Defender"
+      ],
+      "set": "tsr",
+      "collectorNumber": "237",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/e/9e1fd5ff-79a2-43d9-bd69-94be175d19b4.jpg?1783927768",
+        "normal": "https://cards.scryfall.io/normal/front/9/e/9e1fd5ff-79a2-43d9-bd69-94be175d19b4.jpg?1783927768",
+        "large": "https://cards.scryfall.io/large/front/9/e/9e1fd5ff-79a2-43d9-bd69-94be175d19b4.jpg?1783927768",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/e/9e1fd5ff-79a2-43d9-bd69-94be175d19b4.jpg?1783927768"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ff6c08d7-9b2d-475f-9acb-f8a995e7e804",
       "name": "Thallid Soothsayer",
       "manaCost": {
@@ -322495,6 +326318,50 @@
       "faces": []
     },
     {
+      "id": "91a3c3ba-6dbb-454c-86ad-064875382499",
+      "name": "Titan Forge",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{3}, {T}: Put a charge counter on this artifact.\n{T}, Remove three charge counters from this artifact: Create a 9/9 colorless Golem artifact creature token.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "eoc",
+      "collectorNumber": "146",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/1/91a3c3ba-6dbb-454c-86ad-064875382499.jpg?1783906018",
+        "normal": "https://cards.scryfall.io/normal/front/9/1/91a3c3ba-6dbb-454c-86ad-064875382499.jpg?1783906018",
+        "large": "https://cards.scryfall.io/large/front/9/1/91a3c3ba-6dbb-454c-86ad-064875382499.jpg?1783906018",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/1/91a3c3ba-6dbb-454c-86ad-064875382499.jpg?1783906018"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a9ab41c8-3ee2-4676-9b8b-20c34d9f5f21",
       "name": "Titan's Grave",
       "manaCost": {
@@ -323892,6 +327759,58 @@
       "faces": []
     },
     {
+      "id": "d4c9fc8c-e68f-4636-84b8-877f6ec04b09",
+      "name": "Torch Courier",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin",
+      "oracleText": "Haste\nSacrifice this creature: Another target creature gains haste until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "grn",
+      "collectorNumber": "119",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/4/d4c9fc8c-e68f-4636-84b8-877f6ec04b09.jpg?1783934156",
+        "normal": "https://cards.scryfall.io/normal/front/d/4/d4c9fc8c-e68f-4636-84b8-877f6ec04b09.jpg?1783934156",
+        "large": "https://cards.scryfall.io/large/front/d/4/d4c9fc8c-e68f-4636-84b8-877f6ec04b09.jpg?1783934156",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/4/d4c9fc8c-e68f-4636-84b8-877f6ec04b09.jpg?1783934156"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "0beff896-df7a-42b3-aaca-0b9ca1b8cf0c",
       "name": "Torch Drake",
       "manaCost": {
@@ -324806,6 +328725,58 @@
         "normal": "https://cards.scryfall.io/normal/front/5/8/589346d3-b32b-40f2-8513-741ceb88bf7b.jpg?1783938356",
         "large": "https://cards.scryfall.io/large/front/5/8/589346d3-b32b-40f2-8513-741ceb88bf7b.jpg?1783938356",
         "art_crop": "https://cards.scryfall.io/art_crop/front/5/8/589346d3-b32b-40f2-8513-741ceb88bf7b.jpg?1783938356"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "10dc44c7-634f-4210-9c22-ce9e8860568b",
+      "name": "Toucan-Puffin",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Bird"
+        ]
+      },
+      "rawTypeLine": "Creature — Bird",
+      "oracleText": "Flying\nWhen this creature enters, target creature you control gets +2/+0 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "tle",
+      "collectorNumber": "88",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/0/10dc44c7-634f-4210-9c22-ce9e8860568b.jpg?1783904831",
+        "normal": "https://cards.scryfall.io/normal/front/1/0/10dc44c7-634f-4210-9c22-ce9e8860568b.jpg?1783904831",
+        "large": "https://cards.scryfall.io/large/front/1/0/10dc44c7-634f-4210-9c22-ce9e8860568b.jpg?1783904831",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/0/10dc44c7-634f-4210-9c22-ce9e8860568b.jpg?1783904831"
       },
       "localImages": {},
       "layout": "normal",
@@ -325833,6 +329804,59 @@
         "normal": "https://cards.scryfall.io/normal/front/9/1/9194c69d-c849-4c4a-976c-d1382bd5cf32.jpg?1783947471",
         "large": "https://cards.scryfall.io/large/front/9/1/9194c69d-c849-4c4a-976c-d1382bd5cf32.jpg?1783947471",
         "art_crop": "https://cards.scryfall.io/art_crop/front/9/1/9194c69d-c849-4c4a-976c-d1382bd5cf32.jpg?1783947471"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a53088da-25b5-4c7e-9a11-456fbc814dfc",
+      "name": "Trailblazing Historian",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Shaman",
+      "oracleText": "Haste\n{T}: Another target creature gains haste until end of turn.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "mom",
+      "collectorNumber": "168",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/5/a53088da-25b5-4c7e-9a11-456fbc814dfc.jpg?1783916980",
+        "normal": "https://cards.scryfall.io/normal/front/a/5/a53088da-25b5-4c7e-9a11-456fbc814dfc.jpg?1783916980",
+        "large": "https://cards.scryfall.io/large/front/a/5/a53088da-25b5-4c7e-9a11-456fbc814dfc.jpg?1783916980",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/5/a53088da-25b5-4c7e-9a11-456fbc814dfc.jpg?1783916980"
       },
       "localImages": {},
       "layout": "normal",
@@ -327361,6 +331385,59 @@
       "faces": []
     },
     {
+      "id": "e1722a55-850c-4924-be98-45539f4676a2",
+      "name": "Treetop Ambusher",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Berserker"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Berserker",
+      "oracleText": "Dash {1}{G} (You may cast this spell for its dash cost. If you do, it gains haste, and it's returned from the battlefield to its owner's hand at the beginning of the next end step.)\nWhenever this creature attacks, target creature you control gets +1/+1 until end of turn.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Dash"
+      ],
+      "set": "mh1",
+      "collectorNumber": "186",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/1/e1722a55-850c-4924-be98-45539f4676a2.jpg?1783933088",
+        "normal": "https://cards.scryfall.io/normal/front/e/1/e1722a55-850c-4924-be98-45539f4676a2.jpg?1783933088",
+        "large": "https://cards.scryfall.io/large/front/e/1/e1722a55-850c-4924-be98-45539f4676a2.jpg?1783933088",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/1/e1722a55-850c-4924-be98-45539f4676a2.jpg?1783933088"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a9394200-7ffc-440f-8b5f-c08b7930133c",
       "name": "Treetop Freedom Fighters",
       "manaCost": {
@@ -328190,6 +332267,190 @@
         "normal": "https://cards.scryfall.io/normal/front/f/7/f7860cf3-c3ea-4055-8c95-6d1c8d50e69d.jpg?1783936547",
         "large": "https://cards.scryfall.io/large/front/f/7/f7860cf3-c3ea-4055-8c95-6d1c8d50e69d.jpg?1783936547",
         "art_crop": "https://cards.scryfall.io/art_crop/front/f/7/f7860cf3-c3ea-4055-8c95-6d1c8d50e69d.jpg?1783936547"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "26e215e0-836c-4b37-8f9a-9093a535bff1",
+      "name": "Trigon of Corruption",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three charge counters on it.\n{B}{B}, {T}: Put a charge counter on this artifact.\n{2}, {T}, Remove a charge counter from this artifact: Put a -1/-1 counter on target creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "som",
+      "collectorNumber": "213",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/6/26e215e0-836c-4b37-8f9a-9093a535bff1.jpg?1783941694",
+        "normal": "https://cards.scryfall.io/normal/front/2/6/26e215e0-836c-4b37-8f9a-9093a535bff1.jpg?1783941694",
+        "large": "https://cards.scryfall.io/large/front/2/6/26e215e0-836c-4b37-8f9a-9093a535bff1.jpg?1783941694",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/6/26e215e0-836c-4b37-8f9a-9093a535bff1.jpg?1783941694"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "be409a80-846c-4883-8aee-c2e3f973fc0f",
+      "name": "Trigon of Infestation",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three charge counters on it.\n{G}{G}, {T}: Put a charge counter on this artifact.\n{2}, {T}, Remove a charge counter from this artifact: Create a 1/1 green Phyrexian Insect creature token with infect.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "som",
+      "collectorNumber": "214",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/e/be409a80-846c-4883-8aee-c2e3f973fc0f.jpg?1783941693",
+        "normal": "https://cards.scryfall.io/normal/front/b/e/be409a80-846c-4883-8aee-c2e3f973fc0f.jpg?1783941693",
+        "large": "https://cards.scryfall.io/large/front/b/e/be409a80-846c-4883-8aee-c2e3f973fc0f.jpg?1783941693",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/e/be409a80-846c-4883-8aee-c2e3f973fc0f.jpg?1783941693"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1135f3b7-8c6b-47ff-b895-b7127836b0bf",
+      "name": "Trigon of Rage",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three charge counters on it.\n{R}{R}, {T}: Put a charge counter on this artifact.\n{2}, {T}, Remove a charge counter from this artifact: Target creature gets +3/+0 until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "som",
+      "collectorNumber": "216",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/1/1135f3b7-8c6b-47ff-b895-b7127836b0bf.jpg?1783941693",
+        "normal": "https://cards.scryfall.io/normal/front/1/1/1135f3b7-8c6b-47ff-b895-b7127836b0bf.jpg?1783941693",
+        "large": "https://cards.scryfall.io/large/front/1/1/1135f3b7-8c6b-47ff-b895-b7127836b0bf.jpg?1783941693",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/1/1135f3b7-8c6b-47ff-b895-b7127836b0bf.jpg?1783941693"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f8da37ba-52e3-417e-8d7b-6c3e060552a4",
+      "name": "Trigon of Thought",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "This artifact enters with three charge counters on it.\n{U}{U}, {T}: Put a charge counter on this artifact.\n{2}, {T}, Remove a charge counter from this artifact: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "som",
+      "collectorNumber": "217",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/8/f8da37ba-52e3-417e-8d7b-6c3e060552a4.jpg?1783941692",
+        "normal": "https://cards.scryfall.io/normal/front/f/8/f8da37ba-52e3-417e-8d7b-6c3e060552a4.jpg?1783941692",
+        "large": "https://cards.scryfall.io/large/front/f/8/f8da37ba-52e3-417e-8d7b-6c3e060552a4.jpg?1783941692",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/8/f8da37ba-52e3-417e-8d7b-6c3e060552a4.jpg?1783941692"
       },
       "localImages": {},
       "layout": "normal",
@@ -331467,6 +335728,56 @@
         "normal": "https://cards.scryfall.io/normal/front/0/f/0fb52b44-da5f-4f7a-a6c2-7924b855e051.jpg?1783918007",
         "large": "https://cards.scryfall.io/large/front/0/f/0fb52b44-da5f-4f7a-a6c2-7924b855e051.jpg?1783918007",
         "art_crop": "https://cards.scryfall.io/art_crop/front/0/f/0fb52b44-da5f-4f7a-a6c2-7924b855e051.jpg?1783918007"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b6ab0855-782a-498c-a885-b3ab3d1bb362",
+      "name": "Tyvar's Stand",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": [
+          "X"
+        ]
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +X/+X and gains hexproof and indestructible until end of turn. (It can't be the target of spells or abilities your opponents control. Damage and effects that say \"destroy\" don't destroy it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "291",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/6/b6ab0855-782a-498c-a885-b3ab3d1bb362.jpg?1783903758",
+        "normal": "https://cards.scryfall.io/normal/front/b/6/b6ab0855-782a-498c-a885-b3ab3d1bb362.jpg?1783903758",
+        "large": "https://cards.scryfall.io/large/front/b/6/b6ab0855-782a-498c-a885-b3ab3d1bb362.jpg?1783903758",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/6/b6ab0855-782a-498c-a885-b3ab3d1bb362.jpg?1783903758"
       },
       "localImages": {},
       "layout": "normal",
@@ -335886,6 +340197,57 @@
         "normal": "https://cards.scryfall.io/normal/front/b/a/ba547810-c82a-498b-81eb-e81a8dcbbd42.jpg?1783943628",
         "large": "https://cards.scryfall.io/large/front/b/a/ba547810-c82a-498b-81eb-e81a8dcbbd42.jpg?1783943628",
         "art_crop": "https://cards.scryfall.io/art_crop/front/b/a/ba547810-c82a-498b-81eb-e81a8dcbbd42.jpg?1783943628"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1ad7c141-2e20-4891-93a8-1cf309d3b979",
+      "name": "Ursine Fylgja",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit",
+          "Bear"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit Bear",
+      "oracleText": "This creature enters with four healing counters on it.\nRemove a healing counter from this creature: Prevent the next 1 damage that would be dealt to this creature this turn.\n{2}{W}: Put a healing counter on this creature.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "csp",
+      "collectorNumber": "22",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/a/1ad7c141-2e20-4891-93a8-1cf309d3b979.jpg?1783943365",
+        "normal": "https://cards.scryfall.io/normal/front/1/a/1ad7c141-2e20-4891-93a8-1cf309d3b979.jpg?1783943365",
+        "large": "https://cards.scryfall.io/large/front/1/a/1ad7c141-2e20-4891-93a8-1cf309d3b979.jpg?1783943365",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/a/1ad7c141-2e20-4891-93a8-1cf309d3b979.jpg?1783943365"
       },
       "localImages": {},
       "layout": "normal",
@@ -345009,6 +349371,57 @@
         "normal": "https://cards.scryfall.io/normal/front/e/d/ed3d5a10-6d4b-4383-b400-7323f2b4670e.jpg?1783946081",
         "large": "https://cards.scryfall.io/large/front/e/d/ed3d5a10-6d4b-4383-b400-7323f2b4670e.jpg?1783946081",
         "art_crop": "https://cards.scryfall.io/art_crop/front/e/d/ed3d5a10-6d4b-4383-b400-7323f2b4670e.jpg?1783946081"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "62534128-2a85-4a36-bc7b-e4f4c51fa1f6",
+      "name": "Voice of the Blessed",
+      "manaCost": {
+        "generic": 0,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit",
+          "Cleric"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit Cleric",
+      "oracleText": "Whenever you gain life, put a +1/+1 counter on this creature.\nAs long as this creature has four or more +1/+1 counters on it, it has flying and vigilance.\nAs long as this creature has ten or more +1/+1 counters on it, it has indestructible.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "inr",
+      "collectorNumber": "50",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/2/62534128-2a85-4a36-bc7b-e4f4c51fa1f6.jpg?1783908172",
+        "normal": "https://cards.scryfall.io/normal/front/6/2/62534128-2a85-4a36-bc7b-e4f4c51fa1f6.jpg?1783908172",
+        "large": "https://cards.scryfall.io/large/front/6/2/62534128-2a85-4a36-bc7b-e4f4c51fa1f6.jpg?1783908172",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/2/62534128-2a85-4a36-bc7b-e4f4c51fa1f6.jpg?1783908172"
       },
       "localImages": {},
       "layout": "normal",
@@ -354305,6 +358718,54 @@
       "faces": []
     },
     {
+      "id": "b17950ae-43aa-4d03-a41e-726ca96eb1ba",
+      "name": "Whirling Strike",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +2/+0 and gains first strike and trample until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "bro",
+      "collectorNumber": "157",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/1/b17950ae-43aa-4d03-a41e-726ca96eb1ba.jpg?1783920058",
+        "normal": "https://cards.scryfall.io/normal/front/b/1/b17950ae-43aa-4d03-a41e-726ca96eb1ba.jpg?1783920058",
+        "large": "https://cards.scryfall.io/large/front/b/1/b17950ae-43aa-4d03-a41e-726ca96eb1ba.jpg?1783920058",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/1/b17950ae-43aa-4d03-a41e-726ca96eb1ba.jpg?1783920058"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "9fdbe6b5-7f67-42f1-be8f-637c35417925",
       "name": "Whirlwind Adept",
       "manaCost": {
@@ -359461,6 +363922,54 @@
       "faces": []
     },
     {
+      "id": "cc329134-4b71-4c33-8cfb-c3867a733115",
+      "name": "Woodcutter's Grit",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature you control gets +3/+3 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "emn",
+      "collectorNumber": "179",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/c/cc329134-4b71-4c33-8cfb-c3867a733115.jpg?1783937431",
+        "normal": "https://cards.scryfall.io/normal/front/c/c/cc329134-4b71-4c33-8cfb-c3867a733115.jpg?1783937431",
+        "large": "https://cards.scryfall.io/large/front/c/c/cc329134-4b71-4c33-8cfb-c3867a733115.jpg?1783937431",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/c/cc329134-4b71-4c33-8cfb-c3867a733115.jpg?1783937431"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "61b85077-64aa-4bcc-890d-2d88da9543c0",
       "name": "Wooded Bastion",
       "manaCost": {
@@ -360227,6 +364736,53 @@
         "normal": "https://cards.scryfall.io/normal/front/c/e/ced54aa6-c8ee-451f-91cd-967fe766ec13.jpg?1786005790",
         "large": "https://cards.scryfall.io/large/front/c/e/ced54aa6-c8ee-451f-91cd-967fe766ec13.jpg?1786005790",
         "art_crop": "https://cards.scryfall.io/art_crop/front/c/e/ced54aa6-c8ee-451f-91cd-967fe766ec13.jpg?1786005790"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c2571ff7-0287-4ba2-8365-5ff08de641a2",
+      "name": "Workhorse",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Horse"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Horse",
+      "oracleText": "This creature enters with four +1/+1 counters on it.\nRemove a +1/+1 counter from this creature: Add {C}.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "exo",
+      "collectorNumber": "142",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/2/c2571ff7-0287-4ba2-8365-5ff08de641a2.jpg?1783946497",
+        "normal": "https://cards.scryfall.io/normal/front/c/2/c2571ff7-0287-4ba2-8365-5ff08de641a2.jpg?1783946497",
+        "large": "https://cards.scryfall.io/large/front/c/2/c2571ff7-0287-4ba2-8365-5ff08de641a2.jpg?1783946497",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/2/c2571ff7-0287-4ba2-8365-5ff08de641a2.jpg?1783946497"
       },
       "localImages": {},
       "layout": "normal",
@@ -365588,6 +370144,57 @@
         "normal": "https://cards.scryfall.io/normal/front/d/c/dc798e6f-13c4-457c-b052-b7b65bc83cfe.jpg?1783909070",
         "large": "https://cards.scryfall.io/large/front/d/c/dc798e6f-13c4-457c-b052-b7b65bc83cfe.jpg?1783909070",
         "art_crop": "https://cards.scryfall.io/art_crop/front/d/c/dc798e6f-13c4-457c-b052-b7b65bc83cfe.jpg?1783909070"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8d5cd0be-4337-4aba-a4f6-5adab7735a73",
+      "name": "Zookeeper Mechan",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Robot"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Robot",
+      "oracleText": "{T}: Add {R}.\n{6}{R}: Target creature you control gets +4/+0 until end of turn. Activate only as a sorcery.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "eoe",
+      "collectorNumber": "170",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/d/8d5cd0be-4337-4aba-a4f6-5adab7735a73.jpg?1783905942",
+        "normal": "https://cards.scryfall.io/normal/front/8/d/8d5cd0be-4337-4aba-a4f6-5adab7735a73.jpg?1783905942",
+        "large": "https://cards.scryfall.io/large/front/8/d/8d5cd0be-4337-4aba-a4f6-5adab7735a73.jpg?1783905942",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/d/8d5cd0be-4337-4aba-a4f6-5adab7735a73.jpg?1783905942"
       },
       "localImages": {},
       "layout": "normal",

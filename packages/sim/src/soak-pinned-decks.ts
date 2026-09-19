@@ -533,6 +533,20 @@ export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.f
   1390617766: PINNED_1390617766,
   3434778477: PINNED_3434778477,
   113343071: PINNED_113343071,
+  /*
+   * §3.162 — the SAME two decks under a different shuffle. The stubborn-pilot
+   * runaway row (`loop-runaway.test.ts`) walked into the Reverberate + Narset's
+   * Reversal mirror on seed 113343071 only because the shipped pilot of the day
+   * sacrificed Crystal Vein in its own upkeep for two mana it could not spend;
+   * once an activation's sacrifice was priced (`ai/activation-cost.ts`) the
+   * pilot kept its land, the game took another road, and the mirror never came.
+   * A pilot improvement moving a pinned trajectory is the drift that row's own
+   * comment predicts; the decks are what the row is about, so the decks stay
+   * and the shuffle moves. Found by replaying these decks under the fixture
+   * pilot across 600 shuffles: the first hit, 662 copies, no other violation.
+   * The shipped pilot plays this shuffle clean (`soak.test.ts`).
+   */
+  113390585: PINNED_113343071,
   3791358276: PINNED_3791358276,
   3736754678: PINNED_3736754678,
   3455580742: PINNED_3455580742,
@@ -553,6 +567,7 @@ export const PINNED_IDENTITIES: Readonly<Record<number, PinnedIdentity>> = Objec
   // The two copy spells are both in B; Heraldic Banner is A's, and adding it is
   // what turned this row from decorative into a guard (see PinnedIdentity).
   113343071: ['Reverberate', "Narset's Reversal", 'Heraldic Banner'],
+  113390585: ['Reverberate', "Narset's Reversal", 'Heraldic Banner'],
   // §3.141. Bog Initiate is the loop, and it is B's alone — so B is named twice
   // over (Nezumi Cutthroat is the second) and A twice over (Prodigal Pyromancer,
   // Tar Pitcher). Naming only the Initiate would leave this row green with A

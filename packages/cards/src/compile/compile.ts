@@ -46,7 +46,7 @@ import type {
 import {
   EFFECT_RULES,
   stripTargetBound,
-  applyTargetBound,
+  applyTargetBoundToContribution,
   KEYWORD_ABILITY_BUILDERS,
   joinPayloadKeywords,
   KEYWORD_FLAGS,
@@ -59,6 +59,7 @@ import {
   parsePayloadKeyword,
   COST_NOUNS,
   COST_NOUN_PHRASE,
+  parseRemoveCountersCost,
   resolveItsReferent,
   WHERE_X_IS_CLAUSE,
   whereXBinding,
@@ -630,10 +631,9 @@ function applyRules(
     const stripped = stripTargetBound(clause);
     if (stripped) {
       const inner = applyRules(rules, stripped.clause, ctx, targetFree, true);
-      const narrowed =
-        inner === null ? null : applyTargetBound(inner.contribution.effects ?? [], stripped.bound);
+      const narrowed = inner === null ? null : applyTargetBoundToContribution(inner.contribution, stripped.bound);
       if (inner && narrowed) {
-        return { contribution: { ...inner.contribution, effects: narrowed }, ruleId: inner.ruleId };
+        return { contribution: narrowed, ruleId: inner.ruleId };
       }
     }
   }
@@ -1007,6 +1007,11 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
   const effects = ctx.compileEffectClause(effectText, { xBound: (cost.xCost ?? 0) > 0 });
   if (!effects || effects.length === 0) return false;
 
+  // A printed "ANOTHER target …" rides the effect ref as `excludeSelf` and is
+  // lifted onto the ABILITY here, exactly as the trigger-body compiler lifts it
+  // onto a trigger: the ability is what gets aimed, and a flag left on the ref
+  // alone would exclude nothing.
+  const excludeSelf = effects.some((ref) => ref.params?.excludeSelf === true);
   assembly.activated.push({
     cost,
     effects,
@@ -1014,6 +1019,7 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
     // and the one wording that says otherwise is stripped above.
     ...(sorceryOnly ? { timing: 'sorcery' as const } : {}),
     ...(activateOnly ? { activateOnly } : {}),
+    ...(excludeSelf ? { targetsExcludeSelf: true } : {}),
     label: capitalizeFirst(split.raw),
   });
   assembly.matchedRules.push('activated-ability');
@@ -1129,6 +1135,7 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
     sacrificeAnother?: CardFilter;
     sacrificeExcludesSelf?: boolean;
     life?: number;
+    removeCounters?: ActivationCost['removeCounters'];
   } = {};
 
   for (const partRaw of text.split(',')) {
@@ -1146,6 +1153,14 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
     }
     if (SACRIFICE_SELF.test(part) || part === `sacrifice ${ctx.card.name.toLowerCase()}`) {
       cost.sacrificeSelf = true;
+      continue;
+    }
+    // "Remove a +1/+1 counter from ~" / "Remove three spore counters from ~" —
+    // the read half of the counter family; the kinds come from the same closed
+    // table the write half ("put a charge counter on ~") reads.
+    const removal = parseRemoveCountersCost(part);
+    if (removal) {
+      cost.removeCounters = removal;
       continue;
     }
     // "Sacrifice a creature" / "Sacrifice another creature" / "Sacrifice a

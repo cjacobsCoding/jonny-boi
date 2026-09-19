@@ -292,6 +292,32 @@ function DeckPanel({
           ))
         )}
 
+        {/* CARDS THE APP ADDED AT HIS REQUEST (§3.162) — said out loud, on the
+            deck, until he dismisses it. The cards themselves are ordinary
+            entries above (or wish-list lines below, until the pool carries
+            them); this is only the message that they arrived, and why. */}
+        {(active.revisions ?? []).map((note) => (
+          <div key={note.id} className="deck-group deck-group--revision" role="status">
+            <div className="deck-group__title">Added to this deck for you</div>
+            <p className="deck-revision__note">{note.note}</p>
+            <ul className="deck-revision__added">
+              {note.added.map((added) => (
+                <li key={added.name}>
+                  <span className="deck-entry__count">+{added.count}×</span> {added.name}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="deck-revision__dismiss"
+              onClick={() => decks.dismissRevisionNote(note.id)}
+              title="Dismiss this note. The cards stay in the deck."
+            >
+              Got it
+            </button>
+          </div>
+        ))}
+
         {/* CARDS THE POOL CANNOT SUPPLY YET — listed in the deck, not hidden.
             These have no `cardId`, so they cannot be a `deck-entry`: there is
             nothing to inspect, nothing to step up, and no art. What they DO

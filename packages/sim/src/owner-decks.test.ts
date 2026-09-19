@@ -44,6 +44,8 @@ import { SAMPLE_DECKS } from '../data/decks/index.js';
 import {
   OWNER_DECKS,
   OWNER_DECK_ENTRIES,
+  applyDeckRevisions,
+  currentOwnerDeck,
   transcribedSize,
 } from '../data/owner-decks/index.js';
 import { DEFAULT_DECK_RULES } from './config.js';
@@ -74,6 +76,10 @@ const EXPECTED = Object.freeze([
     names: 22,
     cards: 65,
     tell: ['Archangel of Thune', 'Soul Warden', 'Rhox Faithmender'],
+    // §3.162 — the six he asked for by name, two of each, as ONE dated revision.
+    revisions: [{ id: '2026-09-18-his-six', names: 6, cards: 12 }],
+    /** The deck as it stands today: the transcription plus every revision. */
+    currentCards: 77,
   }),
   Object.freeze({
     name: 'Tamiyo + Jace Surge',
@@ -81,6 +87,8 @@ const EXPECTED = Object.freeze([
     names: 17,
     cards: 49,
     tell: ['Tamiyo, the Moon Sage', 'Jace, Architect of Thought'],
+    revisions: [],
+    currentCards: 49,
   }),
 ]);
 
@@ -91,21 +99,66 @@ const EXPECTED = Object.freeze([
  * disk and LF in git with no `.gitattributes` — a guard that assumes one of them
  * false-alarms on every Windows checkout (CLAUDE.md, "CRLF trap").
  */
-function readTranscription(relativePath: string): readonly { count: number; name: string }[] {
-  const text = readFileSync(resolve(REPO_ROOT, relativePath), 'utf8');
-  const lines: { count: number; name: string }[] = [];
+interface TranscribedLine {
+  readonly count: number;
+  readonly name: string;
+}
+
+/** A `// revision <id> — <note>` block: the header's id and its `+N Name` lines. */
+interface TranscribedRevision {
+  readonly id: string;
+  readonly adds: TranscribedLine[];
+}
+
+interface Transcription {
+  /** The plain `N Name` lines — the deck as transcribed. */
+  readonly base: TranscribedLine[];
+  /** The `// revision` blocks, in file order (§3.162). */
+  readonly revisions: TranscribedRevision[];
+}
+
+/** Read one transcription into its base lines and its revision blocks. */
+function readTranscription(relativePath: string): Transcription {
+  return readTranscriptionText(readFileSync(resolve(REPO_ROOT, relativePath), 'utf8'), relativePath);
+}
+
+/**
+ * ⚠️ Split on `/\r?\n/`, never on `'\n'`. Committed text in this repo is CRLF on
+ * disk and LF in git with no `.gitattributes` — a guard that assumes one of them
+ * false-alarms on every Windows checkout (CLAUDE.md, "CRLF trap").
+ */
+function readTranscriptionText(text: string, label: string): Transcription {
+  const base: TranscribedLine[] = [];
+  const revisions: TranscribedRevision[] = [];
   for (const raw of text.split(/\r?\n/)) {
-    // Trailing `// …` notes mark which cards compile; they are annotation, not
-    // decklist. A WHOLE-line comment is dropped by the same strip.
+    // A revision HEADER is the one comment that is data: it opens a block whose
+    // "+N Name" lines belong to it. Every other `// …` is annotation and is
+    // stripped — trailing notes on a card line and whole-line comments alike.
+    const header = /^\/\/\s*revision\s+(\S+)\s+[—-]\s*(.*)$/.exec(raw.trim());
+    if (header) {
+      revisions.push({ id: header[1]!, adds: [] });
+      continue;
+    }
     const line = raw.replace(/\/\/.*$/, '').trim();
     if (line === '') continue;
+    const add = /^\+(\d+)\s+(\S.*)$/.exec(line);
+    if (add) {
+      const open = revisions[revisions.length - 1];
+      // A "+N" line before any header has no revision to belong to.
+      expect(open, `"+N" line outside a revision block in ${label}: "${raw}"`).toBeDefined();
+      open!.adds.push({ count: Number(add[1]), name: add[2]!.trim() });
+      continue;
+    }
     const match = /^(\d+)\s+(\S.*)$/.exec(line);
     // Anything else in one of these files is a transcription error worth
     // failing on, not a line to skip quietly.
-    expect(match, `unparseable line in ${relativePath}: "${raw}"`).not.toBeNull();
-    lines.push({ count: Number(match![1]), name: match![2]!.trim() });
+    expect(match, `unparseable line in ${label}: "${raw}"`).not.toBeNull();
+    // A plain line AFTER a revision block would silently belong to the base
+    // list while reading as part of the revision — refused.
+    expect(revisions.length, `base line "${raw}" after a revision block in ${label}`).toBe(0);
+    base.push({ count: Number(match![1]), name: match![2]!.trim() });
   }
-  return lines;
+  return { base, revisions };
 }
 
 describe("the owner's decks are registered", () => {
@@ -139,6 +192,10 @@ describe("the owner's decks are registered", () => {
       const deck = OWNER_DECKS.find((d) => d.name === expected.name)!;
       expect(deck.cards.length, `${expected.name}: distinct names`).toBe(expected.names);
       expect(transcribedSize(deck), `${expected.name}: total cards`).toBe(expected.cards);
+      const entry = OWNER_DECK_ENTRIES.find((e) => e.deck === deck)!;
+      expect(transcribedSize(currentOwnerDeck(entry)), `${expected.name}: cards today, revisions in`).toBe(
+        expected.currentCards,
+      );
     }
   });
 
@@ -162,14 +219,89 @@ describe('each list still matches the transcription it came from', () => {
       // transcription (it is the physical reading order of the piles), and a
       // set comparison would let two lines swap places unnoticed.
       expect(deck.cards.map((c) => ({ count: c.count, name: c.cardId }))).toEqual(
-        transcribed.map((line) => ({ count: line.count, name: line.name })),
+        transcribed.base.map((line) => ({ count: line.count, name: line.name })),
       );
     });
+
+    it(`${expected.name}'s revisions match the \`// revision\` blocks of ${expected.source}`, () => {
+      const entry = OWNER_DECK_ENTRIES.find((e) => e.deck.name === expected.name)!;
+      const transcribed = readTranscription(expected.source);
+      // Same whole-block comparison: id, order and counts, or the mirror drifted.
+      expect(
+        entry.revisions.map((r) => ({ id: r.id, adds: r.adds.map((a) => ({ count: a.count, name: a.cardId })) })),
+      ).toEqual(transcribed.revisions);
+      // And the shape this file's EXPECTED pins, so a revision cannot be added
+      // to the .txt and the data without a human writing down what it is.
+      expect(
+        entry.revisions.map((r) => ({ id: r.id, names: r.adds.length, cards: r.adds.reduce((n, a) => n + a.count, 0) })),
+      ).toEqual(expected.revisions);
+    });
   }
+
+  it('the revision grammar is read the way the block is written', () => {
+    const parsed = readTranscriptionText(
+      [
+        '// a note',
+        '4 Forest // compiles',
+        '',
+        '// revision 2026-01-01-test — "his words"',
+        '+2 Grizzly Bears',
+        '+1 Forest',
+      ].join('\r\n'),
+      'inline',
+    );
+    expect(parsed.base).toEqual([{ count: 4, name: 'Forest' }]);
+    expect(parsed.revisions).toEqual([
+      { id: '2026-01-01-test', adds: [{ count: 2, name: 'Grizzly Bears' }, { count: 1, name: 'Forest' }] },
+    ]);
+  });
 
   it('every registry entry declares a source that exists', () => {
     for (const entry of OWNER_DECK_ENTRIES) {
       expect(() => readTranscription(entry.source), entry.deck.name).not.toThrow();
+    }
+  });
+});
+
+describe('a revision is ADD-ONLY (§3.162)', () => {
+  it('raises counts and appends names, and never lowers, drops or reorders', () => {
+    for (const entry of OWNER_DECK_ENTRIES) {
+      const before = entry.deck;
+      const after = currentOwnerDeck(entry);
+      // Every transcribed line is still there, in its place, at least as large.
+      before.cards.forEach((line, i) => {
+        expect(after.cards[i]?.cardId, `${entry.deck.name}: line ${i} kept in order`).toBe(line.cardId);
+        expect(after.cards[i]!.count, `${entry.deck.name}: ${line.cardId} count`).toBeGreaterThanOrEqual(line.count);
+      });
+      expect(after.cards.length).toBeGreaterThanOrEqual(before.cards.length);
+      // The input is not mutated.
+      expect(transcribedSize(before)).toBe(EXPECTED.find((e) => e.name === entry.deck.name)!.cards);
+      // The additions are exactly the revisions' lines, no more and no less.
+      const added = transcribedSize(after) - transcribedSize(before);
+      const asked = entry.revisions.reduce((n, r) => n + r.adds.reduce((m, a) => m + a.count, 0), 0);
+      expect(added, `${entry.deck.name}: cards added`).toBe(asked);
+    }
+  });
+
+  it('sums a name the deck already holds rather than listing it twice', () => {
+    const revised = applyDeckRevisions(
+      { name: 'probe', archetype: '', cards: [{ cardId: 'Forest', count: 3 }] },
+      [{ id: 'r', date: '2026-01-01', note: '', adds: [{ cardId: 'Forest', count: 1 }, { cardId: 'Plains', count: 2 }] }],
+    );
+    expect(revised.cards).toEqual([{ cardId: 'Forest', count: 4 }, { cardId: 'Plains', count: 2 }]);
+  });
+
+  it('with no revisions, returns the very same deck', () => {
+    const deck = { name: 'probe', archetype: '', cards: [{ cardId: 'Forest', count: 3 }] };
+    expect(applyDeckRevisions(deck, [])).toBe(deck);
+  });
+
+  it('the revised decks respect the 4-of rule too', () => {
+    for (const entry of OWNER_DECK_ENTRIES) {
+      for (const line of currentOwnerDeck(entry).cards) {
+        if (DEFAULT_DECK_RULES.unlimitedCopies.has(line.cardId)) continue;
+        expect(line.count, `${entry.deck.name}: ${line.cardId}`).toBeLessThanOrEqual(DEFAULT_DECK_RULES.maxCopiesNonBasic);
+      }
     }
   });
 });

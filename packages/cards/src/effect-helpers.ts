@@ -26,7 +26,7 @@ import type {
   DerivedCountScope,
   PermanentStateFilter,
   SpellStackObject,
-  TargetRestriction,
+  TargetSpec,
 } from '@jonny-boi/core';
 import {
   aggregateFor,
@@ -41,7 +41,7 @@ import {
   gainLifeAmount,
   isCreature,
   isPlayerTarget,
-  isTargetRestriction,
+  isTargetSpec,
   MANA_COLORS,
   markBattlefieldEntry,
   pruneCardGrantsFor,
@@ -595,13 +595,22 @@ export function otherPlayer(p: PlayerId): PlayerId {
 export { isPlayerTarget } from '@jonny-boi/core';
 
 /**
- * Read an effect's declared {@link TargetRestriction} (`params.targets`), falling
- * back to the unrestricted default so an effect that declares nothing behaves
- * exactly as it always has. One reader, shared by every targeting primitive.
+ * Read an effect's declared target spec (`params.targets`) — the bare
+ * {@link TargetRestriction} or, since §3.150, the noun WITH its printed bound —
+ * falling back to the unrestricted default so an effect that declares nothing
+ * behaves exactly as it always has. One reader, shared by every targeting
+ * primitive.
+ *
+ * ⚠️ The BOUND is part of the answer. This used to return only a bare
+ * restriction and hand a bounded spec back as the default, so a primitive's
+ * resolution-time legality re-check (CR 608.2b) policed "target creature with
+ * power 4 or greater" as "any target": a creature shrunk below the bound in
+ * response was still destroyed, where the printed spell fizzles. The aiming
+ * pass had the bound; the resolution did not. Same spec at both.
  */
-export function restrictionParam(ctx: EffectContext): TargetRestriction {
+export function restrictionParam(ctx: EffectContext): TargetSpec {
   const declared = ctx.params[TARGET_RESTRICTION_PARAM];
-  return isTargetRestriction(declared) ? declared : DEFAULT_TARGET_RESTRICTION;
+  return isTargetSpec(declared) ? declared : DEFAULT_TARGET_RESTRICTION;
 }
 
 /** Find a battlefield permanent by instance id, or undefined. */

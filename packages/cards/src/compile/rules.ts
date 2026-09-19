@@ -53,6 +53,7 @@ import type {
 import {
   DEFAULT_TARGET_RESTRICTION,
   DEFAULT_TRIGGER_WATCHES,
+  MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
@@ -209,6 +210,10 @@ const ACTIVATED_OR_TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction =
 const INSTANT_OR_SORCERY_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'instantOrSorcerySpellYouControl';
 const PERMANENT_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'permanentSpellYouControl';
 const NONLAND_PERMANENT_YOU_CONTROL_TARGET: TargetRestriction = 'nonlandPermanentYouControl';
+/** "target nonland permanent an opponent controls / you don't control" — Skyclave Apparition. */
+const NONLAND_PERMANENT_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'nonlandPermanentAnOpponentControls';
+/** "target creature or enchantment you control" — Heliod, Sun-Crowned's lifegain trigger. */
+const CREATURE_OR_ENCHANTMENT_YOU_CONTROL_TARGET: TargetRestriction = 'creatureOrEnchantmentYouControl';
 const TOKEN_YOU_CONTROL_TARGET: TargetRestriction = 'tokenYouControl';
 /** "target creature an opponent controls" — Banisher Priest. */
 const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
@@ -1504,6 +1509,30 @@ function keywordFlag(word: string): Record<string, boolean> | null {
 }
 
 /**
+ * Build one `KeywordFlags` object from a printed LIST — "hexproof and
+ * indestructible", "flying, first strike, and lifelink". Every word must be a
+ * keyword the engine enforces or the whole list is refused: granting two of
+ * three printed keywords is a card playing weaker than printed, silently.
+ */
+function keywordFlags(list: string): Record<string, boolean> | null {
+  const words = list
+    .split(/,\s*(?:and\s+)?|\s+and\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0);
+  if (words.length === 0) return null;
+  const flags: Record<string, boolean> = {};
+  for (const word of words) {
+    const one = keywordFlag(word);
+    if (!one) return null;
+    Object.assign(flags, one);
+  }
+  return flags;
+}
+
+/** One or more keywords joined by "and" / commas, for a pattern's capture. */
+const KEYWORD_LIST_TOKEN = `((?:${Object.keys(KEYWORD_FLAGS).join('|')})(?:(?:,\\s*(?:and\\s+)?|\\s+and\\s+)(?:${Object.keys(KEYWORD_FLAGS).join('|')}))*)`;
+
+/**
  * The quality words a printed "protection from ..." may name, mapped to the core
  * {@link ProtectionQuality} each means. A CLOSED table: a quality outside it
  * ("protection from mana value 3 or less", "from the chosen color") has no
@@ -2395,6 +2424,12 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
   // the one core could already say (`creatureAnOpponentControls`, added for
   // Banisher Priest). One row, and destroy/exile/bounce gain it together.
   'creature an opponent controls': 'creatureAnOpponentControls',
+  // "target nonland permanent an opponent controls" (Deputy of Detention) and
+  // "… you don't control" (Skyclave Apparition, Perilous Voyage): 58 cards
+  // print one spelling or the other, and in this two-seat engine they select
+  // the same permanents — see the member's note in core.
+  'nonland permanent an opponent controls': NONLAND_PERMANENT_AN_OPPONENT_CONTROLS_TARGET,
+  "nonland permanent you don't control": NONLAND_PERMANENT_AN_OPPONENT_CONTROLS_TARGET,
   // ⚠️ "artifact, enchantment, or land" is deliberately NOT here: Oracle prints
   // it with and without the serial comma, and `destroy-target-artifact-
   // enchantment-or-land` owns both spellings. A row here would take one
@@ -2421,10 +2456,32 @@ const PUMP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.fr
   // `creature` would offer a pilot its own board as a legal target for a
   // penalty, which is a card playing differently from its text.
   'creature an opponent controls': CREATURE_AN_OPPONENT_CONTROLS_TARGET,
+  // "Target creature YOU CONTROL gets +X/+X and gains hexproof and indestructible
+  // until end of turn" (Tyvar's Stand) — the protective pump is only ever aimed
+  // at your own side, and `creatureYouControl` already exists for it.
+  'creature you control': CREATURE_YOU_CONTROL_TARGET,
 });
 
 /** The pump nouns as an alternation, longest first so "creature" cannot truncate the pair. */
 const PUMP_TARGET_PHRASE = Object.keys(PUMP_TARGET_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The nouns "put N +1/+1 counters on target …" may name, as a closed table —
+ * the same shape as {@link PUMP_TARGET_NOUNS} and separate for the same
+ * reason: these are the nouns that sentence actually prints.
+ */
+const COUNTER_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  creature: CREATURE_TARGET,
+  'creature you control': CREATURE_YOU_CONTROL_TARGET,
+  // "Whenever you gain life, put a +1/+1 counter on target creature or
+  // enchantment you control" (Heliod, Sun-Crowned; Alseid of Life's Bounty).
+  'creature or enchantment you control': CREATURE_OR_ENCHANTMENT_YOU_CONTROL_TARGET,
+});
+
+/** The counter nouns as an alternation, longest first. */
+const COUNTER_TARGET_PHRASE = Object.keys(COUNTER_TARGET_NOUNS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
@@ -2892,6 +2949,47 @@ function inertCounterKind(word: string): string | null {
 }
 
 /**
+ * The counter KINDS a printed clause may name, as the string core stores each
+ * one under: the two P/T kinds by their constants, and every inert kind. ONE
+ * alternation for the cost parser and the threshold static below, so "a +1/+1
+ * counter" in a cost is the same object "put a +1/+1 counter on it" created.
+ */
+const COUNTER_KIND_TOKEN = `(\\+1\\/\\+1|-1\\/-1|${INERT_COUNTER_KIND_TOKEN})`;
+
+/** The stored kind for a printed counter word, or null outside the closed set. */
+function counterKindOf(word: string): string | null {
+  const printed = word.trim().toLowerCase();
+  if (printed === '+1/+1') return PLUS_ONE_COUNTER;
+  if (printed === '-1/-1') return MINUS_ONE_COUNTER;
+  return inertCounterKind(printed);
+}
+
+/**
+ * "**Remove a +1/+1 counter from ~**" / "Remove three spore counters from ~" as
+ * an ACTIVATION COST component — the read half of the counter family, whose
+ * write half ("put a charge counter on ~") `put-named-counter-on-self` closed.
+ * 176 cards on the 32,341-card corpus print this cost (measured 2026-09-18);
+ * Spike Feeder prints it twice.
+ *
+ * "Remove X counters" is refused here on purpose: the X would have to ride the
+ * action as the {X} mana cost does, and nothing enumerates it yet — a card
+ * compiled with a guessed X would play differently from its text.
+ */
+// Groups: [1] the article or count word ("a", "an", "three"), [2] COUNT_TOKEN's
+// own inner capture (undefined for an article), [3] the counter kind.
+const REMOVE_COUNTERS_COST = new RegExp(`^remove (an?|${COUNT_TOKEN}) ${COUNTER_KIND_TOKEN} counters? from ~$`);
+
+export function parseRemoveCountersCost(part: string): { readonly kind: string; readonly count: number } | null {
+  const match = REMOVE_COUNTERS_COST.exec(part.trim());
+  if (!match) return null;
+  const word = match[1] ?? '';
+  const count = word === 'a' || word === 'an' ? 1 : parseCount(word);
+  const kind = counterKindOf(match[3] ?? '');
+  if (count === null || count <= 0 || kind === null) return null;
+  return { kind, count };
+}
+
+/**
  * Whether the card being compiled is something a counter can sit ON.
  *
  * Counters live on PERMANENTS (CR 122.1 — and on players, which is a different
@@ -2929,6 +3027,17 @@ const RETURN_EXILED_TO_HAND = /^return the exiled cards? to (?:its|their) owners
 const LEAVES_TRIGGER_PREFIX = /^when ~ leaves the battlefield, (.+)$/;
 
 /**
+ * Skyclave Apparition's leaves line — the THIRD thing a linked exile can do
+ * when its exiler leaves: "the exiled card's owner creates an X/X blue Illusion
+ * creature token, where X is the mana value of the exiled card". Read by the
+ * linked-exile condition below (so the ETB exile is LINKED, not plain) and by
+ * the effect rule that compiles it (`token-for-exiled-by-this`).
+ */
+const TOKEN_FOR_EXILED = new RegExp(
+  `^the exiled card's owner creates an x\\/x (${Object.keys(COLOR_WORDS).join('|')}) ([a-z]+) creature token, where x is the mana value of the exiled card$`,
+);
+
+/**
  * Does this card print the OTHER half of an O-Ring — a "when ~ leaves the
  * battlefield, return the exiled card…" line?
  *
@@ -2951,6 +3060,9 @@ function printsLinkedReturn(ctx: RuleContext): boolean {
     const body = LEAVES_TRIGGER_PREFIX.exec(normalizeClause(line))?.[1];
     if (body === undefined) continue;
     if (RETURN_EXILED_TO_BATTLEFIELD.test(body) || RETURN_EXILED_TO_HAND.test(body)) return true;
+    // Not a return, but a leaves line that READS "the exiled card" all the same
+    // (Skyclave Apparition) — the exile must be linked or the line finds nothing.
+    if (TOKEN_FOR_EXILED.test(body)) return true;
   }
   return false;
 }
@@ -4048,35 +4160,22 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'put-counters-on-target',
-    description: '"Put N +1/+1 counters on target creature"',
-    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature$`),
+    description:
+      '"Put N +1/+1 counters on target creature [you control | or enchantment you control]" — every noun in COUNTER_TARGET_NOUNS',
+    // ONE rule over a closed noun table (rule 2): "creature you control"
+    // (Snakeskin Veil) and "creature or enchantment you control" (Heliod,
+    // Sun-Crowned) are rows, never widened to `'creature'` — which would let a
+    // pilot grow the opponent's board, a card playing differently from its text.
+    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target (${COUNTER_TARGET_PHRASE})$`),
     needsChosenTarget: true,
     build(match) {
       // "a counter" has no count token to parse — it is exactly one.
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
-      if (amount === null) return null;
+      const restriction = COUNTER_TARGET_NOUNS[(match[2] ?? '').trim()];
+      if (amount === null || restriction === undefined) return null;
       return effects({
         primitive: 'addCounters',
-        params: { amount, targets: CREATURE_TARGET },
-      });
-    },
-  },
-  {
-    // "…on target creature YOU CONTROL" (Snakeskin Veil). Its own rule rather
-    // than a widened one: `'creature'` would let a pilot grow the opponent's
-    // board, which is a card playing differently from its printed text.
-    id: 'put-counters-on-target-you-control',
-    description: '"Put N +1/+1 counters on target creature you control"',
-    pattern: new RegExp(
-      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature you control$`,
-    ),
-    needsChosenTarget: true,
-    build(match) {
-      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
-      if (amount === null) return null;
-      return effects({
-        primitive: 'addCounters',
-        params: { amount, targets: CREATURE_YOU_CONTROL_TARGET },
+        params: { amount, targets: restriction },
       });
     },
   },
@@ -4450,6 +4549,28 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: RETURN_EXILED_TO_HAND,
     build() {
       return effects({ primitive: 'returnExiledByThis', params: { to: 'hand' } });
+    },
+  },
+  {
+    id: 'token-for-exiled-by-this',
+    description:
+      '"The exiled card’s owner creates an X/X <colour> <Name> creature token, where X is the mana value of the exiled card" (Skyclave Apparition, Severance Priest)',
+    /*
+     * The third leaves-half of a linked exile. Whole-line on purpose: the
+     * "where X is" tail names a value only the LINK can supply (the mana value
+     * of whatever THIS permanent exiled), so it is not a body for the §3.149
+     * X-binding pre-pass, which reads board counts. Colour and name are data,
+     * through the same token-descriptor reader every printed token uses.
+     */
+    pattern: TOKEN_FOR_EXILED,
+    build(match) {
+      const colour = COLOR_WORDS[match[1] ?? ''];
+      const name = capitalizeWord(match[2] ?? '');
+      if (colour === undefined || name.length === 0) return null;
+      return effects({
+        primitive: 'tokenForExiledByThis',
+        params: { colors: [colour], name, subtypes: [name] },
+      });
     },
   },
   {
@@ -4845,15 +4966,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'pump-and-grant-until-eot',
     description:
       '"Target creature gets +X/+Y and gains KEYWORD until end of turn" — and the ATTACKING form (§3.112: "Bloodrush — {R}{G}, Discard this card: Target attacking creature gets +4/+4 and gains trample")',
+    // The keywords are a LIST (Tyvar's Stand: "gains hexproof and indestructible")
+    // — one capture, every word a keyword the engine enforces, or the line reports.
     pattern: new RegExp(
-      `^target (${PUMP_TARGET_PHRASE}) gets ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} and gains ${KEYWORD_TOKEN} until end of turn$`,
+      `^target (${PUMP_TARGET_PHRASE}) gets ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} and gains ${KEYWORD_LIST_TOKEN} until end of turn$`,
     ),
     needsChosenTarget: true,
     build(match, ctx) {
       const restriction = PUMP_TARGET_NOUNS[(match[1] ?? '').trim()];
       const power = parsePumpAmount(match[2] ?? '', ctx);
       const toughness = parsePumpAmount(match[3] ?? '', ctx);
-      const keywords = keywordFlag(match[4] ?? '');
+      const keywords = keywordFlags(match[4] ?? '');
       if (restriction === undefined || power === null || toughness === null || !keywords) return null;
       return effects(
         { primitive: 'pumpUntilEndOfTurn', params: { power, toughness, targets: restriction } },
@@ -4954,16 +5077,23 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'grant-keyword-until-eot',
-    description: '"Target creature gains KEYWORD until end of turn"',
-    pattern: new RegExp(`^target creature gains ${KEYWORD_TOKEN} until end of turn$`),
+    description: '"[Another] target creature gains KEYWORD until end of turn"',
+    // "ANOTHER target creature" (Heliod, Sun-Crowned's "{1}{W}: Another target
+    // creature gains lifelink until end of turn"; 7 cards) rides the ref as
+    // `excludeSelf`, which the ability compilers lift onto the ability.
+    pattern: new RegExp(`^(another )?target creature gains ${KEYWORD_TOKEN} until end of turn$`),
     needsChosenTarget: true,
     build(match) {
-      const keywords = keywordFlag(match[1] ?? '');
+      const keywords = keywordFlag(match[2] ?? '');
       return keywords === null
         ? null
         : effects({
             primitive: 'grantKeywordUntilEndOfTurn',
-            params: { keywords, targets: CREATURE_TARGET },
+            params: {
+              keywords,
+              targets: CREATURE_TARGET,
+              ...(match[1] !== undefined ? { excludeSelf: true } : {}),
+            },
           });
     },
   },
@@ -7242,21 +7372,29 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
      * trigger again for ever (DESIGN §3.33's mirror). It rides the ability as
      * `targetsExcludeSelf`, which the aiming pass reads when it builds the menu.
      */
-    pattern: new RegExp(`^when ~ enters(?: the battlefield)?, exile (another )?target (${TARGET_NOUN_PHRASE})$`),
+    // "UP TO ONE target" (Skyclave Apparition) makes declining a legal answer:
+    // the ability stays on the stack with no target rather than being removed
+    // for want of one, carried as a 0..1 `targetCount` exactly as Angel of
+    // Serenity's "up to three" is.
+    pattern: new RegExp(
+      `^when ~ enters(?: the battlefield)?, exile (up to one )?(another )?target (${TARGET_NOUN_PHRASE})$`,
+    ),
     needsChosenTarget: true,
     build(match, ctx) {
       if (!printsLinkedReturn(ctx)) return null;
-      const restriction = TARGET_NOUN_RESTRICTIONS[match[2] ?? ''];
+      const restriction = TARGET_NOUN_RESTRICTIONS[match[3] ?? ''];
       if (restriction === undefined) return null;
-      const excludeSelf = match[1] !== undefined;
+      const upToOne = match[1] !== undefined;
+      const excludeSelf = match[2] !== undefined;
       return {
         triggers: [
           {
             condition: { on: 'etb' },
             effects: [{ primitive: 'exileUntilLeaves', params: { targets: restriction, max: 1 } }],
-            label: `Enters: exile ${excludeSelf ? 'another ' : ''}target ${match[2] ?? ''}`,
+            label: `Enters: exile ${upToOne ? 'up to one ' : ''}${excludeSelf ? 'another ' : ''}target ${match[3] ?? ''}`,
             targets: restriction,
             ...(excludeSelf ? { targetsExcludeSelf: true } : {}),
+            ...(upToOne ? { targetCount: { min: 0, max: 1 } } : {}),
           },
         ],
       };
@@ -10483,6 +10621,38 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'static-self-counter-threshold-keywords',
+    description:
+      '"As long as ~ has N or more <kind> counters on it, it has KEYWORD[ and KEYWORD]" (Voice of the Blessed, Pelt Collector, Angelic Cub)',
+    /*
+     * A SELF-ONLY static keyed on a counter THRESHOLD — the same
+     * `onlySource` + `hasCounterKind` shape unleash's "can't block" uses, with
+     * the printed number carried as `hasCounterMin`. Five cards print the
+     * shape on the 32,341-card corpus (measured 2026-09-18); the two whose
+     * grant is not a keyword list ("is a Knight in addition", "gets +2/+0")
+     * refuse here and keep reporting.
+     */
+    pattern: new RegExp(
+      `^as long as ~ has ${COUNT_TOKEN} or more ${COUNTER_KIND_TOKEN} counters on it, it has ${KEYWORD_LIST_TOKEN}$`,
+    ),
+    build(match, ctx) {
+      if (!sourceCanHoldCounters(ctx)) return null;
+      const min = parseCount(match[1]);
+      const kind = counterKindOf(match[2] ?? '');
+      const keywords = keywordFlags(match[3] ?? '');
+      if (min === null || min <= 0 || kind === null || keywords === null) return null;
+      return {
+        statics: [
+          {
+            affects: { onlySource: true, hasCounterKind: kind, hasCounterMin: min },
+            keywords,
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
     id: 'static-counters-grant',
     description: `"Creatures you control with +1/+1 counters on them have KEYWORD / can't be blocked"`,
     pattern: new RegExp(
@@ -13078,12 +13248,24 @@ const TARGET_BOUND_DIRECTION_PHRASE = Object.keys(TARGET_BOUND_DIRECTIONS)
  * unfiltered — a card playing wider than printed, in the half nobody looked at.
  */
 const BOUND_TAIL = new RegExp(
-  `\\b(target [a-z][a-z ]*?)\\s+((?:with|without) (?:${TARGET_BOUND_KEYWORD_PHRASE})|with (?:${TARGET_BOUND_PROPERTY_PHRASE}) \\d+ (?:${TARGET_BOUND_DIRECTION_PHRASE}))\\b`,
+  // The noun may carry an apostrophe ("target nonland permanent you don't
+  // control with mana value 4 or less" — Skyclave Apparition).
+  `\\b(target [a-z][a-z' ]*?)\\s+((?:with|without) (?:${TARGET_BOUND_KEYWORD_PHRASE})|with (?:${TARGET_BOUND_PROPERTY_PHRASE}) \\d+ (?:${TARGET_BOUND_DIRECTION_PHRASE}))\\b`,
   'gi',
 );
 
 /** The printed COLOUR form, which sits before the noun rather than after it. */
 const BOUND_COLOUR = new RegExp(`\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`, 'gi');
+
+/**
+ * The printed adjective "**nontoken**", which sits before the noun — alone
+ * ("target nontoken creature", Kaya the Inexorable) or after a sibling
+ * adjective with Oracle's comma ("target nonland, nontoken permanent you don't
+ * control", Skyclave Apparition). 39 cards print it on a target. The sibling
+ * is kept and the comma dropped, so the noun table sees the phrase it prints
+ * without the adjective: "nonland permanent you don't control".
+ */
+const BOUND_NONTOKEN = /\btarget ((?:non[a-z]+), )?nontoken (?=[a-z])/gi;
 
 /**
  * Read one printed bound phrase into a {@link TargetBound}, or `null`.
@@ -13130,19 +13312,45 @@ export interface StrippedTargetBound {
  * closed. Those cards keep reporting, with their number.
  */
 export function stripTargetBound(clause: string): StrippedTargetBound | null {
-  const tails = [...clause.matchAll(BOUND_TAIL)];
-  const colours = [...clause.matchAll(BOUND_COLOUR)];
-  if (tails.length + colours.length !== 1) return null;
+  let text = clause;
+  let bound: TargetBound = {};
+  let found = 0;
+  // Each printed form at most once — a second copy of the same form means two
+  // selectors, and which one each bound belongs to would be a guess.
+  const nontoken = [...text.matchAll(BOUND_NONTOKEN)];
+  if (nontoken.length > 1) return null;
+  if (nontoken.length === 1) {
+    const hit = nontoken[0] as RegExpMatchArray;
+    text = text.replace(hit[0], `target ${(hit[1] ?? '').replace(', ', ' ')}`);
+    bound = { ...bound, nontoken: true };
+    found += 1;
+  }
+  const tails = [...text.matchAll(BOUND_TAIL)];
+  const colours = [...text.matchAll(BOUND_COLOUR)];
+  if (tails.length > 1 || colours.length > 1) return null;
   if (tails.length === 1) {
     const hit = tails[0] as RegExpMatchArray;
-    const bound = parseBoundPhrase((hit[2] ?? '').trim());
-    if (bound === null) return null;
-    return { clause: clause.replace(hit[0], hit[1] ?? ''), bound };
+    const parsed = parseBoundPhrase((hit[2] ?? '').trim());
+    if (parsed === null) return null;
+    text = text.replace(hit[0], hit[1] ?? '');
+    bound = { ...bound, ...parsed };
+    found += 1;
   }
-  const hit = colours[0] as RegExpMatchArray;
-  const colour = TARGET_BOUND_COLOURS[(hit[1] ?? '').toLowerCase()];
-  if (colour === undefined) return null;
-  return { clause: clause.replace(hit[0], 'target '), bound: { colour } };
+  if (colours.length === 1) {
+    const hit = colours[0] as RegExpMatchArray;
+    const colour = TARGET_BOUND_COLOURS[(hit[1] ?? '').toLowerCase()];
+    if (colour === undefined) return null;
+    text = text.replace(hit[0], 'target ');
+    bound = { ...bound, colour };
+    found += 1;
+  }
+  if (found === 0) return null;
+  // Several bounds AND together on ONE selector ("target nonland, nontoken
+  // permanent you don't control with mana value 4 or less" — Skyclave
+  // Apparition). With two "target" words in the clause there is no single
+  // selector for them all to narrow, so the clause keeps reporting.
+  if (found > 1 && (text.match(/\btarget\b/g) ?? []).length !== 1) return null;
+  return { clause: text, bound };
 }
 
 /**
@@ -13155,6 +13363,38 @@ export function stripTargetBound(clause: string): StrippedTargetBound | null {
  * its printed text does not allow. Refusing keeps the card REPORTED with its
  * number, which is the project's whole acceptance rule.
  */
+/**
+ * {@link applyTargetBound} for a whole clause contribution: a bare effect list
+ * (every effect rule), or ONE trigger whose aim the rule declared itself (the
+ * linked-exile rule behind Skyclave Apparition builds its trigger whole, so the
+ * effect-level pass never saw it and every bounded O-Ring noun reported).
+ * Anything else — two triggers, a trigger whose aim is absent or already
+ * bounded, a contribution mixing both — refuses, exactly as the effect form
+ * does when it has no single restriction to narrow.
+ */
+export function applyTargetBoundToContribution(
+  contribution: ClauseContribution,
+  bound: TargetBound,
+): ClauseContribution | null {
+  const effects = contribution.effects ?? [];
+  const triggers = contribution.triggers ?? [];
+  if (effects.length > 0 && triggers.length === 0) {
+    const narrowed = applyTargetBound(effects, bound);
+    return narrowed === null ? null : { ...contribution, effects: narrowed };
+  }
+  if (effects.length === 0 && triggers.length === 1) {
+    const trigger = triggers[0] as TriggeredAbility;
+    if (trigger.targets === undefined || !isTargetRestriction(trigger.targets)) return null;
+    const narrowed = applyTargetBound(trigger.effects, bound);
+    if (narrowed === null) return null;
+    return {
+      ...contribution,
+      triggers: [{ ...trigger, targets: { base: trigger.targets, bound }, effects: narrowed }],
+    };
+  }
+  return null;
+}
+
 export function applyTargetBound(effects: readonly EffectRef[], bound: TargetBound): EffectRef[] | null {
   const declared = new Set<string>();
   for (const ref of effects) {

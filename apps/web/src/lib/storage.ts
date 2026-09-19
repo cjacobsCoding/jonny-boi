@@ -16,7 +16,7 @@
  * `corrupt`, because the caller's next move would otherwise be to overwrite it
  * with a fresh empty list and destroy any chance of getting it back.
  */
-import type { Deck, DeckEntry, UnresolvedCard } from './deck.js';
+import type { AppliedRevision, Deck, DeckEntry, UnresolvedCard } from './deck.js';
 import { getCard } from './cards.js';
 import { isEntryPrinting } from './printings/entryPrinting.js';
 import { DECKS_STORAGE_KEY, ACTIVE_DECK_STORAGE_KEY } from './config.js';
@@ -162,7 +162,33 @@ function normalizeDeck(value: Partial<Deck>): Deck {
   // looking like something he built badly.
   const unresolved = normalizeUnresolved(value.unresolved);
   if (unresolved.length > 0) deck.unresolved = unresolved;
+  // And the same trap a third time: a revision note dropped here would tell him
+  // about the cards once and never again after a refresh.
+  const revisions = normalizeRevisions(value.revisions);
+  if (revisions.length > 0) deck.revisions = revisions;
   return deck;
+}
+
+/**
+ * Rebuild the applied-revision notes, row by row, keeping only well-formed
+ * ones — a corrupt note costs one message, never the deck or its cards.
+ */
+function normalizeRevisions(raw: unknown): AppliedRevision[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AppliedRevision[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.id !== 'string' || !row.id.trim()) continue;
+    if (typeof row.note !== 'string') continue;
+    out.push({
+      id: row.id,
+      appliedAt: typeof row.appliedAt === 'string' ? row.appliedAt : new Date().toISOString(),
+      note: row.note,
+      added: normalizeUnresolved(row.added),
+    });
+  }
+  return out;
 }
 
 /**

@@ -354,3 +354,52 @@ describe('§3.150 — every bound family fires on text a REAL card prints', () =
     expect(stripTargetBound(clause.toLowerCase()), `${hits[0]!.name}: ${clause}`).not.toBeNull();
   });
 });
+
+describe('§3.162 — the bound pre-pass widened for Skyclave Apparition, as the class', () => {
+  it('reads the printed adjective "nontoken", alone and after a sibling with Oracle’s comma', () => {
+    expect(stripTargetBound('exile target nontoken creature')).toEqual({
+      clause: 'exile target creature',
+      bound: { nontoken: true },
+    });
+    expect(stripTargetBound("exile up to one target nonland, nontoken permanent you don't control")).toEqual({
+      clause: "exile up to one target nonland permanent you don't control",
+      bound: { nontoken: true },
+    });
+  });
+
+  it('ANDs several bounds on ONE selector, and the noun may carry an apostrophe', () => {
+    expect(
+      stripTargetBound("exile up to one target nonland, nontoken permanent you don't control with mana value 4 or less"),
+    ).toEqual({
+      clause: "exile up to one target nonland permanent you don't control",
+      bound: { nontoken: true, atMost: { property: 'manaValue', value: 4 } },
+    });
+    // The colour form composes too ("target red creature with flying").
+    expect(stripTargetBound('destroy target red creature with flying')).toEqual({
+      clause: 'destroy target creature',
+      bound: { colour: 'R', withKeyword: 'flying' },
+    });
+  });
+
+  it('still refuses two bounds when the clause has two "target" words — no single selector to narrow', () => {
+    expect(stripTargetBound('target nontoken creature fights target creature with flying')).toBeNull();
+  });
+
+  it('narrows a WHOLE-TRIGGER rule’s aim, not only a bare effect list', () => {
+    const skyclave = compiled(
+      'Skyclave Apparition',
+      "When Skyclave Apparition enters, exile up to one target nonland, nontoken permanent you don't control with mana value 4 or less.\n" +
+        "When Skyclave Apparition leaves the battlefield, the exiled card's owner creates an X/X blue Illusion creature token, where X is the mana value of the exiled card.",
+      { typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Kor', 'Spirit'] }, power: 2, toughness: 2 },
+    );
+    expect(skyclave.status, JSON.stringify(skyclave.missing)).toBe('complete');
+    const enters = skyclave.definition.triggers?.[0];
+    const aim = enters?.targets;
+    expect(aim && baseRestrictionOf(aim)).toBe('nonlandPermanentAnOpponentControls');
+    expect(aim && boundOf(aim)).toEqual({ nontoken: true, atMost: { property: 'manaValue', value: 4 } });
+    // The effect inside the trigger carries the SAME bounded spec — the
+    // resolution-time re-check reads it from there.
+    expect(restrictionOfEffects(enters?.effects ?? [])).toEqual(aim);
+    expect(enters?.targetCount, '"up to one"').toEqual({ min: 0, max: 1 });
+  });
+});

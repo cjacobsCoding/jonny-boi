@@ -25,6 +25,7 @@
  * the battlefield differs only by a param.
  */
 import {
+  convertedManaCost,
   isCreature,
   PLAYER_IDS,
   type CardInstance,
@@ -43,6 +44,7 @@ import {
   restrictionParam,
   strParam,
 } from './effect-helpers.js';
+import { tokenDefFromParams } from './primitives.js';
 
 /** Where a returning card goes. Battlefield is the default (O-Ring, Fiend Hunter). */
 type ReturnTo = 'battlefield' | 'hand';
@@ -147,6 +149,38 @@ export const returnExiledByThis: EffectPrimitive = (ctx) => {
   }
 };
 
+/**
+ * `tokenForExiledByThis` — "When ~ leaves the battlefield, **the exiled card's
+ * owner creates an X/X blue Illusion creature token, where X is the mana value
+ * of the exiled card**" (Skyclave Apparition; Severance Priest prints a white
+ * Spirit).
+ *
+ * The third thing a linked exile can do when its exiler leaves, beside the two
+ * returns above, and it reads the SAME link: whatever this source exiled, in
+ * whichever exile holds it. The card stays exiled — that is the printed card,
+ * and why the link is cleared rather than the card moved. The token's colour,
+ * name and subtype are DATA from params through the one token-descriptor
+ * reader every printed token uses; only its P/T is computed here, from the
+ * exiled card's mana value (CR 202.3 — an {X} in the cost counts 0), and it is
+ * created under the exiled card's OWNER, as printed, never this source's
+ * controller.
+ */
+export const tokenForExiledByThis: EffectPrimitive = (ctx) => {
+  const source = ctx.source.instanceId;
+  for (const owner of PLAYER_IDS) {
+    const mine = ctx.state.players[owner].exile.filter((c) => c.exiledUntilLeavesBy === source);
+    for (const card of mine) {
+      delete card.exiledUntilLeavesBy;
+      const manaValue = card.def.cost ? convertedManaCost(card.def.cost) : 0;
+      const def = tokenDefFromParams({
+        ...ctx,
+        params: { ...ctx.params, power: manaValue, toughness: manaValue },
+      });
+      ctx.createTokens(def, 1, owner);
+    }
+  }
+};
+
 /** True when this definition is a creature — read by the pilot's valuation. */
 export { isCreature };
 
@@ -154,4 +188,5 @@ export { isCreature };
 export const EXILE_UNTIL_LEAVES_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   exileUntilLeaves,
   returnExiledByThis,
+  tokenForExiledByThis,
 });
