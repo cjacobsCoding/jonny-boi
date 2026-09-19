@@ -102,6 +102,10 @@
   padding: var(--space-1) 0;
   overflow-y: auto;
   flex: 1 1 auto;
+  /* A flex child defaults to min-height: auto and will not shrink below its
+     content, so the popover's max-height would never engage and the list would
+     push the footer off the bottom. */
+  min-height: 0;
 }
 
 .card-picker__option {
