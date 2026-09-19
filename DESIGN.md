@@ -10669,6 +10669,71 @@ waiting to happen: two comboboxes and no native card `<select>`; a 1-of leaves o
 a finished verdict renders a LIVE apply button (no `disabled` attribute — matched as an attribute,
 since a false `aria-disabled` would still contain the word, which is how the first draft of this
 test failed against a button that was live).
+### 3.169 "As long as …" — when a static ability is on, as one pre-pass and one closed table — ✅ done
+
+> "start adding all the rest of the missing mechanics"
+
+**Measured first, three times, because the first two measurements were wrong in instructive ways.**
+On the 32,341-card corpus, 596 one-clause cards print a static gated by *"as long as <condition>"*,
+across 327 condition shapes — threshold (49), delirium (18), metalcraft and "you control an
+artifact" (26), "~ is equipped" (14), "it's attacking" (9), "~ is enchanted" (5), fateful hour
+(3) at the head, then a very long tail. A second probe that compiled each card with the condition
+REMOVED reported almost none of them unblocked — and that was the finding: *"~ gets +7/+7"* is not a
+printed shape on its own. A creature never prints an unconditional pump on itself; the self-static
+body exists only under its condition, so the compiler had no rule for the body either, and
+"condition alone" was the wrong unit to measure. The unit is the LINE.
+
+**One pre-pass, so every static body gains the whole vocabulary in one edit.** `applyRules`, for
+the STATIC rules only and tried last (a line that already compiles is untouched, exactly as the
+where-X and target-bound pre-passes are): `stripStaticCondition` takes the printed condition off
+the line in either printed order — the tail (*"~ gets +7/+7 as long as seven or more cards are in
+your graveyard"*) or the prefix (*"As long as ~ is equipped, it gets +1/+1 and has flying"*, where
+the remainder's "it" is the source) — the ordinary static rules compile what is left, and
+`applyStaticCondition` attaches the condition to every static that came back. A body that compiles
+to anything OTHER than statics is refused: an Aura's *"Enchanted creature gets +2/+2 as long as
+it's untapped"* is about the HOST, and an attachment modification carrying a source condition
+would be a wrong card. The missing body rule is `static-self-modification` — *"~ gets +N/+N"*, *"~
+has KEYWORD(S)"*, *"~ gets +N/+N and has KEYWORD(S)"* — unleash's and the counter-threshold rule's
+`onlySource` shape.
+
+**One closed table (`core/static-conditions.ts`).** `StaticAbility.activeWhile?: StaticCondition`,
+re-read every time the continuous index is built, so a static switches on the moment the seventh
+card lands with nothing stored. The members, each from the words that print it:
+`countAtLeast { count, min, excludeSource? }` — the count is the SAME two shapes the derived-value
+and mana-amount vocabularies use (a named core count, or a permanent filter with a scope), so
+"artifacts you control" means one set to a pump, a mana ability and a condition; delirium needed
+one new named count, `cardTypesInYourGraveyard` (Tarmogoyf's row reads ALL graveyards); "another
+Elf" is `excludeSource`, the source removed from its own count. `sourceAttached { by: Equipment |
+Aura }`, `sourceTapped`, `sourceAttacking` (a declared attacker this combat), `lifeAtMost`. The
+compiler's `STATIC_CONDITION_SHAPES` is the same table from the printed side — "there are N or
+more … in your graveyard" / "N or more … are in your graveyard" / "you control N or more …" / "you
+control a|an|another …" looked up in the ONE count vocabulary, so a noun outside it (*a Gate*)
+leaves the whole line reporting.
+
+**Why the single continuous pass stays exact.** The fold is exact only because nothing a static
+WRITES is something a static READS. Every condition keeps that: a graveyard's size or the printed
+types of its cards (zone state); a count over PRINTED characteristics (no static in this model
+changes a type or a colour); the source's own tapped/attacking/attached state; a life total. Never
+effective power or a granted keyword. One liveness predicate — `staticIsLive` — now gates all three
+static walks (the bulk index, the per-permanent aggregate, the emblem fold), because they answer
+the same abilities by index and a gate present in one and absent in another is an ability offered
+and then resolved to `undefined`; the test asserts the two paths agree for every case.
+
+**Verification.** `core/static-conditions.test.ts`: Krosan Beast a 1/1 at six cards and an 8/8 at
+seven; delirium counts DISTINCT types in YOUR graveyard (four creature cards are one type; the
+opponent's graveyard is not yours); Skyhunter Cub flies only while an Equipment — not an Aura — is
+attached; Kor Scythemaster's +1/+0 only as a declared attacker; the Archangel's shroud reaches
+artifacts only at three; "another Elf" never counts the source; fateful hour on at 5 life, off at
+6, never on the Ironwright itself; every case read by both aggregate paths.
+`cards/compile/static-conditions.test.ts`: the real printed texts of Krosan Beast, Grim Flayer, Kor
+Scythemaster, Indomitable Archangel (a GROUP static), Skyhunter Cub and Gavony Ironwright (the
+prefix form) compile whole to the members; Static Orb's body, the Aura's host condition and four
+conditions outside the table leave the whole line reporting. Pool at regeneration: **7,136 →
+7,259** (+123 on the lane's base — the largest single-section gain since the pool refresh, and the
+smaller number is still the one reported: the 596-card family is 327 shapes and the table reads its
+head); index 7,291/7,291, `--check` clean. Three ability words rode in with the cards and the glossary
+(a closed table the index builder enforces) gained *Threshold*, *Delirium* and *Fateful hour*.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

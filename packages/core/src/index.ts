@@ -170,6 +170,14 @@ export {
 // and characteristic-defining P/T, plus its closed count vocabulary.
 export type { CharacteristicFormula, CharacteristicPT, DerivedCountName } from './card.js';
 export { evaluateDerivedCount, characteristicValue, countPermanentsMatching } from './derived.js';
+export {
+  STATIC_COUNT_PERMANENTS_MATCHING,
+  staticConditionHolds,
+  staticCountValue,
+  type AttachedBy,
+  type StaticCondition,
+  type StaticCountSource,
+} from './static-conditions.js';
 export type { DerivedCountScope, PermanentStateFilter } from './derived.js';
 
 // Turn-scoped fact memory (revolt / morbid / lifegain) — a NAMED closed

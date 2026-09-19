@@ -1531,6 +1531,8 @@ export type DerivedCountName =
   | 'creaturesYouControlWithDefender'
   /** Distinct card types among cards in ALL graveyards (Tarmogoyf). */
   | 'cardTypesInAllGraveyards'
+  /** §3.169 — distinct card types among cards in YOUR graveyard (delirium: Grim Flayer, Thraben Foulbloods). */
+  | 'cardTypesInYourGraveyard'
   /**
    * §3.163 — "your devotion to white" (CR 700.5): the white mana symbols among
    * the mana costs of permanents you control, hybrid faces included. Five rows,

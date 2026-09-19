@@ -60,25 +60,34 @@ const CARD_TYPE_BIT: Readonly<Record<CardType, number>> = Object.freeze({
   kindred: 1 << 8,
 });
 
-/** Count distinct card types among cards in BOTH graveyards (Tarmogoyf). */
-function cardTypesInAllGraveyards(state: GameState): number {
+/** The card-type bits present among the cards of one graveyard. */
+function graveyardTypeMask(state: GameState, player: PlayerId): number {
   let mask = 0;
-  for (const pid of PLAYER_IDS) {
-    const graveyard = state.players[pid].graveyard;
-    for (let i = 0; i < graveyard.length; i++) {
-      const types = graveyard[i]!.def.types;
-      for (let t = 0; t < types.length; t++) {
-        mask |= CARD_TYPE_BIT[types[t]!] ?? 0;
-      }
+  const graveyard = state.players[player].graveyard;
+  for (let i = 0; i < graveyard.length; i++) {
+    const types = graveyard[i]!.def.types;
+    for (let t = 0; t < types.length; t++) {
+      mask |= CARD_TYPE_BIT[types[t]!] ?? 0;
     }
   }
-  // Popcount over a small mask — a simple loop beats allocating anything.
+  return mask;
+}
+
+/** Popcount over a small mask — a simple loop beats allocating anything. */
+function bitCount(mask: number): number {
   let count = 0;
   while (mask !== 0) {
     count += mask & 1;
     mask >>>= 1;
   }
   return count;
+}
+
+/** Count distinct card types among cards in BOTH graveyards (Tarmogoyf). */
+function cardTypesInAllGraveyards(state: GameState): number {
+  let mask = 0;
+  for (const pid of PLAYER_IDS) mask |= graveyardTypeMask(state, pid);
+  return bitCount(mask);
 }
 
 /** Count creature CARDS in one player's graveyard (Boneyard Wurm). */
@@ -156,6 +165,9 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
       return creaturesInGraveyard(state, you);
     case 'cardTypesInAllGraveyards':
       return cardTypesInAllGraveyards(state);
+    // §3.169 — delirium's count: the same bits, one graveyard.
+    case 'cardTypesInYourGraveyard':
+      return bitCount(graveyardTypeMask(state, you));
     // §3.163 — CR 700.5, through the same function the gods' type layer reads.
     case 'devotionToWhite':
       return devotionTo(state, you, ['W']);

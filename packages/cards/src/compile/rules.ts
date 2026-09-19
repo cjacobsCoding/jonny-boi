@@ -64,7 +64,12 @@ import {
   isTargetRestriction,
 } from '@jonny-boi/core';
 import { MANA_AMOUNT_COUNTS, MANA_AMOUNT_PERMANENTS_MATCHING } from '@jonny-boi/core';
-import type { ManaAmountCount, ManaAmountSource } from '@jonny-boi/core';
+import type {
+  ManaAmountCount,
+  ManaAmountSource,
+  StaticCondition,
+  StaticCountSource,
+} from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
   ABILITY_WORD_LIST,
@@ -209,27 +214,32 @@ const NON_ANGEL_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonAngelCreatu
 const TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction = 'triggeredAbilityYouControl';
 const ACTIVATED_OR_TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction =
   'activatedOrTriggeredAbilityYouControl';
-const INSTANT_OR_SORCERY_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'instantOrSorcerySpellYouControl';
+const INSTANT_OR_SORCERY_SPELL_YOU_CONTROL_TARGET: TargetRestriction =
+  'instantOrSorcerySpellYouControl';
 const PERMANENT_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'permanentSpellYouControl';
 const NONLAND_PERMANENT_YOU_CONTROL_TARGET: TargetRestriction = 'nonlandPermanentYouControl';
 /** "target nonland permanent an opponent controls / you don't control" — Skyclave Apparition. */
-const NONLAND_PERMANENT_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'nonlandPermanentAnOpponentControls';
+const NONLAND_PERMANENT_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction =
+  'nonlandPermanentAnOpponentControls';
 /** "target creature or enchantment you control" — Heliod, Sun-Crowned's lifegain trigger. */
-const CREATURE_OR_ENCHANTMENT_YOU_CONTROL_TARGET: TargetRestriction = 'creatureOrEnchantmentYouControl';
+const CREATURE_OR_ENCHANTMENT_YOU_CONTROL_TARGET: TargetRestriction =
+  'creatureOrEnchantmentYouControl';
 const TOKEN_YOU_CONTROL_TARGET: TargetRestriction = 'tokenYouControl';
 /** "target creature an opponent controls" — Banisher Priest. */
 const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
 /** "target artifact, enchantment, or land" — the naturalize family. */
 const ARTIFACT_ENCHANTMENT_OR_LAND_TARGET: TargetRestriction = 'artifactEnchantmentOrLand';
 /** "creatures from the battlefield and/or creature cards from graveyards" — Angel of Serenity. */
-const CREATURE_BATTLEFIELD_OR_GRAVEYARD_TARGET: TargetRestriction = 'creatureOnBattlefieldOrInGraveyard';
+const CREATURE_BATTLEFIELD_OR_GRAVEYARD_TARGET: TargetRestriction =
+  'creatureOnBattlefieldOrInGraveyard';
 /**
  * "target NONLEGENDARY creature you control" (Kiki-Jiki) — never widened to
  * {@link CREATURE_YOU_CONTROL_TARGET}. The printed word is what stops the card
  * copying itself, and dropping it turns a fair rare into an infinite combo with
  * every legend on the table.
  */
-const NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonlegendaryCreatureYouControl';
+const NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET: TargetRestriction =
+  'nonlegendaryCreatureYouControl';
 /**
  * "target artifact or creature you control" (Molten Duplication) — neither
  * {@link CREATURE_YOU_CONTROL_TARGET} widened nor `'permanent'` narrowed, both
@@ -256,7 +266,6 @@ const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveya
 const CREATURE_CARD_IN_YOUR_GRAVEYARD_TARGET: TargetRestriction = 'creatureCardInYourGraveyard';
 /** §3.149 — "target card from **a** graveyard": either player's, any card type. */
 const CARD_IN_ANY_GRAVEYARD_TARGET: TargetRestriction = 'cardInAnyGraveyard';
-
 
 /**
  * The controller scope + {@link CardFilter} a printed "each …" group phrase names,
@@ -357,7 +366,6 @@ const MODAL_HEADER_PHRASE = Object.keys(MODAL_HEADER_COUNTS)
 const REPEATED_MODES_PHRASE = 'you may choose the same mode more than once';
 const OPPONENT_TARGET: TargetRestriction = 'opponent';
 
-
 /**
  * Printed "the number of …" phrases → the {@link DerivedCount} that evaluates
  * them. A closed table on purpose: a phrase not listed here is NOT compiled,
@@ -382,6 +390,8 @@ const NAMED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = O
   // a spell that deals damage "equal to the number of creature cards in your
   // graveyard" counts the identical set, and one table is what guarantees it.
   'card types among cards in all graveyards': 'cardTypesInAllGraveyards',
+  // §3.169 — delirium reads YOUR graveyard; Tarmogoyf's row above reads both.
+  'card types among cards in your graveyard': 'cardTypesInYourGraveyard',
   'creature cards in your graveyard': 'creaturesInYourGraveyard',
   // The wall-tribal count both halves of that archetype print (Axebane
   // Guardian, Doorkeeper). In the SHARED table for the usual reason: the day a
@@ -702,12 +712,20 @@ function scopedCounts(
   /** The SINGULAR noun, for the "for each …" spellings (§3.164). */
   singular?: string,
 ): Record<string, DerivedCountDescriptor> {
-  const row = (scope: DerivedCountScope) => ({ countOf: PERMANENTS_MATCHING, filter, scope }) as const;
-  const scopes = ['you control', 'an opponent controls', 'your opponents control', 'they control', 'on the battlefield'];
+  const row = (scope: DerivedCountScope) =>
+    ({ countOf: PERMANENTS_MATCHING, filter, scope }) as const;
+  const scopes = [
+    'you control',
+    'an opponent controls',
+    'your opponents control',
+    'they control',
+    'on the battlefield',
+  ];
   if (singular !== undefined) {
     // The singular spellings point at the PLURAL rows — one definition of the
     // count, exactly as `DERIVED_EACH_TO_PLURAL` does for the named rows.
-    for (const scope of scopes) FILTERED_EACH_TO_PLURAL[`${singular} ${scope}`] = `${plural} ${scope}`;
+    for (const scope of scopes)
+      FILTERED_EACH_TO_PLURAL[`${singular} ${scope}`] = `${plural} ${scope}`;
   }
   return {
     [`${plural} you control`]: row('you'),
@@ -875,7 +893,19 @@ const AFTERLIFE_TOKEN_FACE = '1/1 white and black spirit creature';
 
 /** A printed count as Oracle prints it inside a token line — "a", "two", "three" — for a generated body. */
 function countWord(count: number): string {
-  const words = ['zero', 'a', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+  const words = [
+    'zero',
+    'a',
+    'two',
+    'three',
+    'four',
+    'five',
+    'six',
+    'seven',
+    'eight',
+    'nine',
+    'ten',
+  ];
   return words[count] ?? String(count);
 }
 
@@ -1225,9 +1255,7 @@ const SEARCHABLE_SUBTYPES: ReadonlySet<string> = new Set([
  * {@link SEARCHABLE_SUBTYPES} as a regex alternation, longest first so a pattern
  * cannot match a prefix of a longer type and leave the rest of the word behind.
  */
-const SUBTYPE_ALTERNATION = [...SEARCHABLE_SUBTYPES]
-  .sort((a, b) => b.length - a.length)
-  .join('|');
+const SUBTYPE_ALTERNATION = [...SEARCHABLE_SUBTYPES].sort((a, b) => b.length - a.length).join('|');
 
 /**
  * The numeric restriction a search may print — "with mana value 1 or less",
@@ -1238,12 +1266,13 @@ const SUBTYPE_ALTERNATION = [...SEARCHABLE_SUBTYPES]
  * characteristic outside this table is not expressible and rejects the rule
  * rather than being dropped — a dropped restriction is a strictly better tutor.
  */
-const SEARCH_BOUND_FIELDS: Readonly<Record<string, { readonly min: string; readonly max: string }>> =
-  Object.freeze({
-    'mana value': Object.freeze({ min: 'minManaValue', max: 'maxManaValue' }),
-    power: Object.freeze({ min: 'minPower', max: 'maxPower' }),
-    toughness: Object.freeze({ min: 'minToughness', max: 'maxToughness' }),
-  });
+const SEARCH_BOUND_FIELDS: Readonly<
+  Record<string, { readonly min: string; readonly max: string }>
+> = Object.freeze({
+  'mana value': Object.freeze({ min: 'minManaValue', max: 'maxManaValue' }),
+  power: Object.freeze({ min: 'minPower', max: 'maxPower' }),
+  toughness: Object.freeze({ min: 'minToughness', max: 'maxToughness' }),
+});
 
 /** The alternation of the characteristics above, for the search patterns. */
 const SEARCH_BOUND_PHRASE = `(${Object.keys(SEARCH_BOUND_FIELDS).join('|')})`;
@@ -1279,7 +1308,10 @@ function searchFilterFrom(
   // `anyOfTypes` with `anyOfSubtypes`, so a mixed union ("an artifact or Goblin
   // card") would compile into a search for something that is BOTH — a tutor that
   // can never find. Mixed unions therefore report.
-  const nouns = noun.split(' or ').map((word) => word.trim()).filter((word) => word.length > 0);
+  const nouns = noun
+    .split(' or ')
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
   if (nouns.length === 0) return null;
   const types: CardType[] = [];
   const subtypes: string[] = [];
@@ -1355,13 +1387,17 @@ const SEARCH_COLOR_PHRASE = `(?:(${Object.keys(COLOR_WORDS).join('|')}) )?`;
  * restriction the filter cannot express, so the rule declines rather than
  * discarding the wrong kind of card.
  */
-const DISCARD_RESTRICTIONS: Readonly<Record<string, { readonly noneOfTypes?: readonly string[]; readonly anyOfTypes?: readonly string[] }>> =
-  Object.freeze({
-    nonland: { noneOfTypes: Object.freeze(['land']) },
-    noncreature: { noneOfTypes: Object.freeze(['creature']) },
-    creature: { anyOfTypes: Object.freeze(['creature']) },
-    land: { anyOfTypes: Object.freeze(['land']) },
-  });
+const DISCARD_RESTRICTIONS: Readonly<
+  Record<
+    string,
+    { readonly noneOfTypes?: readonly string[]; readonly anyOfTypes?: readonly string[] }
+  >
+> = Object.freeze({
+  nonland: { noneOfTypes: Object.freeze(['land']) },
+  noncreature: { noneOfTypes: Object.freeze(['creature']) },
+  creature: { anyOfTypes: Object.freeze(['creature']) },
+  land: { anyOfTypes: Object.freeze(['land']) },
+});
 
 /**
  * The permanent kinds a printed MANDATORY additional cost may sacrifice, mapped
@@ -1594,7 +1630,13 @@ const PROTECTION_QUALITY_WORDS: Readonly<Record<string, ProtectionQuality>> = Ob
  * then have to define.
  */
 const PROTECTION_EACH_COLOR = 'each color';
-const EVERY_COLOR_QUALITY: readonly ProtectionQuality[] = Object.freeze(['white', 'blue', 'black', 'red', 'green']);
+const EVERY_COLOR_QUALITY: readonly ProtectionQuality[] = Object.freeze([
+  'white',
+  'blue',
+  'black',
+  'red',
+  'green',
+]);
 
 /**
  * The SUBTYPES a printed protection line may name, lower-cased as Oracle's
@@ -1817,7 +1859,8 @@ function spellFiltersFor(restriction: string): readonly TriggerCondition[] | nul
     const excluded = SPELL_TYPE_WORDS[negated[1] ?? ''];
     return excluded ? [{ on: 'castSpell', who: 'you', spellTypeNoneOf: [excluded] }] : null;
   }
-  const positive = text === 'instant or sorcery' ? (['instant', 'sorcery'] as const) : positiveSpellTypes(text);
+  const positive =
+    text === 'instant or sorcery' ? (['instant', 'sorcery'] as const) : positiveSpellTypes(text);
   return positive === null
     ? null
     : positive.map((spellType) => ({ on: 'castSpell', who: 'you', spellType }));
@@ -1860,7 +1903,6 @@ function manaSymbols(text: string): readonly ManaColor[] | null {
   return colors;
 }
 
-
 /**
  * REPLACEMENT AND PREVENTION EFFECTS (core's CR 614/615 layer) — the printed
  * vocabulary, as data tables, shared by the four rules that read it.
@@ -1896,7 +1938,10 @@ const REPLACEMENT_SOURCE_TYPES: Readonly<Record<string, CardType | null>> = Obje
  * ("…would deal damage to an opponent" — Solphim's clause is about players).
  */
 const REPLACEMENT_RECIPIENTS: Readonly<
-  Record<string, { readonly controller: StaticControllerScope; readonly kind?: 'player' | 'permanent' }>
+  Record<
+    string,
+    { readonly controller: StaticControllerScope; readonly kind?: 'player' | 'permanent' }
+  >
 > = Object.freeze({
   'a permanent or player': { controller: 'any' },
   'an opponent or a permanent an opponent controls': { controller: 'opponent' },
@@ -1926,7 +1971,6 @@ const REPLACEMENT_MULTIPLIERS: Readonly<Record<string, number>> = Object.freeze(
   twice: 2,
   'three times': 3,
 });
-
 
 /**
  * The printed NOUN PHRASE a counter replacement watches, mapped to the filter
@@ -1966,7 +2010,10 @@ const REPLACEMENT_MULTIPLIER_TOKEN = `(${Object.keys(REPLACEMENT_MULTIPLIERS)
  * Every row is a real printed card, named. Adding a subject is a ROW.
  */
 const PREVENTION_STATIC_SUBJECTS: Readonly<
-  Record<string, { readonly recipient: ReplacementApplies; readonly dealer: ReplacementApplies | null }>
+  Record<
+    string,
+    { readonly recipient: ReplacementApplies; readonly dealer: ReplacementApplies | null }
+  >
 > = Object.freeze({
   // "~" — the ability's own permanent. Fog Bank, Cho-Manno Revolutionary, Dawn
   // Elemental, Guard Gomazoa, Seraph of the Sword, Everdawn Champion.
@@ -1974,10 +2021,16 @@ const PREVENTION_STATIC_SUBJECTS: Readonly<
   // The permanent an Aura or Equipment is attached to. Gaseous Form, Sandskin,
   // Ghostly Possession, Heart of Light, Inviolability (to); Muzzle, Defang,
   // Temporal Isolation, Candletrap, Demonic Torment (by).
-  'enchanted creature': { recipient: { recipientAnchor: 'attached' }, dealer: { dealerAnchor: 'attached' } },
+  'enchanted creature': {
+    recipient: { recipientAnchor: 'attached' },
+    dealer: { dealerAnchor: 'attached' },
+  },
   // General's Kabuto. Same anchor, different printed word — `attachedTo` does
   // not care which kind of attachment it is, and neither does the card.
-  'equipped creature': { recipient: { recipientAnchor: 'attached' }, dealer: { dealerAnchor: 'attached' } },
+  'equipped creature': {
+    recipient: { recipientAnchor: 'attached' },
+    dealer: { dealerAnchor: 'attached' },
+  },
   // Crystal Barricade and kin. A PLAYER is never a damage source, so there is
   // no dealer projection to write.
   you: { recipient: { recipientController: 'you', recipientKind: 'player' }, dealer: null },
@@ -2022,7 +2075,10 @@ const PREVENTION_STATIC_SUBJECTS: Readonly<
   },
   // Bubble Matrix — symmetric, both players' creatures.
   creatures: {
-    recipient: { recipientKind: 'permanent', recipientFilter: { anyOfTypes: ['creature' as CardType] } },
+    recipient: {
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+    },
     dealer: null,
   },
 });
@@ -2158,11 +2214,12 @@ const CHOSEN_X_PARAM = Object.freeze({ chosenX: true });
 // {@link resolveItsReferent}.
 
 /** Printed possessive → the object {@link ObjectCharacteristicValue} reads. */
-const OBJECT_CHARACTERISTIC_SUBJECTS: Readonly<Record<string, 'triggering' | 'source'>> = Object.freeze({
-  "that creature's": 'triggering',
-  "that permanent's": 'triggering',
-  "~'s": 'source',
-});
+const OBJECT_CHARACTERISTIC_SUBJECTS: Readonly<Record<string, 'triggering' | 'source'>> =
+  Object.freeze({
+    "that creature's": 'triggering',
+    "that permanent's": 'triggering',
+    "~'s": 'source',
+  });
 
 /** Printed characteristic word → the characteristic read. */
 const OBJECT_CHARACTERISTIC_WORDS: Readonly<Record<string, 'power' | 'toughness' | 'manaValue'>> =
@@ -2215,7 +2272,8 @@ function objectCharacteristic(
  * "target", "that creature" or "equipped creature" has a SECOND candidate, so
  * nothing is rewritten and the card reports instead of playing a coin-flip.
  */
-const SECOND_OBJECT_WORDS = /\btarget\b|\bthat (?:creature|permanent|card|spell|player)\b|\bequipped\b|\benchanted\b/;
+const SECOND_OBJECT_WORDS =
+  /\btarget\b|\bthat (?:creature|permanent|card|spell|player)\b|\bequipped\b|\benchanted\b/;
 export function resolveItsReferent(body: string, referent: "that creature's" | "~'s"): string {
   if (!/\bits (?:power|toughness|mana value)\b/.test(body)) return body;
   if (SECOND_OBJECT_WORDS.test(body)) return body;
@@ -2234,7 +2292,11 @@ export function resolveItsReferent(body: string, referent: "that creature's" | "
 function readsTriggeringObject(refs: readonly EffectRef[]): boolean {
   for (const ref of refs) {
     for (const value of Object.values(ref.params ?? {})) {
-      if (typeof value === 'object' && value !== null && (value as { readOf?: unknown }).readOf === 'triggering') {
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        (value as { readOf?: unknown }).readOf === 'triggering'
+      ) {
         return true;
       }
     }
@@ -2298,7 +2360,10 @@ function xParamValue(ctx: RuleContext): Record<string, unknown> | null {
  * `null` for an X nothing bound, exactly as {@link parseCount} is null for a
  * word it does not know: the clause reports rather than dealing zero.
  */
-function parseAmount(token: string | undefined, ctx: RuleContext): number | Record<string, unknown> | null {
+function parseAmount(
+  token: string | undefined,
+  ctx: RuleContext,
+): number | Record<string, unknown> | null {
   if ((token ?? '').trim().toLowerCase() === 'x') return xParamValue(ctx);
   return parseCount(token);
 }
@@ -2357,7 +2422,12 @@ const WHERE_X_ARITHMETIC: readonly {
   readonly offset: (n: number) => Record<string, unknown>;
 }[] = Object.freeze([
   // "3 plus the number of artifacts you control" (Welding Sparks)
-  { pattern: /^(\d+) plus the number of (.+)$/, countGroup: 2, constantGroup: 1, offset: (n) => ({ plus: n }) },
+  {
+    pattern: /^(\d+) plus the number of (.+)$/,
+    countGroup: 2,
+    constantGroup: 1,
+    offset: (n) => ({ plus: n }),
+  },
   // "3 minus the number of cards in their hand" (Rackling, Wheel of Torture)
   {
     pattern: /^(\d+) minus the number of (.+)$/,
@@ -2680,12 +2750,14 @@ const UNTAP_TARGET_NOUN_PHRASE = Object.keys(UNTAP_TARGET_NOUNS)
  * table because the objects live in different zones and no printed line mixes
  * them; same closed-table discipline.
  */
-export const COUNTER_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
-  spell: 'spell',
-  'noncreature spell': 'noncreatureSpell',
-  'instant spell': 'instantSpell',
-  'instant or sorcery spell': 'instantOrSorcerySpell',
-});
+export const COUNTER_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze(
+  {
+    spell: 'spell',
+    'noncreature spell': 'noncreatureSpell',
+    'instant spell': 'instantSpell',
+    'instant or sorcery spell': 'instantOrSorcerySpell',
+  },
+);
 
 const COUNTER_NOUN_PHRASE = Object.keys(COUNTER_NOUN_RESTRICTIONS)
   .sort((a, b) => b.length - a.length)
@@ -2763,7 +2835,10 @@ export const COST_NOUN_PHRASE = Object.keys(COST_NOUNS)
  * mean two different quantities.
  */
 const TRIGGERING_AMOUNT_BODIES: Readonly<
-  Record<string, { primitive: string; amountKey: string; params: Readonly<Record<string, unknown>> }>
+  Record<
+    string,
+    { primitive: string; amountKey: string; params: Readonly<Record<string, unknown>> }
+  >
 > = Object.freeze({
   'you gain that much life': { primitive: 'gainLife', amountKey: 'amount', params: {} },
   'you lose that much life': { primitive: 'loseLife', amountKey: 'amount', params: {} },
@@ -2811,7 +2886,8 @@ function groupStaticAffects(
   scopeWords: string | undefined,
   ctx: RuleContext,
 ): StaticAffects | null {
-  const scope = scopeWords === undefined ? 'any' : scopeWords.includes('you control') ? 'you' : 'opponent';
+  const scope =
+    scopeWords === undefined ? 'any' : scopeWords.includes('you control') ? 'you' : 'opponent';
   const singular = noun.endsWith('s') ? noun.slice(0, -1) : noun;
   const type = STATIC_NOUN_TYPES[singular];
   if (type !== undefined) {
@@ -2862,10 +2938,16 @@ const MILL_RETURN_NOUN_TOKEN = Object.keys(MILL_RETURN_NOUNS)
  * an as-enters choice the replacement layer cannot read, and reports.
  */
 const DOUBLE_ALL_DAMAGE_SOURCES: Readonly<
-  Record<string, { readonly sourceController: StaticControllerScope; readonly sourceFilter?: CardFilter }>
+  Record<
+    string,
+    { readonly sourceController: StaticControllerScope; readonly sourceFilter?: CardFilter }
+  >
 > = Object.freeze({
   'sources you control': { sourceController: 'you' },
-  'creature sources you control': { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature'] } },
+  'creature sources you control': {
+    sourceController: 'you',
+    sourceFilter: { anyOfTypes: ['creature'] },
+  },
   'creatures you control': { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature'] } },
 });
 
@@ -2914,7 +2996,10 @@ const PREVENTION_TARGET_PHRASE = Object.keys(PREVENTION_TARGET_RECIPIENTS)
  * Ages).
  */
 const PREVENTION_FIXED_RECIPIENTS: Readonly<
-  Record<string, { readonly self?: true; readonly scope?: 'you'; readonly recipientKind?: 'player' }>
+  Record<
+    string,
+    { readonly self?: true; readonly scope?: 'you'; readonly recipientKind?: 'player' }
+  >
 > = Object.freeze({
   '~': { self: true },
   you: { scope: 'you', recipientKind: 'player' },
@@ -2960,11 +3045,42 @@ const PREVENTION_FIXED_PHRASE = Object.keys(PREVENTION_FIXED_RECIPIENTS)
  * being widened into the nearest row that happens to exist.
  */
 const INERT_COUNTER_KINDS: readonly string[] = Object.freeze([
-  'blood', 'bounty', 'brick', 'charge', 'depletion', 'divinity', 'flood',
-  'gold', 'growth', 'hatchling', 'healing', 'hoofprint', 'ice', 'intervention',
-  'ki', 'lodestone', 'luck', 'matrix', 'music', 'net', 'oil', 'page', 'plague',
-  'pressure', 'quest', 'rust', 'scream', 'slime', 'soul', 'spore', 'storage',
-  'study', 'tide', 'training', 'verse', 'wish',
+  'blood',
+  'bounty',
+  'brick',
+  'charge',
+  'depletion',
+  'divinity',
+  'flood',
+  'gold',
+  'growth',
+  'hatchling',
+  'healing',
+  'hoofprint',
+  'ice',
+  'intervention',
+  'ki',
+  'lodestone',
+  'luck',
+  'matrix',
+  'music',
+  'net',
+  'oil',
+  'page',
+  'plague',
+  'pressure',
+  'quest',
+  'rust',
+  'scream',
+  'slime',
+  'soul',
+  'spore',
+  'storage',
+  'study',
+  'tide',
+  'training',
+  'verse',
+  'wish',
 ]);
 
 /** The alternation, built FROM the table so the two cannot drift apart. */
@@ -3010,9 +3126,13 @@ function counterKindOf(word: string): string | null {
  */
 // Groups: [1] the article or count word ("a", "an", "three"), [2] COUNT_TOKEN's
 // own inner capture (undefined for an article), [3] the counter kind.
-const REMOVE_COUNTERS_COST = new RegExp(`^remove (an?|${COUNT_TOKEN}) ${COUNTER_KIND_TOKEN} counters? from ~$`);
+const REMOVE_COUNTERS_COST = new RegExp(
+  `^remove (an?|${COUNT_TOKEN}) ${COUNTER_KIND_TOKEN} counters? from ~$`,
+);
 
-export function parseRemoveCountersCost(part: string): { readonly kind: string; readonly count: number } | null {
+export function parseRemoveCountersCost(
+  part: string,
+): { readonly kind: string; readonly count: number } | null {
   const match = REMOVE_COUNTERS_COST.exec(part.trim());
   if (!match) return null;
   const word = match[1] ?? '';
@@ -3054,7 +3174,8 @@ const RETURN_EXILED_TO_BATTLEFIELD =
   /^return (?:the exiled cards?|that exiled card) to the battlefield under (?:its|their) owners?['\u2019]?s? control$/;
 
 /** Angel of Serenity's destination — the same line, the same two readers. */
-const RETURN_EXILED_TO_HAND = /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/;
+const RETURN_EXILED_TO_HAND =
+  /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/;
 
 /** The leaves-trigger prefix the return line is always printed under. */
 const LEAVES_TRIGGER_PREFIX = /^when ~ leaves the battlefield, (.+)$/;
@@ -3428,7 +3549,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const restriction = damageRestriction(match[1]!);
       const amount = derivedValue(match[2]!);
       if (!restriction || !amount) return null;
-      return effects({ primitive: 'dealDamage', params: damageParams(amount as never, restriction) });
+      return effects({
+        primitive: 'dealDamage',
+        params: damageParams(amount as never, restriction),
+      });
     },
   },
   {
@@ -3453,7 +3577,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // scale factor — so there is no honest way to emit it and the card reports
     // instead. Emitting the bare count would print a card that gains HALF the
     // life it says, which is the class of infidelity nothing would ever notice.
-    pattern: new RegExp(`^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life for each ${DERIVED_EACH_PHRASE}$`),
+    pattern: new RegExp(
+      `^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life for each ${DERIVED_EACH_PHRASE}$`,
+    ),
     build(match) {
       if (parseCount(match[1]) !== 1) return null;
       const amount = derivedEachValue(match[2] ?? '');
@@ -3632,7 +3758,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = xParamValue(ctx);
       const restriction = damageRestriction(match[1] ?? '');
       if (amount === null || restriction === null) return null;
-      return effects({ primitive: 'dealDamage', params: damageParams(amount as never, restriction) });
+      return effects({
+        primitive: 'dealDamage',
+        params: damageParams(amount as never, restriction),
+      });
     },
   },
   {
@@ -3679,7 +3808,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'object-characteristic-gain-lose-life',
     description:
       '"[You] gain/lose life equal to THAT CREATURE\'S / ~\'S power|toughness|mana value" (Trostani, Angelic Chorus, Wolverine Riders)',
-    pattern: new RegExp(`^${OPTIONAL_YOU}(gain|lose) life equal to ${OBJECT_CHARACTERISTIC_PHRASE}$`),
+    pattern: new RegExp(
+      `^${OPTIONAL_YOU}(gain|lose) life equal to ${OBJECT_CHARACTERISTIC_PHRASE}$`,
+    ),
     build(match, ctx) {
       const amount = objectCharacteristic(match[2]!, match[3]!, ctx);
       if (!amount) return null;
@@ -3720,7 +3851,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = objectCharacteristic(match[1] === 'its' ? "~'s" : match[1]!, match[2]!, ctx);
       const restriction = damageRestriction(match[3] ?? '');
       if (!amount || restriction === null) return null;
-      return effects({ primitive: 'dealDamage', params: damageParams(amount as never, restriction) });
+      return effects({
+        primitive: 'dealDamage',
+        params: damageParams(amount as never, restriction),
+      });
     },
   },
   {
@@ -3887,7 +4021,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'gain-life',
-    description: '"[You] gain N life" (Soul Warden prints the subject; Soul\'s Attendant\'s "you may gain 1 life" reaches here without it)',
+    description:
+      '"[You] gain N life" (Soul Warden prints the subject; Soul\'s Attendant\'s "you may gain 1 life" reaches here without it)',
     pattern: new RegExp(`^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
@@ -4102,8 +4237,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'destroy-target-simple-permanent',
-    description:
-      `"Destroy target <NOUN>" for every noun in TARGET_NOUN_RESTRICTIONS (Stone Rain, Naturalize, Hero's Downfall, Go for the Throat, Putrefy, Mortify, Void Rend)`,
+    description: `"Destroy target <NOUN>" for every noun in TARGET_NOUN_RESTRICTIONS (Stone Rain, Naturalize, Hero's Downfall, Go for the Throat, Putrefy, Mortify, Void Rend)`,
     // ONE rule over the shared noun table: the printed word is the whole of what
     // may be aimed at, and adding the next noun is a row in that table rather
     // than a new alternation here.
@@ -4111,7 +4245,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build(match) {
       const kind = TARGET_NOUN_RESTRICTIONS[match[1] ?? ''];
-      return kind === undefined ? null : effects({ primitive: 'destroyTarget', params: { targets: kind } });
+      return kind === undefined
+        ? null
+        : effects({ primitive: 'destroyTarget', params: { targets: kind } });
     },
   },
   {
@@ -4151,7 +4287,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // closed `AMASS_ARMY_TYPES` table; "Amass Orcs X" reads the cast-time X
     // only on a card that prints {X} in its cost, like every other X rule.
     id: 'amass',
-    description: '"Amass Orcs N" / "Amass Zombies X" — grow an Army you control, making one first if you have none',
+    description:
+      '"Amass Orcs N" / "Amass Zombies X" — grow an Army you control, making one first if you have none',
     pattern: /^amass ([a-z]+) (?:([0-9]+)|x)$/,
     build(match, ctx) {
       const subtype = AMASS_ARMY_TYPES[match[1] ?? ''];
@@ -4199,7 +4336,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // (Snakeskin Veil) and "creature or enchantment you control" (Heliod,
     // Sun-Crowned) are rows, never widened to `'creature'` — which would let a
     // pilot grow the opponent's board, a card playing differently from its text.
-    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target (${COUNTER_TARGET_PHRASE})$`),
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target (${COUNTER_TARGET_PHRASE})$`,
+    ),
     needsChosenTarget: true,
     build(match) {
       // "a counter" has no count token to parse — it is exactly one.
@@ -4274,9 +4413,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // why the targeted rule above could never match it.
     id: 'put-counters-on-self',
     description: '"Put N +1/+1 counters on ~" (no target)',
-    pattern: new RegExp(
-      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (~|it|this creature)$`,
-    ),
+    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (~|it|this creature)$`),
     build(match, ctx) {
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
@@ -4334,7 +4471,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // sentence's set — and both sets are read off the board at the SAME
     // resolution moment, so "each creature you control" twice IS the printed
     // meaning, exactly (nothing can enter or leave between the two).
-    pattern: /^put a (\+1\/\+1) counter on each creature you control\. those creatures gain (.+) until end of turn$/,
+    pattern:
+      /^put a (\+1\/\+1) counter on each creature you control\. those creatures gain (.+) until end of turn$/,
     build(match) {
       const keywords = parseKeywordList(match[2] ?? '');
       if (keywords === null) return null;
@@ -4343,7 +4481,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         // §3.155 — the mass modification's own primitive. The old name still
         // resolves (it is the same function), but the compiler emits ONE name so
         // a reader of the generated pool cannot conclude there are two effects.
-        { primitive: 'grantKeywordToYoursUntilEndOfTurn', params: { keywords, anyOfTypes: ['creature'] } },
+        {
+          primitive: 'grantKeywordToYoursUntilEndOfTurn',
+          params: { keywords, anyOfTypes: ['creature'] },
+        },
       );
     },
   },
@@ -4354,9 +4495,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // target, so the counters are the same real counters the stat layer reads.
     id: 'put-counters-on-each',
     description: '"Put N +1/-1 counters on each CREATURE-GROUP"',
-    pattern: new RegExp(
-      `^put (?:a|${COUNT_TOKEN}) (\\+1/\\+1|-1/-1) counters? on each (.+)$`,
-    ),
+    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) (\\+1/\\+1|-1/-1) counters? on each (.+)$`),
     build(match, ctx) {
       const magnitude = match[1] === undefined ? 1 : parseCount(match[1]);
       if (magnitude === null) return null;
@@ -4402,7 +4541,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const life = parseCount(match[2]);
       if (count === null || life === null) return null;
       return effects(
-        { primitive: 'drawCards', params: { count, whichPlayer: 'targetPlayer', targets: PLAYER_TARGET } },
+        {
+          primitive: 'drawCards',
+          params: { count, whichPlayer: 'targetPlayer', targets: PLAYER_TARGET },
+        },
         { primitive: 'loseLife', params: { amount: life, targetPlayer: true } },
       );
     },
@@ -4523,8 +4665,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'gain-control-until-eot',
-    description:
-      '"Gain control of target creature until end of turn. Untap it. It gains haste."',
+    description: '"Gain control of target creature until end of turn. Untap it. It gains haste."',
     // The riders are optional in the pattern but captured, because they change
     // what the card DOES: without haste a stolen creature cannot attack, so a
     // card that prints them and a card that does not are different cards.
@@ -4547,7 +4688,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'destroy-target-artifact-enchantment-or-land',
-    description: '"Destroy target artifact, enchantment, or land" (Acidic Slime, the naturalize family)',
+    description:
+      '"Destroy target artifact, enchantment, or land" (Acidic Slime, the naturalize family)',
     /*
      * One target with three acceptable types, which is why it is one restriction
      * rather than three rules. Written to accept the Oracle comma-or spelling
@@ -4608,8 +4750,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'exile-target-creature',
-    description:
-      '"Exile target <NOUN>" for every noun in TARGET_NOUN_RESTRICTIONS (Utter End)',
+    description: '"Exile target <NOUN>" for every noun in TARGET_NOUN_RESTRICTIONS (Utter End)',
     // Reads the SAME shared noun table the destroy family does, which is the
     // whole reason that table exists: a noun added for one verb is understood
     // by the other in the same edit, and the two verbs can never drift into
@@ -4618,7 +4759,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build(match) {
       const kind = TARGET_NOUN_RESTRICTIONS[match[1] ?? ''];
-      return kind === undefined ? null : effects({ primitive: 'exileTarget', params: { targets: kind } });
+      return kind === undefined
+        ? null
+        : effects({ primitive: 'exileTarget', params: { targets: kind } });
     },
   },
   {
@@ -4669,7 +4812,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build(match) {
       const restriction =
-        match[3] === 'artifact or creature' ? ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET : CREATURE_YOU_CONTROL_TARGET;
+        match[3] === 'artifact or creature'
+          ? ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET
+          : CREATURE_YOU_CONTROL_TARGET;
       return effects({
         primitive: 'blinkTarget',
         params: {
@@ -4741,8 +4886,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'copy-target-spell',
-    description:
-      `"Copy target instant or sorcery spell[, then return it to its owner's hand]. You may choose new targets for the copy." (Reverberate, Fork, Reiterate, Narset's Reversal) — CR 707.10`,
+    description: `"Copy target instant or sorcery spell[, then return it to its owner's hand]. You may choose new targets for the copy." (Reverberate, Fork, Reiterate, Narset's Reversal) — CR 707.10`,
     // ONE rule for the whole printed idiom, matched on the WHOLE LINE rather
     // than sentence by sentence, because "you may choose new targets for the
     // copy" is not an effect of its own — it is the permission that governs the
@@ -4771,7 +4915,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       // "this spell can't be countered" does not stop it. Ordered AFTER the copy
       // because the copy is made while the original is still on the stack.
       if (match[1] !== undefined) {
-        refs.push({ primitive: 'returnSpellToHand', params: { targets: INSTANT_OR_SORCERY_SPELL_TARGET } });
+        refs.push({
+          primitive: 'returnSpellToHand',
+          params: { targets: INSTANT_OR_SORCERY_SPELL_TARGET },
+        });
       }
       return effects(...refs);
     },
@@ -4835,8 +4982,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'create-token-copy',
-    description:
-      `"Create [N] token[s] that's a copy of <selector>[, except <clauses>][. If this spell was kicked, create five of those tokens instead]" (Rite of Replication, Cackling Counterpart, Giant Adephage) — CR 707.2`,
+    description: `"Create [N] token[s] that's a copy of <selector>[, except <clauses>][. If this spell was kicked, create five of those tokens instead]" (Rite of Replication, Cackling Counterpart, Giant Adephage) — CR 707.2`,
     // The selector and the "except" tail are parsed by the SAME two closed
     // tables the as-enters copy uses (`parseCopyException`), so "except it has
     // haste" means one thing in this codebase rather than two. A selector or a
@@ -4853,8 +4999,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'for-each-token-copy',
-    description:
-      `"For each token you control, create a token that's a copy of that permanent." (Second Harvest) — CR 707.2, one copy per original`,
+    description: `"For each token you control, create a token that's a copy of that permanent." (Second Harvest) — CR 707.2, one copy per original`,
     // An ITERATION, not a target: no aiming step, one copy of EACH matching
     // permanent. The primitive snapshots the match list before creating
     // anything, so the copies are never themselves copied.
@@ -4865,13 +5010,14 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'create-token-conditional-instead',
-    description:
-      `"Create <token>. If you control N or more <noun>, create <other token> instead." (Scute Swarm) — a resolution-time substitution`,
+    description: `"Create <token>. If you control N or more <noun>, create <other token> instead." (Scute Swarm) — a resolution-time substitution`,
     // The word "instead" makes the two sentences ONE instruction: exactly one
     // branch runs, decided as the ability resolves. Both halves must themselves
     // compile — a half this table cannot read reports the whole line, never a
     // card that always (or never) makes the better token.
-    pattern: new RegExp(`^(create .+?)\\. if you control ${COUNT_TOKEN} or more ([a-z]+?)s?, (create .+?) instead$`),
+    pattern: new RegExp(
+      `^(create .+?)\\. if you control ${COUNT_TOKEN} or more ([a-z]+?)s?, (create .+?) instead$`,
+    ),
     build(match, ctx) {
       const min = parseCount(match[2]);
       const filter = searchFilterFrom(match[3] ?? '');
@@ -4901,8 +5047,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^return an? (land|creature|permanent) you control to its owner's hand$/,
     build(match) {
       const noun = match[1] ?? '';
-      const filter =
-        noun === 'permanent' ? {} : { anyOfTypes: [noun as CardType] };
+      const filter = noun === 'permanent' ? {} : { anyOfTypes: [noun as CardType] };
       return effects({
         primitive: 'returnChosenToHand',
         params: { count: 1, ...(Object.keys(filter).length > 0 ? { filter } : {}) },
@@ -4911,7 +5056,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'counter-target-spell',
-    description: '"Counter target spell / noncreature spell / instant spell / instant or sorcery spell" (Cancel, Negate, Dispel, Muddle the Mixture)',
+    description:
+      '"Counter target spell / noncreature spell / instant spell / instant or sorcery spell" (Cancel, Negate, Dispel, Muddle the Mixture)',
     // Same shared-table discipline as the destroy family one table up: the
     // printed spell noun decides what may be countered, and a noun outside the
     // table reports rather than being widened to "any spell".
@@ -4919,7 +5065,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build(match) {
       const kind = COUNTER_NOUN_RESTRICTIONS[match[1] ?? ''];
-      return kind === undefined ? null : effects({ primitive: 'counterSpell', params: { targets: kind } });
+      return kind === undefined
+        ? null
+        : effects({ primitive: 'counterSpell', params: { targets: kind } });
     },
   },
   {
@@ -4967,7 +5115,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // The NOUN is a row in `PUMP_TARGET_NOUNS`, not a second nearly identical
     // rule: bloodrush prints exactly this sentence with one word more, and a
     // copy of the rule for it is the thing that drifts.
-    pattern: new RegExp(`^target (${PUMP_TARGET_PHRASE}) gets ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} until end of turn$`),
+    pattern: new RegExp(
+      `^target (${PUMP_TARGET_PHRASE}) gets ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} until end of turn$`,
+    ),
     needsChosenTarget: true,
     build(match, ctx) {
       const restriction = PUMP_TARGET_NOUNS[(match[1] ?? '').trim()];
@@ -5010,7 +5160,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const power = parsePumpAmount(match[2] ?? '', ctx);
       const toughness = parsePumpAmount(match[3] ?? '', ctx);
       const keywords = keywordFlags(match[4] ?? '');
-      if (restriction === undefined || power === null || toughness === null || !keywords) return null;
+      if (restriction === undefined || power === null || toughness === null || !keywords)
+        return null;
       return effects(
         { primitive: 'pumpUntilEndOfTurn', params: { power, toughness, targets: restriction } },
         { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords, targets: restriction } },
@@ -5050,7 +5201,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'mass-modify-yours-until-eot',
     description:
       '"Creatures/permanents you control get +X/+Y and/or gain KEYWORDS until end of turn" (Selfless Spirit, Overrun, Craterhoof Behemoth, Moonshaker Cavalry)',
-    pattern: new RegExp(`^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (.+) until end of turn$`),
+    pattern: new RegExp(
+      `^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (.+) until end of turn$`,
+    ),
     build(match, ctx) {
       const nounType = STATIC_NOUN_TYPES[match[1] ?? ''];
       if (nounType === undefined) return null;
@@ -5159,8 +5312,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'tap-target-noun',
-    description:
-      `"Tap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Auriok Transfixer, Relic Barrier, Icy Manipulator)`,
+    description: `"Tap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Auriok Transfixer, Relic Barrier, Icy Manipulator)`,
     // The tap half of the untap family, off the SAME noun table: a printed
     // ability that can tap an artifact and one that can untap it name the same
     // set of things, so one row serves both verbs (DESIGN §1.12).
@@ -5168,7 +5320,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build(match) {
       const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
-      return kind === undefined ? null : effects({ primitive: 'tapTarget', params: { targets: kind } });
+      return kind === undefined
+        ? null
+        : effects({ primitive: 'tapTarget', params: { targets: kind } });
     },
   },
   {
@@ -5183,8 +5337,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'untap-target-noun',
-    description:
-      `"Untap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Arbor Elf, Voltaic Key, Blossom Dryad, Jandor's Saddlebags, Kiora's Follower)`,
+    description: `"Untap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Arbor Elf, Voltaic Key, Blossom Dryad, Jandor's Saddlebags, Kiora's Follower)`,
     // ONE rule over the noun table, the shape `destroy-target-simple-permanent`
     // established: the printed word is the whole of what may be aimed at, and
     // the next noun is a ROW rather than a new rule.
@@ -5192,7 +5345,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build(match) {
       const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
-      return kind === undefined ? null : effects({ primitive: 'untapTarget', params: { targets: kind } });
+      return kind === undefined
+        ? null
+        : effects({ primitive: 'untapTarget', params: { targets: kind } });
     },
   },
   // ⚠️ "Untap ANOTHER target permanent" (Kiora's Follower, Manifold Key) stays
@@ -5222,8 +5377,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   // ===========================================================================
   {
     id: 'tap-target-noun-and-freeze',
-    description:
-      `"Tap target <NOUN>. It doesn't untap during its controller's next untap step" (Ojutai's Breath, Crippling Chill, Tamiyo's +1)`,
+    description: `"Tap target <NOUN>. It doesn't untap during its controller's next untap step" (Ojutai's Breath, Crippling Chill, Tamiyo's +1)`,
     // TWO effects, not one primitive that does both: Skyline Cascade prints the
     // freeze with no tap at all, so a combined primitive would have to carry a
     // "do not actually tap" flag — a parameter that exists only because two
@@ -5258,8 +5412,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'freeze-target-noun',
-    description:
-      `"Target <NOUN> doesn't untap during its controller's next untap step" — the freeze with NO tap (Skyline Cascade, House Guildmage, Elvish Hunter)`,
+    description: `"Target <NOUN> doesn't untap during its controller's next untap step" — the freeze with NO tap (Skyline Cascade, House Guildmage, Elvish Hunter)`,
     pattern: new RegExp(
       `^target (${UNTAP_TARGET_NOUN_PHRASE}) doesn'?t untap during its controller'?s next untap step$`,
     ),
@@ -5316,7 +5469,13 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const entry = tokenEntryWords(match[2]);
       const power = parseSignedInt(match[3] ?? '');
       const toughness = parseSignedInt(match[4] ?? '');
-      if (count === null || entry === null || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      if (
+        count === null ||
+        entry === null ||
+        !Number.isFinite(power) ||
+        !Number.isFinite(toughness)
+      )
+        return null;
       const face = parseTokenFace(match[5] ?? '');
       if (face === null) return null;
       const params: Record<string, unknown> = {
@@ -5346,8 +5505,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'exile-graveyard',
-    description:
-      `"Exile target player's graveyard" (Bojuka Bog, Tormod's Crypt, Rakdos Charm's mode) / "Exile all graveyards" (Scavenger Grounds) / "Exile each opponent's graveyard"`,
+    description: `"Exile target player's graveyard" (Bojuka Bog, Tormod's Crypt, Rakdos Charm's mode) / "Exile all graveyards" (Scavenger Grounds) / "Exile each opponent's graveyard"`,
     // WHOSE graveyards is the only variable, and it reads the same
     // `whichPlayer` vocabulary every other player-scoped primitive reads — so a
     // printed scope this table does not carry reports, rather than being
@@ -5358,11 +5516,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const printed = match[1] ?? '';
       const whichPlayer =
-        printed === "target player's"
-          ? 'targetPlayer'
-          : printed === 'all'
-            ? 'each'
-            : 'opponent';
+        printed === "target player's" ? 'targetPlayer' : printed === 'all' ? 'each' : 'opponent';
       return effects({
         primitive: 'exileGraveyard',
         params: {
@@ -5417,7 +5571,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      */
     pattern: /^populate$/,
     build() {
-      return effects({ primitive: 'createTokenCopy', params: { chooseCreatureTokenYouControl: true, count: 1 } });
+      return effects({
+        primitive: 'createTokenCopy',
+        params: { chooseCreatureTokenYouControl: true, count: 1 },
+      });
     },
   },
   {
@@ -5483,7 +5640,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'investigate',
-    description: '"Investigate" (CR 701.51) — exactly "create a Clue token", as the rules define it',
+    description:
+      '"Investigate" (CR 701.51) — exactly "create a Clue token", as the rules define it',
     pattern: /^investigate$/,
     build() {
       return effects({ primitive: 'createPredefinedToken', params: { token: 'clue' } });
@@ -5557,7 +5715,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // caster (CR 603.7d) so the CASTER draws on the opponent's upkeep.
     id: 'draw-at-next-turns-upkeep',
     description: `"Draw N cards at the beginning of the next turn's upkeep"`,
-    pattern: new RegExp(`^(?:you )?draw (a|${COUNT_TOKEN}) cards? at the beginning of the next turn'?s upkeep$`),
+    pattern: new RegExp(
+      `^(?:you )?draw (a|${COUNT_TOKEN}) cards? at the beginning of the next turn'?s upkeep$`,
+    ),
     build(match) {
       const count = match[1] === 'a' ? 1 : parseCount(match[1]);
       if (count === null || count <= 0) return null;
@@ -5627,7 +5787,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^add ((?:\{[wubrgc]\})+)$/,
     build(match) {
       const colors = manaSymbols(match[1] ?? '');
-      return colors === null ? null : effects({ primitive: 'addMana', params: { mana: [...colors] } });
+      return colors === null
+        ? null
+        : effects({ primitive: 'addMana', params: { mana: [...colors] } });
     },
   },
 
@@ -5637,7 +5799,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   // the printed clause exactly, so refusing it would be the dishonest answer.
   {
     id: 'draw-then-put-back-on-top',
-    description: '"Draw N cards, then put M cards from your hand on top of your library in any order" (Brainstorm)',
+    description:
+      '"Draw N cards, then put M cards from your hand on top of your library in any order" (Brainstorm)',
     pattern: new RegExp(
       `^draw ${COUNT_TOKEN} cards?, then put ${COUNT_TOKEN} cards? from your hand on top of your library in any order$`,
     ),
@@ -5653,33 +5816,46 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'look-at-top-and-reorder',
-    description: '"Look at the top N cards of your library, then put them back in any order" (Ponder)',
-    pattern: new RegExp(`^look at the top ${COUNT_TOKEN} cards? of your library, then put them back in any order$`),
+    description:
+      '"Look at the top N cards of your library, then put them back in any order" (Ponder)',
+    pattern: new RegExp(
+      `^look at the top ${COUNT_TOKEN} cards? of your library, then put them back in any order$`,
+    ),
     build(match) {
       const count = parseCount(match[1]);
-      return count === null ? null : effects({ primitive: 'reorderTopOfLibrary', params: { count } });
+      return count === null
+        ? null
+        : effects({ primitive: 'reorderTopOfLibrary', params: { count } });
     },
   },
   {
     id: 'scry-n',
-    description: '"Scry N" — look at the top N, any split between top (any order) and bottom (any order)',
+    description:
+      '"Scry N" — look at the top N, any split between top (any order) and bottom (any order)',
     pattern: new RegExp(`^scry ${COUNT_TOKEN}$`),
     build(match) {
       const count = parseCount(match[1]);
       if (count === null) return null;
       // `count` is omitted at the primitive's default of one, matching the
       // emitted-data style of every other rule.
-      return effects({ primitive: 'scry', ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) });
+      return effects({
+        primitive: 'scry',
+        ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }),
+      });
     },
   },
   {
     id: 'surveil-n',
-    description: '"Surveil N" — look at the top N, any split between top (any order) and the graveyard',
+    description:
+      '"Surveil N" — look at the top N, any split between top (any order) and the graveyard',
     pattern: new RegExp(`^surveil ${COUNT_TOKEN}$`),
     build(match) {
       const count = parseCount(match[1]);
       if (count === null) return null;
-      return effects({ primitive: 'surveil', ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) });
+      return effects({
+        primitive: 'surveil',
+        ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }),
+      });
     },
   },
   {
@@ -5736,7 +5912,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'return-target-card-from-graveyard',
-    description: '"[You may] return target card from your graveyard to your hand" (Eternal Witness)',
+    description:
+      '"[You may] return target card from your graveyard to your hand" (Eternal Witness)',
     // No `needsChosenTarget`: the card to return is picked by a CHOICE at
     // resolution, not by a target chosen at cast — which is exactly why this may
     // also be the body of a triggered ability.
@@ -5754,7 +5931,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern:
       /^defending player reveals the top card of their library\. if it'?s a land card, that player puts it into their hand$/,
     build() {
-      return effects({ primitive: 'revealTopCard', params: { who: 'opponent', filter: LAND_FILTER } });
+      return effects({
+        primitive: 'revealTopCard',
+        params: { who: 'opponent', filter: LAND_FILTER },
+      });
     },
   },
   {
@@ -6117,11 +6297,16 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // "for a card" and "for a creature card" are different sentences, and a
     // pattern loose enough to match both would also match "for a basic land
     // card" and quietly drop the restriction.
-    pattern: /^search your library for a card, put (?:it|that card) into your (hand|graveyard), then shuffle$/,
+    pattern:
+      /^search your library for a card, put (?:it|that card) into your (hand|graveyard), then shuffle$/,
     build(match) {
       return effects({
         primitive: 'searchLibrary',
-        params: { who: 'controller', count: 1, destination: match[1] === 'graveyard' ? 'graveyard' : 'hand' },
+        params: {
+          who: 'controller',
+          count: 1,
+          destination: match[1] === 'graveyard' ? 'graveyard' : 'hand',
+        },
       });
     },
   },
@@ -6159,7 +6344,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'search-to-graveyard-by-filter',
-    description: '"Search your library for a creature card, put it into your graveyard, then shuffle" (the entomb family)',
+    description:
+      '"Search your library for a creature card, put it into your graveyard, then shuffle" (the entomb family)',
     pattern: new RegExp(
       `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your graveyard, then shuffle$`,
     ),
@@ -6174,7 +6360,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'sacrifice-a-permanent-you-control',
-    description: '"Sacrifice a land." — a sacrifice as a RESOLUTION effect, not as a cost (Roiling Regrowth)',
+    description:
+      '"Sacrifice a land." — a sacrifice as a RESOLUTION effect, not as a cost (Roiling Regrowth)',
     // The controller chooses which of their own permanents to give up, which is
     // the same question an edict asks of a victim — so it is the same primitive
     // pointed at `'controller'` rather than a second sacrifice implementation.
@@ -6280,7 +6467,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'search-cards-to-graveyard',
-    description: '"Search your library for up to three creature cards, put them into your graveyard, then shuffle" (Buried Alive)',
+    description:
+      '"Search your library for up to three creature cards, put them into your graveyard, then shuffle" (Buried Alive)',
     // A tutor whose destination is the GRAVEYARD — the same primitive, the same
     // filter vocabulary, one more destination. It only reaches a zone
     // `searchLibrary`'s closed destination table names, so a wording that put a
@@ -6471,7 +6659,11 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         // approximation the compiler contract exists to prevent.
         if (!foldEmblemAbility(body, ctx, statics, triggers, definitionFields)) return null;
       }
-      if (statics.length === 0 && triggers.length === 0 && Object.keys(definitionFields).length === 0) {
+      if (
+        statics.length === 0 &&
+        triggers.length === 0 &&
+        Object.keys(definitionFields).length === 0
+      ) {
         return null;
       }
       return effects({
@@ -6489,7 +6681,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   // loot template, the mill shapes, doubling power, reveal-the-top draws ------
   {
     id: 'learn',
-    description: '"Learn" (CR 701.48a) — the discard-to-draw half; the outside-the-game Lesson half has no zone here (Pop Quiz, Field Trip)',
+    description:
+      '"Learn" (CR 701.48a) — the discard-to-draw half; the outside-the-game Lesson half has no zone here (Pop Quiz, Field Trip)',
     pattern: /^learn$/,
     build() {
       return effects({ primitive: 'learn' });
@@ -6497,7 +6690,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'investigate-n-times',
-    description: '"Investigate twice / three times" (CR 701.16a, Confirm Suspicions) — that many Clue tokens in one create',
+    description:
+      '"Investigate twice / three times" (CR 701.16a, Confirm Suspicions) — that many Clue tokens in one create',
     pattern: new RegExp(`^investigate (${Object.keys(REPEAT_COUNT_WORDS).join('|')})$`),
     build(match) {
       const count = REPEAT_COUNT_WORDS[match[1] ?? ''];
@@ -6507,7 +6701,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'draw-then-discard-loot',
-    description: '"Draw N cards, then discard N cards" — the loot template (Owl Familiar, Merfolk Looter)',
+    description:
+      '"Draw N cards, then discard N cards" — the loot template (Owl Familiar, Merfolk Looter)',
     pattern: new RegExp(`^draw ${COUNT_TOKEN} cards?, then discard ${COUNT_TOKEN} cards?$`),
     build(match) {
       const drawn = parseCount(match[1]);
@@ -6517,7 +6712,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         { primitive: 'drawCards', params: { count: drawn } },
         // The CONTROLLER's own discard, chosen by them — `discardCard`'s default
         // victim is a targeted player, which this clause never has.
-        { primitive: 'discardCard', params: { who: 'controller', ...(discarded === 1 ? {} : { count: discarded }) } },
+        {
+          primitive: 'discardCard',
+          params: { who: 'controller', ...(discarded === 1 ? {} : { count: discarded }) },
+        },
       );
     },
   },
@@ -6561,7 +6759,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       // A trailing sentence ("You gain 2 life") must itself compile, target-free,
       // for the reason `scry-then-effect` gives; a tail outside the table
       // (Cache Grab's Squirrel clause) refuses the whole line.
-      const tail = match[4] === undefined ? [] : ctx.compileEffectClause(match[4], { targetFree: true });
+      const tail =
+        match[4] === undefined ? [] : ctx.compileEffectClause(match[4], { targetFree: true });
       if (tail === null || tail === undefined) return null;
       return effects(
         {
@@ -6574,7 +6773,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'double-target-power',
-    description: '"Double the power of target creature / target creature\'s power until end of turn" (CR 701.10b — Unleash Fury, Bulk Up)',
+    description:
+      '"Double the power of target creature / target creature\'s power until end of turn" (CR 701.10b — Unleash Fury, Bulk Up)',
     pattern: /^double (?:the power of target creature|target creature's power) until end of turn$/,
     needsChosenTarget: true,
     build() {
@@ -6583,7 +6783,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'double-each-power',
-    description: '"Double the power of each creature you control until end of turn" (CR 701.10b — Double Trouble)',
+    description:
+      '"Double the power of each creature you control until end of turn" (CR 701.10b — Double Trouble)',
     pattern: /^double the power of each creature you control until end of turn$/,
     build() {
       return effects({ primitive: 'doublePower', params: { each: 'yours' } });
@@ -7023,10 +7224,10 @@ function optionalTriggerFrom(
         effects,
         label,
         ...(compiled.targets ? { targets: compiled.targets } : {}),
-            ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
         ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
-            ...(compiled.modal ? { modal: compiled.modal } : {}),
-            ...(compiled.modal ? { modal: compiled.modal } : {}),
+        ...(compiled.modal ? { modal: compiled.modal } : {}),
+        ...(compiled.modal ? { modal: compiled.modal } : {}),
       },
     ],
   };
@@ -7307,8 +7508,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
      * rides the ability as `targetsExcludeSelf`, which the engine applies when it
      * builds the candidate list.
      */
-    pattern:
-      /^when ~ enters(?: the battlefield)?, you may exile another target creature$/,
+    pattern: /^when ~ enters(?: the battlefield)?, you may exile another target creature$/,
     needsChosenTarget: true,
     build() {
       return {
@@ -7483,7 +7683,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             label: `Enters: you may ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
-        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
             ...(compiled.modal ? { modal: compiled.modal } : {}),
             ...(compiled.modal ? { modal: compiled.modal } : {}),
           },
@@ -7510,11 +7710,13 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // death event this engine's `dies` does not emit for noncreatures — so it
     // keeps reporting rather than compiling a trigger that never fires.
     id: 'keyword-modular',
-    description: '"Modular N" — enters with N +1/+1 counters; on death, may move them to target artifact creature',
+    description:
+      '"Modular N" — enters with N +1/+1 counters; on death, may move them to target artifact creature',
     pattern: /^modular ([0-9]+)$/,
     build(match, ctx) {
       const amount = Number.parseInt(match[1] ?? '', 10);
-      if (!Number.isFinite(amount) || !ctx.card.typeLine.types.some((t) => /^creature$/i.test(t))) return null;
+      if (!Number.isFinite(amount) || !ctx.card.typeLine.types.some((t) => /^creature$/i.test(t)))
+        return null;
       return {
         entersWithCounters: [{ kind: PLUS_ONE_COUNTER, count: amount }],
         triggers: [
@@ -7557,7 +7759,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // reading the turn-fact memory as the spell resolves. "Bloodthirst X"
     // (X = the damage dealt) is a count this memory does not keep: reports.
     id: 'keyword-bloodthirst',
-    description: '"Bloodthirst N" — enters with N +1/+1 counters if an opponent was dealt damage this turn',
+    description:
+      '"Bloodthirst N" — enters with N +1/+1 counters if an opponent was dealt damage this turn',
     pattern: /^bloodthirst ([0-9]+)$/,
     build(match, ctx) {
       const amount = Number.parseInt(match[1] ?? '', 10);
@@ -7572,7 +7775,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // printed question AT RESOLUTION — see `fabricateChoice` for why this is
     // not a `ModalSpec` (CR 603.3c would lock the answer a window early).
     id: 'keyword-fabricate',
-    description: '"Fabricate N" — an enters trigger offering N +1/+1 counters or, if declined, N Servos',
+    description:
+      '"Fabricate N" — an enters trigger offering N +1/+1 counters or, if declined, N Servos',
     pattern: /^fabricate ([0-9]+)$/,
     build(match) {
       const amount = Number.parseInt(match[1] ?? '', 10);
@@ -7599,7 +7803,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // (Scorn-Blade Berserker, Archpriest of Shadows) has no grant seam yet, so
     // the whole line reports rather than granting half of what is printed.
     id: 'keyword-backup',
-    description: '"Backup N" — N +1/+1 counters on target creature, and the abilities below it until end of turn',
+    description:
+      '"Backup N" — N +1/+1 counters on target creature, and the abilities below it until end of turn',
     pattern: /^backup ([0-9]+)$/,
     build(match, ctx) {
       const amount = Number.parseInt(match[1] ?? '', 10);
@@ -7644,7 +7849,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // the closed `DEVOUR_NOUNS` table. "Devour X" (Thromok — X per creature
     // devoured, a square) is a count no row expresses: reports.
     id: 'keyword-devour',
-    description: '"Devour N" / "Devour artifact N" / "Devour Food N" — the as-enters sacrifice-for-counters choice',
+    description:
+      '"Devour N" / "Devour artifact N" / "Devour Food N" — the as-enters sacrifice-for-counters choice',
     pattern: /^devour (?:([a-z]+) )?([0-9]+)$/,
     build(match, ctx) {
       const amount = Number.parseInt(match[2] ?? '', 10);
@@ -7667,7 +7873,9 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         activated: [
           {
             cost: { mana: cost, tap: true },
-            effects: [{ primitive: 'addCounters', params: { amount: OUTLAST_COUNTERS, self: true } }],
+            effects: [
+              { primitive: 'addCounters', params: { amount: OUTLAST_COUNTERS, self: true } },
+            ],
             timing: 'sorcery',
             label: `Outlast ${formatManaCost(cost)}`,
           },
@@ -7714,7 +7922,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // Spirit in the graveyard would be returned even when the controller wants
     // it left for a later Soulshift or a graveyard cost.
     id: 'keyword-soulshift',
-    description: '"Soulshift 4" — the dies trigger returning a cheap Spirit from the graveyard (Hundred-Talon Kami)',
+    description:
+      '"Soulshift 4" — the dies trigger returning a cheap Spirit from the graveyard (Hundred-Talon Kami)',
     pattern: /^soulshift ([0-9]+)$/,
     build(match) {
       const limit = Number.parseInt(match[1] ?? '', 10);
@@ -7760,7 +7969,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         triggers: [
           {
             condition: { on: 'becomesBlocked' },
-            effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: perBlocker, toughness: perBlocker } }],
+            effects: [
+              {
+                primitive: 'pumpUntilEndOfTurn',
+                params: { power: perBlocker, toughness: perBlocker },
+              },
+            ],
             label: `Rampage ${amount}`,
           },
         ],
@@ -7780,7 +7994,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
       if (keyword === undefined) return null;
       const body = selfBody(match[2] ?? '');
-      return triggerFrom(ctx, { on: 'blocks', counterpartHasKeyword: keyword }, body, `Blocks a creature with ${match[1]}: ${body}`);
+      return triggerFrom(
+        ctx,
+        { on: 'blocks', counterpartHasKeyword: keyword },
+        body,
+        `Blocks a creature with ${match[1]}: ${body}`,
+      );
     },
   },
   {
@@ -7794,7 +8013,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-becomes-blocked',
-    description: '"Whenever ~ becomes blocked, BODY" — the attacker\'s half alone (Deeproot Warrior)',
+    description:
+      '"Whenever ~ becomes blocked, BODY" — the attacker\'s half alone (Deeproot Warrior)',
     pattern: /^whenever ~ becomes blocked, (.+)$/,
     build(match, ctx) {
       const body = selfBody(match[1] ?? '');
@@ -7809,7 +8029,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^whenever ~ blocks or becomes blocked, (.+)$/,
     build(match, ctx) {
       const body = selfBody(match[1] ?? '');
-      return triggerFrom(ctx, { on: 'blocksOrBecomesBlocked' }, body, `Blocks or becomes blocked: ${body}`);
+      return triggerFrom(
+        ctx,
+        { on: 'blocksOrBecomesBlocked' },
+        body,
+        `Blocks or becomes blocked: ${body}`,
+      );
     },
   },
   // --- §3.106 upkeep costs and time counters -----------------------------------
@@ -7836,7 +8061,11 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       return {
         triggers: [
           {
-            condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+            condition: {
+              on: 'upkeep',
+              who: 'you',
+              intervening: { kind: 'sourceControlledSinceLastUpkeep' },
+            },
             effects: [
               {
                 primitive: 'payManaOrElse',
@@ -7854,7 +8083,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // [cost] per age counter, else sacrifice. The mana form; `{S}` and "{W} or
     // {U}" are refused by the symbol parser / the pattern and stay reported.
     id: 'keyword-cumulative-upkeep-mana',
-    description: '"Cumulative upkeep {1}" — an age counter, then pay the cost once per counter or sacrifice',
+    description:
+      '"Cumulative upkeep {1}" — an age counter, then pay the cost once per counter or sacrifice',
     pattern: /^cumulative upkeep[—-]? ?((?:\{[^}]+\})+)$/,
     build(match) {
       const mana = parseManaSymbols(match[1] ?? '');
@@ -7897,7 +8127,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // removed, sacrifice it. The bare "Vanishing" (Tidewalker, whose count is
     // a separate sentence) does not match and stays reported.
     id: 'keyword-vanishing',
-    description: '"Vanishing 3" — enters with N time counters, one leaves each upkeep, sacrificed with the last',
+    description:
+      '"Vanishing 3" — enters with N time counters, one leaves each upkeep, sacrificed with the last',
     pattern: new RegExp(`^vanishing ${COUNT_TOKEN}$`),
     build(match) {
       const count = parseCount(match[1]);
@@ -7906,8 +8137,17 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         entersWithCounters: [{ kind: 'time', count }],
         triggers: [
           {
-            condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
-            effects: [{ primitive: 'tickDownCounter', params: { counter: 'time', sacrificeWhen: 'lastRemoved' } }],
+            condition: {
+              on: 'upkeep',
+              who: 'you',
+              intervening: { kind: 'sourceHasCounter', counter: 'time' },
+            },
+            effects: [
+              {
+                primitive: 'tickDownCounter',
+                params: { counter: 'time', sacrificeWhen: 'lastRemoved' },
+              },
+            ],
             label: `Vanishing ${count}`,
           },
         ],
@@ -7919,7 +8159,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // your upkeep remove one, and if you can't, sacrifice it. No intervening
     // "if": the trigger fires with none left, which is exactly when it kills.
     id: 'keyword-fading',
-    description: '"Fading 2" — enters with N fade counters, one leaves each upkeep, sacrificed when none can',
+    description:
+      '"Fading 2" — enters with N fade counters, one leaves each upkeep, sacrificed when none can',
     pattern: new RegExp(`^fading ${COUNT_TOKEN}$`),
     build(match) {
       const count = parseCount(match[1]);
@@ -7929,7 +8170,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         triggers: [
           {
             condition: { on: 'upkeep', who: 'you' },
-            effects: [{ primitive: 'tickDownCounter', params: { counter: 'fade', sacrificeWhen: 'noneToRemove' } }],
+            effects: [
+              {
+                primitive: 'tickDownCounter',
+                params: { counter: 'fade', sacrificeWhen: 'noneToRemove' },
+              },
+            ],
             label: `Fading ${count}`,
           },
         ],
@@ -7956,17 +8202,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // Whole-line rather than a body rule, so "return it to its owner's hand"
     // as a spell's second sentence (about a target) is never mistaken for it.
     id: 'trigger-returns-self-to-hand-from-graveyard',
-    description:
-      `"When ~ is put into a graveyard from the battlefield, return it to its owner's hand." (Rancor) / "When ~ dies, return it to its owner's hand."`,
-    pattern: /^when ~ (dies|is put into a graveyard from the battlefield), return it to its owner['’]s hand$/,
+    description: `"When ~ is put into a graveyard from the battlefield, return it to its owner's hand." (Rancor) / "When ~ dies, return it to its owner's hand."`,
+    pattern:
+      /^when ~ (dies|is put into a graveyard from the battlefield), return it to its owner['’]s hand$/,
     build(match) {
-      const on: TriggerCondition['on'] = match[1] === 'dies' ? 'dies' : 'putIntoGraveyardFromBattlefield';
+      const on: TriggerCondition['on'] =
+        match[1] === 'dies' ? 'dies' : 'putIntoGraveyardFromBattlefield';
       return {
         triggers: [
           {
             condition: { on },
             effects: [{ primitive: 'returnSourceFromGraveyard', params: { to: 'hand' } }],
-            label: match[1] === 'dies' ? "Dies: return it to its owner's hand" : "Put into a graveyard: return it to its owner's hand",
+            label:
+              match[1] === 'dies'
+                ? "Dies: return it to its owner's hand"
+                : "Put into a graveyard: return it to its owner's hand",
           },
         ],
       };
@@ -8007,8 +8257,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'pact-upkeep-bill',
-    description:
-      `"At the beginning of your next upkeep, pay {COST}. If you don't, you lose the game." (the Pact cycle: Pact of Negation, Slaughter Pact, Summoner's Pact)`,
+    description: `"At the beginning of your next upkeep, pay {COST}. If you don't, you lose the game." (the Pact cycle: Pact of Negation, Slaughter Pact, Summoner's Pact)`,
     /*
      * A DELAYED triggered ability (CR 603.7) created as the free spell
      * RESOLVES, not a static on a permanent — the Pact is an instant that is
@@ -8084,7 +8333,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const compiled = ctx.compileTriggerBody(inner);
       // A MODAL body has empty effects on purpose (the chosen modes replace
       // them); it is never optional-wrapped here.
-      if (compiled === null || (compiled.effects.length === 0 && compiled.modal === undefined)) return null;
+      if (compiled === null || (compiled.effects.length === 0 && compiled.modal === undefined))
+        return null;
       if (compiled.modal !== undefined && optional) return null;
       const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null || effectRefs.length === 0) return null;
@@ -8100,7 +8350,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             label: `${scope} ${step}: ${match[3] ?? ''}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
-        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
             ...(compiled.modal ? { modal: compiled.modal } : {}),
             ...(compiled.modal ? { modal: compiled.modal } : {}),
           },
@@ -8157,7 +8407,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const tokenWord = match[4]?.trim();
       if (tokenWord !== undefined) filter.isToken = tokenWord === 'token';
       const tail = (match[6] ?? '').trim();
-      const who = selfOrAnother || tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
+      const who =
+        selfOrAnother || tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
       const another = !selfOrAnother && (match[2] ?? '').trim() === 'another';
       const event = match[10] === 'enters' ? 'permanentEnters' : 'permanentDies';
       const body = match[11] ?? '';
@@ -8174,7 +8425,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const compiled = ctx.compileTriggerBody(inner);
       // A MODAL body has empty effects on purpose (the chosen modes replace
       // them); it is never optional-wrapped here.
-      if (compiled === null || (compiled.effects.length === 0 && compiled.modal === undefined)) return null;
+      if (compiled === null || (compiled.effects.length === 0 && compiled.modal === undefined))
+        return null;
       if (compiled.modal !== undefined && optional) return null;
       const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null) return null;
@@ -8202,7 +8454,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             label: `${another ? 'another ' : ''}${tokenWord ? `${tokenWord} ` : ''}${noun} (${who}) ${match[10]}: ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
-        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
             ...(compiled.modal ? { modal: compiled.modal } : {}),
             ...(compiled.modal ? { modal: compiled.modal } : {}),
           },
@@ -8234,7 +8486,9 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       // An absent type word is "a spell of the chosen type" (Chronicle of
       // Victory) — every card type, narrowed only by the named subtype.
       const base: readonly TriggerCondition[] =
-        typeWord === undefined ? [{ on: 'castSpell', who: 'you' }] : (spellFiltersFor(typeWord) ?? []);
+        typeWord === undefined
+          ? [{ on: 'castSpell', who: 'you' }]
+          : (spellFiltersFor(typeWord) ?? []);
       if (base.length === 0) return null;
       const body = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
       if (body === null || body.length === 0) return null;
@@ -8312,7 +8566,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^whenever (you|a player|an opponent) draws a card, (.+)$/,
     build(match, ctx) {
       const printed = match[1] ?? '';
-      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      const who: TriggerWho =
+        printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
       return triggerFrom(
         ctx,
         { on: 'drawsCard', who },
@@ -8329,7 +8584,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^whenever (you|a player|an opponent) draws a card, you may (.+)$/,
     build(match, ctx) {
       const printed = match[1] ?? '';
-      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      const who: TriggerWho =
+        printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
       const body = match[2] ?? '';
       return optionalTriggerFrom(
         ctx,
@@ -8386,7 +8642,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-creature-combat-damage-to-player',
-    description: '"Whenever a creature you control deals combat damage to a player, [you may] BODY" (Bident of Thassa)',
+    description:
+      '"Whenever a creature you control deals combat damage to a player, [you may] BODY" (Bident of Thassa)',
     // PER-CREATURE: three connecting creatures fire it three times — the group
     // "one or more" wording one rule down is the once-per-batch sibling.
     pattern: /^whenever a creature you control deals combat damage to a player, (you may )?(.+)$/,
@@ -8401,7 +8658,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-group-combat-damage-to-player',
-    description: '"Whenever one or more creatures you control deal combat damage to a player, BODY"',
+    description:
+      '"Whenever one or more creatures you control deal combat damage to a player, BODY"',
     // A GROUP trigger: fires once per damage batch however many creatures
     // connected — core's `groupCombatDamageToPlayer` and its runtime dedup.
     pattern: /^whenever one or more creatures you control deal combat damage to a player, (.+)$/,
@@ -8470,8 +8728,10 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-equipped-combat-damage-to-player-you-may',
-    description: '"Whenever equipped/enchanted creature deals combat damage to a player, you may BODY"',
-    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, you may (.+)$/,
+    description:
+      '"Whenever equipped/enchanted creature deals combat damage to a player, you may BODY"',
+    pattern:
+      /^whenever (?:equipped|enchanted) creature deals combat damage to a player, you may (.+)$/,
     build(match, ctx) {
       const body = match[1] ?? '';
       return optionalTriggerFrom(
@@ -8504,7 +8764,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, you may (.+)$/,
     build(match, ctx) {
       const body = match[1] ?? '';
-      return optionalTriggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: you may ${body}`);
+      return optionalTriggerFrom(
+        ctx,
+        hostWatch('dies'),
+        body,
+        `Equipped creature dies: you may ${body}`,
+      );
     },
   },
   {
@@ -8522,7 +8787,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^whenever (?:equipped|enchanted) creature attacks, you may (.+)$/,
     build(match, ctx) {
       const body = match[1] ?? '';
-      return optionalTriggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: you may ${body}`);
+      return optionalTriggerFrom(
+        ctx,
+        hostWatch('attacks'),
+        body,
+        `Equipped creature attacks: you may ${body}`,
+      );
     },
   },
   {
@@ -8563,10 +8833,15 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   // exactly as a suspend tick is; core pushes the trigger as the spell is cast.
   {
     id: 'keyword-storm',
-    description: '"Storm" (CR 702.40a) — copy the spell once per spell cast before it this turn (Grapeshot, Empty the Warrens)',
+    description:
+      '"Storm" (CR 702.40a) — copy the spell once per spell cast before it this turn (Grapeshot, Empty the Warrens)',
     pattern: /^storm$/,
     build() {
-      return { castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] }] };
+      return {
+        castTriggers: [
+          { keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] },
+        ],
+      };
     },
   },
   {
@@ -8575,19 +8850,28 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       '"Cascade" (CR 702.85a) — exile from the top until a cheaper nonland card, cast it free, bottom the rest at random (Bloodbraid Elf, Shardless Agent)',
     pattern: /^cascade$/,
     build() {
-      return { castTriggers: [{ keyword: 'cascade', label: 'Cascade', effects: [{ primitive: 'cascade' }] }] };
+      return {
+        castTriggers: [
+          { keyword: 'cascade', label: 'Cascade', effects: [{ primitive: 'cascade' }] },
+        ],
+      };
     },
   },
   {
     id: 'keyword-ripple',
-    description: '"Ripple N" (CR 702.60a) — reveal the top N, cast the same-name ones free, bottom the rest (Surging Flame)',
+    description:
+      '"Ripple N" (CR 702.60a) — reveal the top N, cast the same-name ones free, bottom the rest (Surging Flame)',
     pattern: /^ripple ([0-9]+)$/,
     build(match) {
       const count = Number.parseInt(match[1] ?? '', 10);
       if (!Number.isFinite(count) || count <= 0) return null;
       return {
         castTriggers: [
-          { keyword: 'ripple', label: `Ripple ${count}`, effects: [{ primitive: 'ripple', params: { count } }] },
+          {
+            keyword: 'ripple',
+            label: `Ripple ${count}`,
+            effects: [{ primitive: 'ripple', params: { count } }],
+          },
         ],
       };
     },
@@ -8617,6 +8901,45 @@ const CAST_REDUCTION_SCOPES: Readonly<Record<string, CardFilter>> = Object.freez
 
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
+    /**
+     * §3.169 — A SELF-STATIC BODY: "~ gets +7/+7" (Krosan Beast, under
+     * threshold), "~ gets +1/+1 and has flying" (Skyhunter Cub, while
+     * equipped), "~ has shroud". Printed only ever under an "as long as …",
+     * which the pre-pass strips before this rule sees the body; a bare printed
+     * "~ gets +2/+2" would mean the same permanent modification, always on.
+     * The `onlySource` shape is unleash's and the counter-threshold rule's.
+     */
+    id: 'static-self-modification',
+    description:
+      '"~ gets +N/+N[ and has KEYWORD(S)]" / "~ has KEYWORD(S)" — the body under an "as long as …" (Krosan Beast, Skyhunter Cub)',
+    pattern: new RegExp(
+      `^~ (?:gets ([+-]\\d+)/([+-]\\d+)(?: and has ${KEYWORD_LIST_TOKEN})?|has ${KEYWORD_LIST_TOKEN})$`,
+    ),
+    build(match, ctx) {
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
+      if (!isPermanent) return null;
+      const list = match[3] ?? match[4];
+      const keywords = list === undefined ? undefined : keywordFlags(list);
+      if (list !== undefined && keywords === null) return null;
+      const power = match[1] === undefined ? undefined : Number(match[1]);
+      const toughness = match[2] === undefined ? undefined : Number(match[2]);
+      if (power === undefined && keywords === undefined) return null;
+      return {
+        statics: [
+          {
+            affects: { onlySource: true },
+            ...(power !== undefined ? { power } : {}),
+            ...(toughness !== undefined ? { toughness } : {}),
+            ...(keywords ? { keywords } : {}),
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
     // COST ASSISTANCE — Convoke (CR 702.51), Improvise (CR 702.126), Delve
     // (CR 702.66). Three names for one shape: a resource other than mana pays
     // part of this spell, and the closed `COST_ASSISTS` table in core says which
@@ -8630,7 +8953,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // The field names ONE kind, and the honest failure is a card that says so
     // rather than one that silently convokes and forgets to delve.
     id: 'cost-assist-keyword',
-    description: '"Convoke" / "Improvise" / "Delve" (Chord of Calling, Reverse Engineer, Treasure Cruise)',
+    description:
+      '"Convoke" / "Improvise" / "Delve" (Chord of Calling, Reverse Engineer, Treasure Cruise)',
     pattern: /^(convoke|improvise|delve)$/,
     build(match) {
       const kind = match[1];
@@ -8680,7 +9004,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const scope = match[1] ?? '';
       const filter = CAST_REDUCTION_SCOPES[scope];
       if (filter === undefined) return null;
-      return { castCostReduction: { amount, ...(Object.keys(filter).length > 0 ? { filter } : {}) } };
+      return {
+        castCostReduction: { amount, ...(Object.keys(filter).length > 0 ? { filter } : {}) },
+      };
     },
   },
   {
@@ -8873,16 +9199,17 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // A colour phrase always prints "you control" on the cards that use it;
       // the plain-source table covers the rest. Exactly one of the two matched.
       const sourceController: StaticControllerScope =
-        colorWord !== undefined ? 'you' : REPLACEMENT_SOURCE_SCOPES[sourcePhrase ?? ''] ?? 'any';
+        colorWord !== undefined ? 'you' : (REPLACEMENT_SOURCE_SCOPES[sourcePhrase ?? ''] ?? 'any');
       const sourceType =
-        sourcePhrase === undefined ? null : REPLACEMENT_SOURCE_TYPES[sourcePhrase] ?? null;
+        sourcePhrase === undefined ? null : (REPLACEMENT_SOURCE_TYPES[sourcePhrase] ?? null);
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
 
       const recipient = REPLACEMENT_RECIPIENTS[recipientPhrase];
       if (recipient === undefined) return null;
 
-      const times = multiplierWord === undefined ? undefined : REPLACEMENT_MULTIPLIERS[multiplierWord];
+      const times =
+        multiplierWord === undefined ? undefined : REPLACEMENT_MULTIPLIERS[multiplierWord];
       if (multiplierWord !== undefined && times === undefined) return null;
       const plus = plusToken === undefined ? undefined : parseCount(plusToken);
       if (plusToken !== undefined && plus === null) return null;
@@ -8904,7 +9231,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
               ...(sourceFilter !== undefined ? { sourceFilter } : {}),
               ...(combatWord === 'noncombat' ? { combat: false } : {}),
               ...(combatWord === 'combat' ? { combat: true } : {}),
-              ...(recipient.controller === 'any' ? {} : { recipientController: recipient.controller }),
+              ...(recipient.controller === 'any'
+                ? {}
+                : { recipientController: recipient.controller }),
               ...(recipient.kind !== undefined ? { recipientKind: recipient.kind } : {}),
             },
             outcome: {
@@ -8926,7 +9255,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * the rounding direction is printed and must not be guessed.
      */
     id: 'replacement-damage-prevent-half',
-    description: '"If a source would deal damage to X, prevent half that damage, rounded up" (Gisela)',
+    description:
+      '"If a source would deal damage to X, prevent half that damage, rounded up" (Gisela)',
     pattern: new RegExp(
       `^if ${REPLACEMENT_SOURCE_TOKEN} would deal (noncombat |combat )?damage to ${REPLACEMENT_RECIPIENT_TOKEN}, ` +
         `prevent half that damage, rounded up$`,
@@ -8947,7 +9277,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
               ...(sourceType !== null ? { sourceFilter: { anyOfTypes: [sourceType] } } : {}),
               ...(combatWord === 'noncombat' ? { combat: false } : {}),
               ...(combatWord === 'combat' ? { combat: true } : {}),
-              ...(recipient.controller === 'any' ? {} : { recipientController: recipient.controller }),
+              ...(recipient.controller === 'any'
+                ? {}
+                : { recipientController: recipient.controller }),
               ...(recipient.kind !== undefined ? { recipientKind: recipient.kind } : {}),
             },
             outcome: { preventHalfRoundedUp: true },
@@ -8986,7 +9318,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const sourceClass = match[4] === undefined ? undefined : PREVENTION_SOURCE_CLASSES[match[4]];
       if (match[4] !== undefined && sourceClass === undefined) return null;
       const combat: ReplacementApplies =
-        combatWord === 'combat' ? { combat: true } : combatWord === 'noncombat' ? { combat: false } : {};
+        combatWord === 'combat'
+          ? { combat: true }
+          : combatWord === 'noncombat'
+            ? { combat: false }
+            : {};
 
       // "TO AND DEALT BY" is TWO replacement effects, not one with two filters,
       // and that is the faithful reading: CR 615 lets each be applied to its own
@@ -9120,7 +9456,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
               ...(clause === 'except the first one you draw in each of your draw steps'
                 ? { exceptFirstDrawEachDrawStep: true }
                 : {}),
-              ...(clause === 'while your library has no cards in it' ? { requiresEmptyLibrary: true } : {}),
+              ...(clause === 'while your library has no cards in it'
+                ? { requiresEmptyLibrary: true }
+                : {}),
             },
             outcome: winsGame ? { winGame: true } : { times: drawCount as number },
             label: match[0],
@@ -9254,7 +9592,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^~ enters(?: the battlefield)? with x \+1\/\+1 counters on it\.?$/,
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
-      return { effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }] };
+      return {
+        effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }],
+      };
     },
   },
   {
@@ -9412,7 +9752,10 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // time off THIS count, exactly as a printed {X} cost is. Everything else
       // `parseManaSymbols` refuses (Phyrexian, monocolour hybrid) still reports.
       const xCount = symbols.filter((symbol) => symbol === 'X').length;
-      const manaText = symbols.filter((symbol) => symbol !== 'X').map((symbol) => `{${symbol}}`).join('');
+      const manaText = symbols
+        .filter((symbol) => symbol !== 'X')
+        .map((symbol) => `{${symbol}}`)
+        .join('');
       // A flashback cost of nothing but {X} is legal ("Flashback {X}") and pays
       // an empty base cost — `parseManaSymbols` refuses empty input, so that
       // case is handled here rather than by asking it.
@@ -9525,7 +9868,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // hold — and the cards that give the exiled card further abilities report
     // through those lines.
     id: 'suspend-cost',
-    description: '"Suspend 4—{1}{U}" — exile from hand with N time counters, tick each upkeep, cast free when the last leaves',
+    description:
+      '"Suspend 4—{1}{U}" — exile from hand with N time counters, tick each upkeep, cast free when the last leaves',
     pattern: new RegExp(`^suspend ${COUNT_TOKEN}[—-] ?((?:\\{[^}]+\\})+)$`),
     build(match) {
       const count = parseCount(match[1]);
@@ -9550,7 +9894,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // only do what the engine already runs; "activate only as a sorcery" is
     // the one trailing sentence read as timing, exactly as `compileActivatedAbility`
     // reads it. A body opening "It deals …" is the card naming itself.
-    pattern: /^(channel|bloodrush) [—-] ((?:\{[^}]+\})+), discard (?:this card|~): (.+?)(\.? ?activate only as a sorcery\.?)?$/,
+    pattern:
+      /^(channel|bloodrush) [—-] ((?:\{[^}]+\})+), discard (?:this card|~): (.+?)(\.? ?activate only as a sorcery\.?)?$/,
     build(match, ctx) {
       const kind = match[1] as 'channel' | 'bloodrush';
       const cost = parseManaSymbols(match[2] ?? '');
@@ -9823,7 +10168,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'surge-cost',
-    description: '"Surge {1}{R}" (CR 702.117a) — cast for this cost if you have cast another spell this turn',
+    description:
+      '"Surge {1}{R}" (CR 702.117a) — cast for this cost if you have cast another spell this turn',
     pattern: /^surge ((?:\{[^}]+\})+)$/,
     build(match) {
       const cost = parseManaSymbols(match[1] ?? '');
@@ -9895,7 +10241,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
                 // with one opponent there is nobody else the token could
                 // attack, so the printed sentence and the flag are the same
                 // rule. "They gain haste" is the Kiki-Jiki grant.
-                params: { perOpponent: true, grantKeywords: { haste: true, mustAttack: true }, delayedRemoval: 'sacrifice' },
+                params: {
+                  perOpponent: true,
+                  grantKeywords: { haste: true, mustAttack: true },
+                  delayedRemoval: 'sacrifice',
+                },
               },
             ],
             timing: 'sorcery',
@@ -9929,7 +10279,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'entwine-cost',
-    description: '"Entwine {3}{R}" (CR 702.42a) — pay the additional cost to choose ALL of a modal spell\'s modes',
+    description:
+      '"Entwine {3}{R}" (CR 702.42a) — pay the additional cost to choose ALL of a modal spell\'s modes',
     pattern: /^entwine ((?:\{[^}]+\})+)$/,
     build(match) {
       const cost = parseManaSymbols(match[1] ?? '');
@@ -9969,7 +10320,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // (Lunar Hatchling) are cost shapes outside the table and stay reported.
     // "~ escapes with a +1/+1 counter" is its own printed line and reports on
     // its own; the cast itself compiles.
-    pattern: new RegExp(`^escape[—-] ?((?:\\{[^}]+\\})+), exile ${COUNT_TOKEN} other cards? from your graveyard$`),
+    pattern: new RegExp(
+      `^escape[—-] ?((?:\\{[^}]+\\})+), exile ${COUNT_TOKEN} other cards? from your graveyard$`,
+    ),
     build(match, ctx) {
       if (ctx.card.typeLine.types.map((t) => t.toLowerCase()).includes('land')) return null;
       const cost = parseManaSymbols(match[1] ?? '');
@@ -10067,8 +10420,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'enters-tapped-unless-revealed',
-    description:
-      `"As ~ enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped." (the reveal-land cycles)`,
+    description: `"As ~ enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped." (the reveal-land cycles)`,
     // A DECISION, like the shockland above and unlike the board-reading
     // conditions below: holding the card does not untap the land, showing it
     // does. The engine raises a real confirm at land-play time and both answers
@@ -10088,8 +10440,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     id: 'enters-tapped-unless-few-lands',
     description:
       '"~ enters tapped unless you control two or fewer other lands" (the fastland cycle)',
-    pattern:
-      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or fewer other lands$/,
+    pattern: /^~ enters(?: the battlefield)? tapped unless you control (\w+) or fewer other lands$/,
     build(match) {
       const max = SMALL_NUMBER_WORDS[match[1]!];
       if (max === undefined) return null; // an unexpected count — report it
@@ -10103,8 +10454,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // The mirror of the fastland rule above: a fastland wants FEW other lands,
     // a slowland wants MANY. Same board read, opposite comparison, so they are
     // two entries against one condition record rather than two mechanisms.
-    pattern:
-      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more other lands$/,
+    pattern: /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more other lands$/,
     build(match) {
       const min = SMALL_NUMBER_WORDS[match[1]!];
       if (min === undefined) return null; // an unexpected count — report it
@@ -10119,8 +10469,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // point: counting land subtypes would count a nonbasic dual as a basic and
     // let the land enter untapped when the printed card would not. The count
     // reads `CardDefinition.basic`, which the compiler emits from the type line.
-    pattern:
-      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more basic lands$/,
+    pattern: /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more basic lands$/,
     build(match) {
       const min = SMALL_NUMBER_WORDS[match[1]!];
       if (min === undefined) return null;
@@ -10225,9 +10574,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // "a"/"an" is one; a number word is itself. Anything else (no count at all)
       // means the line said something this rule did not actually read.
       const minimum =
-        countWord === undefined ? null
-        : countWord === 'a' || countWord === 'an' ? 1
-        : (SMALL_NUMBER_WORDS[countWord] ?? null);
+        countWord === undefined
+          ? null
+          : countWord === 'a' || countWord === 'an'
+            ? 1
+            : (SMALL_NUMBER_WORDS[countWord] ?? null);
       if (minimum === null || minimum < 1) return null;
       const filter = permanentNounFilter(noun ?? '');
       if (!filter) return null;
@@ -10236,9 +10587,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // it must be READ, or a line carrying it would fall through to the hint.
       void other;
       const supertyped =
-        supertype === 'legendary ' ? { ...filter, legendary: true }
-        : supertype === 'basic ' ? { ...filter, basic: true }
-        : filter;
+        supertype === 'legendary '
+          ? { ...filter, legendary: true }
+          : supertype === 'basic '
+            ? { ...filter, basic: true }
+            : filter;
       return { entersTappedUnless: { controlsMatching: { filter: supertyped, minimum } } };
     },
   },
@@ -10381,7 +10734,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * pattern with a dead alternation for every card.
      */
     id: 'as-enters-choose-from-list',
-    description: '"As ~ enters, choose artifact, creature, enchantment, instant, or sorcery" (Cloud Key)',
+    description:
+      '"As ~ enters, choose artifact, creature, enchantment, instant, or sorcery" (Cloud Key)',
     pattern: /^as ~ enters, choose ((?:[a-z]+, )+or [a-z]+)$/,
     build(match) {
       const words = (match[1] ?? '')
@@ -10392,7 +10746,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         .filter(Boolean);
       // A closed table, like every other type-word read in this file: a word
       // outside it would be a menu entry no reader could ever match.
-      if (words.length === 0 || !words.every((word) => CHOOSABLE_CARD_TYPES.includes(word))) return null;
+      if (words.length === 0 || !words.every((word) => CHOOSABLE_CARD_TYPES.includes(word)))
+        return null;
       return { asEntersChoice: { subject: 'cardType', options: words } };
     },
   },
@@ -10449,7 +10804,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // SYMMETRIC — it pumps the opponent's team too, and reading it as friendly
       // would be a strictly better card than the one printed.
       const scopeWord = match[6] ?? '';
-      const narrowWord = match[7] ?? (scopeWord.startsWith('of the chosen ') ? scopeWord.slice('of the chosen '.length) : undefined);
+      const narrowWord =
+        match[7] ??
+        (scopeWord.startsWith('of the chosen ')
+          ? scopeWord.slice('of the chosen '.length)
+          : undefined);
       const scope: 'you' | 'any' = scopeWord === 'you control' ? 'you' : 'any';
       if (narrowWord !== undefined && narrowWord !== 'type' && narrowWord !== 'color') return null;
       // A card can only read a value it also NAMES. Compiling "of the chosen
@@ -10515,11 +10874,12 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * reads it — activated by the ordinary path, with no second mechanism.
      */
     id: 'static-grant-activated-ability',
-    description:
-      `"Creatures/Lands you control have <ABILITY>" / "All SUBTYPEs have <ABILITY>" (Cryptolith Rite, Chromatic Lantern)`,
+    description: `"Creatures/Lands you control have <ABILITY>" / "All SUBTYPEs have <ABILITY>" (Cryptolith Rite, Chromatic Lantern)`,
     pattern: /^(?:all |each )?([a-z]+) ?(you control|your opponents control)? ?have "(.+)"$/,
     build(match, ctx) {
-      const isPermanent = ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
       if (!isPermanent) return null;
       const ability = ctx.compileQuotedAbility(match[3] ?? '');
       if (!ability) return null;
@@ -10568,14 +10928,15 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * output as input.
      */
     id: 'static-effective-pt-evasion',
-    description:
-      `"Creatures you control with power[ or toughness] N or less can't be blocked[ by creatures with power M or greater]"`,
+    description: `"Creatures you control with power[ or toughness] N or less can't be blocked[ by creatures with power M or greater]"`,
     pattern: new RegExp(
       `^creatures you control with power( or toughness)? ${COUNT_TOKEN} or less can'?t be blocked` +
         `(?: by creatures with power ${COUNT_TOKEN} or (?:greater|more))?$`,
     ),
     build(match, ctx) {
-      const isPermanent = ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
       if (!isPermanent) return null;
       const bound = parseCount(match[2]);
       if (bound === null) return null;
@@ -10625,8 +10986,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * it, and the two map through a closed table so the next printing is a row.
      */
     id: 'static-block-bound-from-source-power',
-    description:
-      `"Creatures with power less/greater than ~'s power can't block creatures you control" (Champion of Lambholt)`,
+    description: `"Creatures with power less/greater than ~'s power can't block creatures you control" (Champion of Lambholt)`,
     pattern: new RegExp(
       `^creatures with power (${Object.keys(SOURCE_POWER_BLOCK_BOUNDS).join('|')}) than ~'?s power` +
         ` can'?t block creatures you control$`,
@@ -10634,7 +10994,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     build(match, ctx) {
       // Only a permanent radiates a static; an instant printing this shape would
       // be a one-shot effect this rule does not implement.
-      const isPermanent = ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
       if (!isPermanent) return null;
       const bound = SOURCE_POWER_BLOCK_BOUNDS[match[1] ?? ''];
       if (bound === undefined) return null;
@@ -10672,8 +11034,16 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const first = COLOR_WORDS[match[1] ?? ''];
       const second = match[2] === undefined ? undefined : COLOR_WORDS[match[2]];
       const min = parseCount(match[3]);
-      if (first === undefined || (match[2] !== undefined && second === undefined) || min === null || min <= 0) return null;
-      return { creatureUnlessDevotion: { colors: second === undefined ? [first] : [first, second], min } };
+      if (
+        first === undefined ||
+        (match[2] !== undefined && second === undefined) ||
+        min === null ||
+        min <= 0
+      )
+        return null;
+      return {
+        creatureUnlessDevotion: { colors: second === undefined ? [first] : [first, second], min },
+      };
     },
   },
   {
@@ -10848,8 +11218,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * data, so the layer that scales Torbran's damage scales this.
      */
     id: 'replacement-double-all-damage',
-    description: '"Double all damage that [creature] sources you control would deal" (Absorbing Man and Titania)',
-    pattern: new RegExp(`^double all damage that (${Object.keys(DOUBLE_ALL_DAMAGE_SOURCES).join('|')}) would deal$`),
+    description:
+      '"Double all damage that [creature] sources you control would deal" (Absorbing Man and Titania)',
+    pattern: new RegExp(
+      `^double all damage that (${Object.keys(DOUBLE_ALL_DAMAGE_SOURCES).join('|')}) would deal$`,
+    ),
     build(match, ctx) {
       if (!cardIsPermanent(ctx)) return null;
       const source = DOUBLE_ALL_DAMAGE_SOURCES[match[1] ?? ''];
@@ -10929,7 +11302,11 @@ export function joinPayloadKeywords(words: readonly string[]): string[] {
   const joined: string[] = [];
   for (const word of words) {
     const previous = joined[joined.length - 1];
-    if (previous !== undefined && QUALITY_PHRASE_PREFIX.test(previous) && isQualityContinuation(word)) {
+    if (
+      previous !== undefined &&
+      QUALITY_PHRASE_PREFIX.test(previous) &&
+      isQualityContinuation(word)
+    ) {
       joined[joined.length - 1] = `${previous} and ${word.replace(/^and /, '')}`;
       continue;
     }
@@ -11076,7 +11453,9 @@ const COPY_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
  * fact (how much mana was spent) nothing records, and "target land", which is a
  * targeted ability rather than an as-enters choice.
  */
-function parseCopySelector(text: string): Partial<Pick<CopyAsEntersSpec, 'filter' | 'from' | 'whose'>> | null {
+function parseCopySelector(
+  text: string,
+): Partial<Pick<CopyAsEntersSpec, 'filter' | 'from' | 'whose'>> | null {
   const trimmed = text.trim();
   const graveyard = trimmed.match(/^any ([a-z ]+?) card in a graveyard$/);
   if (graveyard) {
@@ -11155,7 +11534,8 @@ function parseCopyException(clause: string, ctx: RuleContext): CopyExceptions | 
   }
   // "it's legendary" — the supertype form, which the branch above deliberately
   // does not swallow (a supertype is not "another type").
-  if (/^it'?s legendary(?: in addition to its other types)?$/.test(clause)) return { legendary: true };
+  if (/^it'?s legendary(?: in addition to its other types)?$/.test(clause))
+    return { legendary: true };
   // "it isn't legendary" (Spark Double) / "THE TOKEN isn't legendary" (Helm of
   // the Host). The two nouns name the same object in these clauses — a token
   // copy's "except" tail is about the token it is making — so they are one rule
@@ -11186,7 +11566,9 @@ function mergeCopyExceptions(base: CopyExceptions, patch: CopyExceptions): CopyE
   return {
     ...base,
     ...patch,
-    ...(base.addTypes || patch.addTypes ? { addTypes: [...(base.addTypes ?? []), ...(patch.addTypes ?? [])] } : {}),
+    ...(base.addTypes || patch.addTypes
+      ? { addTypes: [...(base.addTypes ?? []), ...(patch.addTypes ?? [])] }
+      : {}),
     ...(base.addSubtypes || patch.addSubtypes
       ? { addSubtypes: [...(base.addSubtypes ?? []), ...(patch.addSubtypes ?? [])] }
       : {}),
@@ -11258,39 +11640,42 @@ function buildCopyAsEnters(
  * as plain "target creature you control" would let Orthion copy itself, which is
  * a card playing wider than printed.
  */
-const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
-  'target creature': { targets: CREATURE_TARGET },
-  // "a copy of ANOTHER target nonland permanent you control" (Extravagant
-  // Replication). "Another" rides as `excludeSelf`, which the trigger-body
-  // compiler lifts onto the ability so the aiming pass never offers the source.
-  'another target nonland permanent you control': {
-    targets: NONLAND_PERMANENT_YOU_CONTROL_TARGET,
-    excludeSelf: true,
-  },
-  'target creature you control': { targets: CREATURE_YOU_CONTROL_TARGET },
-  // "target NONLEGENDARY creature you control" (Kiki-Jiki, Fable of the
-  // Mirror-Breaker). Its own restriction rather than an approximation: the
-  // printed word is the entire reason Kiki-Jiki cannot copy itself.
-  'target nonlegendary creature you control': { targets: NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET },
-  'target artifact': { targets: ARTIFACT_TARGET },
-  // "a copy of target TOKEN you control" (Caretaker's Talent). Its own
-  // restriction, reading the CR 111.1 token-ness stamp — "token" is a property
-  // of how the object was made, which no type-line filter can express.
-  'target token you control': { targets: TOKEN_YOU_CONTROL_TARGET },
-  'target artifact or creature you control': { targets: ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET },
-  'target permanent': { targets: PERMANENT_TARGET },
-  // "a copy of equipped creature" (Helm of the Host) / "of enchanted artifact"
-  // (Mechanized Production): the source's HOST, not a target. One param covers
-  // both printings because the engine models both with `attachedTo`.
-  'equipped creature': { equipped: true },
-  'enchanted creature': { equipped: true },
-  'enchanted artifact': { equipped: true },
-  'enchanted permanent': { equipped: true },
-  // "a copy of this creature" (Giant Adephage, Homunculus Horde) — `~` after the
-  // self-reference pass. No target at all, which is what makes it legal inside a
-  // triggered ability.
-  '~': { self: true },
-});
+const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unknown>>>> =
+  Object.freeze({
+    'target creature': { targets: CREATURE_TARGET },
+    // "a copy of ANOTHER target nonland permanent you control" (Extravagant
+    // Replication). "Another" rides as `excludeSelf`, which the trigger-body
+    // compiler lifts onto the ability so the aiming pass never offers the source.
+    'another target nonland permanent you control': {
+      targets: NONLAND_PERMANENT_YOU_CONTROL_TARGET,
+      excludeSelf: true,
+    },
+    'target creature you control': { targets: CREATURE_YOU_CONTROL_TARGET },
+    // "target NONLEGENDARY creature you control" (Kiki-Jiki, Fable of the
+    // Mirror-Breaker). Its own restriction rather than an approximation: the
+    // printed word is the entire reason Kiki-Jiki cannot copy itself.
+    'target nonlegendary creature you control': {
+      targets: NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET,
+    },
+    'target artifact': { targets: ARTIFACT_TARGET },
+    // "a copy of target TOKEN you control" (Caretaker's Talent). Its own
+    // restriction, reading the CR 111.1 token-ness stamp — "token" is a property
+    // of how the object was made, which no type-line filter can express.
+    'target token you control': { targets: TOKEN_YOU_CONTROL_TARGET },
+    'target artifact or creature you control': { targets: ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET },
+    'target permanent': { targets: PERMANENT_TARGET },
+    // "a copy of equipped creature" (Helm of the Host) / "of enchanted artifact"
+    // (Mechanized Production): the source's HOST, not a target. One param covers
+    // both printings because the engine models both with `attachedTo`.
+    'equipped creature': { equipped: true },
+    'enchanted creature': { equipped: true },
+    'enchanted artifact': { equipped: true },
+    'enchanted permanent': { equipped: true },
+    // "a copy of this creature" (Giant Adephage, Homunculus Horde) — `~` after the
+    // self-reference pass. No target at all, which is what makes it legal inside a
+    // triggered ability.
+    '~': { self: true },
+  });
 
 /** How many tokens each printed count word makes. */
 const TOKEN_COPY_COUNTS: Readonly<Record<string, number>> = Object.freeze({
@@ -11364,7 +11749,9 @@ function buildTokenCopy(
   // ref rather than a second `ifKicked`-guarded effect — which would create the
   // base token AND five more.
   let kickedCount = 0;
-  const kicked = body.match(/\. if this spell was kicked, create (a|an|one|two|three|four|five) of those tokens instead$/);
+  const kicked = body.match(
+    /\. if this spell was kicked, create (a|an|one|two|three|four|five) of those tokens instead$/,
+  );
   if (kicked) {
     const kickedValue = TOKEN_COPY_COUNTS[kicked[1] ?? ''];
     if (kickedValue === undefined) return null;
@@ -11481,7 +11868,6 @@ function productionFromColors(colors: readonly ManaColor[]): ManaProduction {
 /** Split an "or"-list of mana runs ("{w}, {u}, or {b}") into its alternatives. */
 const MANA_ALTERNATIVE_SEPARATOR = /,? or |, /;
 
-
 /**
  * An optional printed ability-word label, for a pattern that must see past one.
  *
@@ -11586,31 +11972,45 @@ function manaAmountFromPhrase(phrase: string): ManaAmountSource | null {
  */
 function parseDerivedManaPayload(
   payload: string,
-): { readonly produces: readonly ManaProduction[]; readonly amount: ManaAmountSource; readonly anyCombination?: true } | null {
+): {
+  readonly produces: readonly ManaProduction[];
+  readonly amount: ManaAmountSource;
+  readonly anyCombination?: true;
+} | null {
   const text = payload.trim();
   const forEach = /^((?:\{[wubrgc]\})+) for each (.+)$/.exec(text);
   if (forEach) {
     const colors = manaSymbols(forEach[1] ?? '');
     const amount = manaAmountSourceOf(derivedEachValue(forEach[2] ?? ''));
-    return colors === null || amount === null ? null : { produces: [productionFromColors(colors)], amount };
+    return colors === null || amount === null
+      ? null
+      : { produces: [productionFromColors(colors)], amount };
   }
   const equalTo = /^an amount of (\{[wubrgc]\}) equal to (.+)$/.exec(text);
   if (equalTo) {
     const colors = manaSymbols(equalTo[1] ?? '');
     const amount = manaAmountFromPhrase(equalTo[2] ?? '');
-    return colors === null || amount === null ? null : { produces: [productionFromColors(colors)], amount };
+    return colors === null || amount === null
+      ? null
+      : { produces: [productionFromColors(colors)], amount };
   }
   const anyOne = /^x mana of any one color, where x is (.+)$/.exec(text);
   if (anyOne) {
     const amount = manaAmountFromPhrase(anyOne[1] ?? '');
-    return amount === null ? null : { produces: ANY_COLOR.map((color) => productionFromColors([color])), amount };
+    return amount === null
+      ? null
+      : { produces: ANY_COLOR.map((color) => productionFromColors([color])), amount };
   }
   const combination = /^x mana in any combination of colors, where x is (.+)$/.exec(text);
   if (combination) {
     const amount = manaAmountFromPhrase(combination[1] ?? '');
     return amount === null
       ? null
-      : { produces: ANY_COLOR.map((color) => productionFromColors([color])), amount, anyCombination: true };
+      : {
+          produces: ANY_COLOR.map((color) => productionFromColors([color])),
+          amount,
+          anyCombination: true,
+        };
   }
   return null;
 }
@@ -11912,8 +12312,7 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     // ever build modes, never a bundle.)
     id: 'tap-for-mana-choice',
     description: '"{T}: Add {W} or {U}" / "{T}: Add {W}, {U}, {B}, {R}, or {G}"',
-    pattern:
-      /^\{t\}: add ((?:\{[wubrgc]\})+(?:,? or (?:\{[wubrgc]\})+|, (?:\{[wubrgc]\})+)+)$/,
+    pattern: /^\{t\}: add ((?:\{[wubrgc]\})+(?:,? or (?:\{[wubrgc]\})+|, (?:\{[wubrgc]\})+)+)$/,
     build(match) {
       const alternatives = (match[1] ?? '').split(MANA_ALTERNATIVE_SEPARATOR);
       const producesOptions: ManaProduction[] = [];
@@ -11962,9 +12361,7 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     // a life cost.
     id: 'mana-ability-with-rider',
     description: '"{T}: Add {R} or {W}. ~ deals 1 damage to you" (the pain lands)',
-    pattern: new RegExp(
-      `^\\{t\\}: add (.+)\\. (?:~|it) deals ${COUNT_TOKEN} damage to you$`,
-    ),
+    pattern: new RegExp(`^\\{t\\}: add (.+)\\. (?:~|it) deals ${COUNT_TOKEN} damage to you$`),
     build(match) {
       const produces = parseManaPayload(match[1] ?? '');
       const amount = parseCount(match[2]);
@@ -12105,7 +12502,9 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       const derivedIncludesColorless = match[1] === 'type';
       return {
         manaAbilities: [
-          derivedIncludesColorless ? { derivedColors, derivedIncludesColorless } : { derivedColors },
+          derivedIncludesColorless
+            ? { derivedColors, derivedIncludesColorless }
+            : { derivedColors },
         ],
       };
     },
@@ -12174,7 +12573,13 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
         manaAbilities: [
           {
             produces: [{}],
-            rider: { parley: { manaPerNonland: productionFromColors(colors), lifePerNonland: life, thenEachPlayerDraws: true } },
+            rider: {
+              parley: {
+                manaPerNonland: productionFromColors(colors),
+                lifePerNonland: life,
+                thenEachPlayerDraws: true,
+              },
+            },
             label: 'Parley: reveal, add mana per nonland card, then each player draws',
           },
         ],
@@ -12347,7 +12752,8 @@ function backupGrantedKeywords(ctx: RuleContext): KeywordFlags | null {
       asStatic = rule.build(found, ctx);
       if (asStatic) break;
     }
-    if (asStatic === null || asStatic.keywords === undefined || Object.keys(asStatic).length !== 1) return null;
+    if (asStatic === null || asStatic.keywords === undefined || Object.keys(asStatic).length !== 1)
+      return null;
     Object.assign(granted, asStatic.keywords);
   }
   return granted as KeywordFlags;
@@ -12431,7 +12837,10 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     fear: () => ({
       keywords: {
         blockRestriction: {
-          blockerMustMatchAnyOf: [{ kind: 'artifact' as const }, { kind: 'color' as const, color: 'B' as const }],
+          blockerMustMatchAnyOf: [
+            { kind: 'artifact' as const },
+            { kind: 'color' as const, color: 'B' as const },
+          ],
         },
       },
     }),
@@ -12441,7 +12850,10 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     intimidate: () => ({
       keywords: {
         blockRestriction: {
-          blockerMustMatchAnyOf: [{ kind: 'artifact' as const }, { kind: 'sharesColorWithAttacker' as const }],
+          blockerMustMatchAnyOf: [
+            { kind: 'artifact' as const },
+            { kind: 'sharesColorWithAttacker' as const },
+          ],
         },
       },
     }),
@@ -12450,7 +12862,10 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     // restriction is what names it. Carrying both is why a horseman blocks a
     // horseman.
     horsemanship: () => ({
-      keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship' as const] } },
+      keywords: {
+        horsemanship: true,
+        blockRestriction: { blockerMustHaveAnyOf: ['horsemanship' as const] },
+      },
     }),
     // --- the combat keyword family (DESIGN §3.107) ------------------------------
     // EXALTED (CR 702.83a) — "Whenever a creature you control attacks alone,
@@ -12465,7 +12880,10 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
         {
           condition: { on: 'creatureAttacksAlone' as const },
           effects: [
-            { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1, subject: 'triggering' } },
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: 1, toughness: 1, subject: 'triggering' },
+            },
           ],
           label: 'Exalted',
         },
@@ -12480,9 +12898,15 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
       keywords: { flanking: true },
       triggers: [
         {
-          condition: { on: 'becomesBlockedByCreature' as const, counterpartLacksKeyword: 'flanking' as const },
+          condition: {
+            on: 'becomesBlockedByCreature' as const,
+            counterpartLacksKeyword: 'flanking' as const,
+          },
           effects: [
-            { primitive: 'pumpUntilEndOfTurn', params: { power: -1, toughness: -1, subject: 'triggering' } },
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: -1, toughness: -1, subject: 'triggering' },
+            },
           ],
           label: 'Flanking',
         },
@@ -12518,14 +12942,23 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
       graveyardCasts: [
         {
           kind: 'retrace' as const,
-          additional: { kind: 'discard' as const, filter: { anyOfTypes: ['land' as const] }, label: 'Discard a land card' },
+          additional: {
+            kind: 'discard' as const,
+            filter: { anyOfTypes: ['land' as const] },
+            label: 'Discard a land card',
+          },
         },
       ],
     }),
     // JUMP-START (CR 702.133a) — the same shape with "discard a card", and
     // "then exile this card" (the flashback exit).
     'jump-start': () => ({
-      graveyardCasts: [{ kind: 'jumpStart' as const, additional: { kind: 'discard' as const, label: 'Discard a card' } }],
+      graveyardCasts: [
+        {
+          kind: 'jumpStart' as const,
+          additional: { kind: 'discard' as const, label: 'Discard a card' },
+        },
+      ],
     }),
     // --- the counter keyword family (DESIGN §3.110) ------------------------------
     // UNDYING (CR 702.93a) — "When this creature dies, if it had no +1/+1
@@ -12596,8 +13029,13 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     dethrone: () => ({
       triggers: [
         {
-          condition: { on: 'attacks' as const, intervening: { kind: 'opponentHasMostLife' as const } },
-          effects: [{ primitive: 'addCounters', params: { amount: DETHRONE_COUNTERS, self: true } }],
+          condition: {
+            on: 'attacks' as const,
+            intervening: { kind: 'opponentHasMostLife' as const },
+          },
+          effects: [
+            { primitive: 'addCounters', params: { amount: DETHRONE_COUNTERS, self: true } },
+          ],
           label: 'Dethrone',
         },
       ],
@@ -12815,7 +13253,8 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // again. Every trigger this engine has hangs off a permanent's definition
     // (`triggers.ts` collects them from the battlefield), so there is nowhere
     // for one to live.
-    pattern: /\b(?:sacrifice|exile) (?:it|them|those tokens|this token) at the beginning of the (?:next end step|end step)\b/,
+    pattern:
+      /\b(?:sacrifice|exile) (?:it|them|those tokens|this token) at the beginning of the (?:next end step|end step)\b/,
     missingEngineSystem:
       'a DELAYED triggered ability created at resolution ("sacrifice it at the beginning of the next end step" — CR 603.7); token copies themselves are implemented, and a copy compiled without this clause would be strictly better than the printed card',
   },
@@ -12857,7 +13296,8 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //    graveyard, copy that spell TWICE instead" (Increasing Vengeance). The
     //    count itself is a param on the copy ref; what is missing is a condition
     //    on the zone the spell was cast from.
-    pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
+    pattern:
+      /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
     missingEngineSystem:
       'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies with the "you control" scopes, token copies — tapped, "nonlegendary"/"artifact or creature" targets, a haste-grant follow-up sentence and a delayed "sacrifice/exile it at the beginning of the next end step" are ALL implemented; so are the "token you control" target, the "for each token you control" iteration and the "create a copy … instead" board-conditional substitution; what is missing is this selector or tail: "copy THAT spell" naming the spell that triggered the ability, an "except …" tail on a SPELL copy, or a copy COUNT conditional on where the spell was cast from)',
   },
@@ -13088,7 +13528,8 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //   - a per-combat TARGETED requirement ("target creature blocks it this
     //     combat if able" — Fighter Class), which is combat state rather than a
     //     characteristic, and a COST to block (Archangel of Tithes).
-    pattern: /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
+    pattern:
+      /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
     missingEngineSystem:
       'a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)',
   },
@@ -13160,7 +13601,8 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // read — Tarmogoyf plays as printed). What still lands here is a FORMULA
     // outside that vocabulary, or a P/T that changes by some other rule.
     pattern: /power is equal to|toughness is equal to|power and toughness are each equal/,
-    missingEngineSystem: 'a characteristic-defining P/T formula the compiler does not recognize yet',
+    missingEngineSystem:
+      'a characteristic-defining P/T formula the compiler does not recognize yet',
   },
   {
     // {X} costs ARE payable now (a cast-time chooseNumber the engine charges),
@@ -13170,7 +13612,10 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\{x\}|\bx damage\b|\bequal to\b/,
     missingEngineSystem: 'an {X} or derived-value template the compiler does not recognize yet',
   },
-  { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'an activated-ability template the compiler does not recognize yet' },
+  {
+    pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/,
+    missingEngineSystem: 'an activated-ability template the compiler does not recognize yet',
+  },
   // --- replacement & prevention: the LAYER SHIPPED, so these name the residual ---
   //
   // Core now has a real CR 614/615 layer (`packages/core/src/replacement.ts`) that
@@ -13253,7 +13698,10 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /gain control of target/,
     missingEngineSystem: 'a gain-control template the compiler does not recognize yet',
   },
-  { pattern: /\bfights?\b/, missingEngineSystem: 'a fight template the compiler does not recognize yet' },
+  {
+    pattern: /\bfights?\b/,
+    missingEngineSystem: 'a fight template the compiler does not recognize yet',
+  },
   {
     // `TargetRestriction` CAN now say "a player who isn't you" ('opponent'), so
     // what still lands here is an opponent-targeting template with no rule yet —
@@ -13282,7 +13730,8 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // What still lands here is a static whose SELECTOR is outside the filter
     // (by power, by tapped-ness, "as long as you control…") or one that is not
     // a plain P/T-and-keyword modification.
-    pattern: /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
+    pattern:
+      /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
     missingEngineSystem: 'a static-buff template the compiler does not recognize yet',
   },
   {
@@ -13452,7 +13901,10 @@ const BOUND_TAIL = new RegExp(
 );
 
 /** The printed COLOUR form, which sits before the noun rather than after it. */
-const BOUND_COLOUR = new RegExp(`\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`, 'gi');
+const BOUND_COLOUR = new RegExp(
+  `\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`,
+  'gi',
+);
 
 /**
  * The printed adjective "**nontoken**", which sits before the noun — alone
@@ -13476,7 +13928,9 @@ function parseBoundPhrase(phrase: string): TargetBound | null {
   if (keyword) {
     const flag = TARGET_BOUND_KEYWORDS[(keyword[2] ?? '').toLowerCase()];
     if (flag === undefined) return null;
-    return (keyword[1] ?? '').toLowerCase() === 'with' ? { withKeyword: flag } : { withoutKeyword: flag };
+    return (keyword[1] ?? '').toLowerCase() === 'with'
+      ? { withKeyword: flag }
+      : { withoutKeyword: flag };
   }
   const numeric = new RegExp(
     `^with (${TARGET_BOUND_PROPERTY_PHRASE}) (\\d+) (${TARGET_BOUND_DIRECTION_PHRASE})$`,
@@ -13488,7 +13942,9 @@ function parseBoundPhrase(phrase: string): TargetBound | null {
     if (property === undefined || direction === undefined) return null;
     const value = Number(numeric[2]);
     if (!Number.isInteger(value)) return null;
-    return direction === 'atLeast' ? { atLeast: { property, value } } : { atMost: { property, value } };
+    return direction === 'atLeast'
+      ? { atLeast: { property, value } }
+      : { atMost: { property, value } };
   }
   return null;
 }
@@ -13508,6 +13964,167 @@ export interface StrippedTargetBound {
  * guessing which one the bound belongs to is how a closed table stops being
  * closed. Those cards keep reporting, with their number.
  */
+// ===========================================================================
+// §3.169 — "AS LONG AS …": WHEN A STATIC IS ON
+//
+// The printed condition is stripped from a static line, the remainder compiles
+// through the ordinary STATIC_RULES, and the condition is attached to every
+// static that came back (`applyStaticCondition`). One pre-pass, so every static
+// body — a self pump, a team anthem, a granted keyword — gains the whole
+// condition vocabulary in one edit; and a CLOSED table of conditions, so a
+// printed condition outside it leaves the whole line REPORTING rather than
+// compiling a static that is silently always on.
+// ===========================================================================
+
+/** The result of stripping a printed "as long as" from a static line. */
+export interface StrippedStaticCondition {
+  /** The line with the condition removed — the static body the rules read. */
+  readonly clause: string;
+  readonly condition: StaticCondition;
+}
+
+/**
+ * The printed conditions, as a table: each row is the regex that reads it and
+ * the closed-union member it becomes. A row that recognises the shape but
+ * cannot transcribe this instance (a count phrase outside the vocabulary)
+ * returns null and the line reports.
+ */
+const STATIC_CONDITION_SHAPES: ReadonlyArray<{
+  readonly pattern: RegExp;
+  readonly build: (match: RegExpMatchArray) => StaticCondition | null;
+}> = [
+  {
+    // "there are seven or more cards in your graveyard" / "seven or more cards
+    // are in your graveyard" (threshold) · "there are four or more card types
+    // among cards in your graveyard" (delirium) · "there are three or more
+    // creature cards in your graveyard". The noun phrase is looked up in the
+    // ONE count vocabulary, so "cards in your graveyard" here is the same set a
+    // pump "for each card in your graveyard" counts.
+    pattern: new RegExp(
+      `^(?:there (?:are|is) ${COUNT_TOKEN} or more (.+?) in your graveyard|${COUNT_TOKEN} or more (.+?) are in your graveyard)$`,
+    ),
+    build(match) {
+      const min = parseCount(match[1] ?? match[3]);
+      const nouns = match[2] ?? match[4] ?? '';
+      const count = derivedValue(`${nouns} in your graveyard`);
+      if (min === null || min <= 0 || count === null) return null;
+      return { kind: 'countAtLeast', count: count as StaticCountSource, min };
+    },
+  },
+  {
+    // "you control three or more artifacts" (metalcraft) · "you control two or
+    // more Equipment". The plural noun with "you control" is a row of the same
+    // vocabulary.
+    pattern: new RegExp(`^you control ${COUNT_TOKEN} or more ([a-z]+)$`),
+    build(match) {
+      const min = parseCount(match[1]);
+      const count = derivedValue(`${match[2] ?? ''} you control`);
+      if (min === null || min <= 0 || count === null) return null;
+      return { kind: 'countAtLeast', count: count as StaticCountSource, min };
+    },
+  },
+  {
+    // "you control an artifact" · "you control a Gate" · "you control ANOTHER
+    // Elf" — the singular spellings point at the plural rows exactly as the
+    // "for each …" spellings do (`FILTERED_EACH_TO_PLURAL`); "another" excludes
+    // the source from its own count.
+    pattern: /^you control (an?|another) ([a-z]+)$/,
+    build(match) {
+      const singular = `${match[2] ?? ''} you control`;
+      const plural = DERIVED_EACH_TO_PLURAL[singular] ?? FILTERED_EACH_TO_PLURAL[singular];
+      const count = plural === undefined ? null : derivedValue(plural);
+      if (count === null) return null;
+      return {
+        kind: 'countAtLeast',
+        count: count as StaticCountSource,
+        min: 1,
+        ...(match[1] === 'another' ? { excludeSource: true } : {}),
+      };
+    },
+  },
+  {
+    // "~ is equipped" · "it's enchanted".
+    pattern: /^(?:~ is|it's) (equipped|enchanted)$/,
+    build(match) {
+      return { kind: 'sourceAttached', by: match[1] === 'equipped' ? 'Equipment' : 'Aura' };
+    },
+  },
+  {
+    // "~ is untapped" (Static Orb) · "it's tapped".
+    pattern: /^(?:~ is|it's) (un)?tapped$/,
+    build(match) {
+      return { kind: 'sourceTapped', tapped: match[1] === undefined };
+    },
+  },
+  {
+    // "it's attacking" (Kor Scythemaster) · "~ is attacking".
+    pattern: /^(?:~ is|it's) attacking$/,
+    build() {
+      return { kind: 'sourceAttacking' };
+    },
+  },
+  {
+    // "you have 5 or less life" (Gavony Ironwright, Village Survivors).
+    pattern: new RegExp(`^you have ${COUNT_TOKEN} or less life$`),
+    build(match) {
+      const max = parseCount(match[1]);
+      return max === null ? null : { kind: 'lifeAtMost', max };
+    },
+  },
+];
+
+/** The closed-union member a printed condition means, or null when it is outside the table. */
+export function staticConditionOf(text: string): StaticCondition | null {
+  const condition = text.trim().replace(/\.$/, '');
+  for (const row of STATIC_CONDITION_SHAPES) {
+    const match = condition.match(row.pattern);
+    if (match) return row.build(match);
+  }
+  return null;
+}
+
+/**
+ * Strip a printed "as long as …" from a static line, in either printed order:
+ * the TAIL ("~ gets +2/+2 as long as it's equipped") or the PREFIX ("As long as
+ * ~ is equipped, it gets +2/+2" — where the remainder's "it" is the source, so
+ * it is rewritten to `~` for the self-static rule). Returns null when the line
+ * prints no condition, or one outside the table — so the caller compiles
+ * nothing and the line reports.
+ */
+export function stripStaticCondition(clause: string): StrippedStaticCondition | null {
+  const tail = /^(.+?) as long as (.+?)\.?$/.exec(clause);
+  if (tail) {
+    const condition = staticConditionOf(tail[2] ?? '');
+    return condition === null ? null : { clause: (tail[1] ?? '').trim(), condition };
+  }
+  const prefix = /^as long as (.+?), (.+)$/.exec(clause);
+  if (prefix) {
+    const condition = staticConditionOf(prefix[1] ?? '');
+    if (condition === null) return null;
+    return { clause: (prefix[2] ?? '').trim().replace(/^it /, '~ '), condition };
+  }
+  return null;
+}
+
+/**
+ * Attach a stripped condition to what the body compiled to. Only a contribution
+ * that is NOTHING BUT statics may carry it: an attachment's modification, an
+ * effect or a trigger that came back would be a body whose condition means
+ * something this layer does not model (an Aura's "as long as IT'S untapped" is
+ * about the host, not the source), and it refuses rather than guessing.
+ */
+export function applyStaticCondition(
+  contribution: ClauseContribution,
+  condition: StaticCondition,
+): ClauseContribution | null {
+  const statics = contribution.statics;
+  if (statics === undefined || statics.length === 0) return null;
+  for (const key of Object.keys(contribution)) {
+    if (key !== 'statics') return null;
+  }
+  return { statics: statics.map((ability) => ({ ...ability, activeWhile: condition })) };
+}
+
 export function stripTargetBound(clause: string): StrippedTargetBound | null {
   let text = clause;
   let bound: TargetBound = {};
@@ -13592,7 +14209,10 @@ export function applyTargetBoundToContribution(
   return null;
 }
 
-export function applyTargetBound(effects: readonly EffectRef[], bound: TargetBound): EffectRef[] | null {
+export function applyTargetBound(
+  effects: readonly EffectRef[],
+  bound: TargetBound,
+): EffectRef[] | null {
   const declared = new Set<string>();
   for (const ref of effects) {
     const value = ref.params?.[TARGET_RESTRICTION_PARAM];
