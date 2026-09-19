@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T07:14:17.253Z",
+  "generatedAt": "2026-09-19T09:02:57.569Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7134,
+  "requested": 7147,
   "unresolved": [],
   "cards": [
     {
@@ -18875,6 +18875,61 @@
       "faces": []
     },
     {
+      "id": "19353629-07be-47e2-a7d5-3a5e5e1120c8",
+      "name": "Aspect of Hydra",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Target creature gets +X/+X until end of turn, where X is your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "bng",
+      "collectorNumber": "117",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.jpg?1783939539",
+        "normal": "https://cards.scryfall.io/normal/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.jpg?1783939539",
+        "large": "https://cards.scryfall.io/large/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.jpg?1783939539",
+        "png": "https://cards.scryfall.io/png/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.png?1783939539",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.jpg?1783939539",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.jpg?1783939539",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.webp?1783939539",
+        "grid": "https://cards.scryfall.io/grid/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.webp?1783939539",
+        "display": "https://cards.scryfall.io/display/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.webp?1783939539",
+        "art": "https://cards.scryfall.io/art/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.webp?1783939539",
+        "crop": "https://cards.scryfall.io/crop/front/1/9/19353629-07be-47e2-a7d5-3a5e5e1120c8.webp?1783939539"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b3eb61f4-627b-4f42-85aa-eb676a035fbd",
       "name": "Aspect of Mongoose",
       "manaCost": {
@@ -34533,6 +34588,63 @@
         "display": "https://cards.scryfall.io/display/front/c/0/c0f828c7-aedc-462b-8455-46e8a90feb85.webp?1783942712",
         "art": "https://cards.scryfall.io/art/front/c/0/c0f828c7-aedc-462b-8455-46e8a90feb85.webp?1783942712",
         "crop": "https://cards.scryfall.io/crop/front/c/0/c0f828c7-aedc-462b-8455-46e8a90feb85.webp?1783942712"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7865c079-1d91-48d4-852d-d104b6e0c157",
+      "name": "Blight-Breath Catoblepas",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Beast"
+        ]
+      },
+      "rawTypeLine": "Creature — Beast",
+      "oracleText": "When this creature enters, target creature an opponent controls gets -X/-X until end of turn, where X is your devotion to black. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "thb",
+      "collectorNumber": "86",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.jpg?1783931570",
+        "normal": "https://cards.scryfall.io/normal/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.jpg?1783931570",
+        "large": "https://cards.scryfall.io/large/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.jpg?1783931570",
+        "png": "https://cards.scryfall.io/png/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.png?1783931570",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.jpg?1783931570",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.jpg?1783931570",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.webp?1783931570",
+        "grid": "https://cards.scryfall.io/grid/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.webp?1783931570",
+        "display": "https://cards.scryfall.io/display/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.webp?1783931570",
+        "art": "https://cards.scryfall.io/art/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.webp?1783931570",
+        "crop": "https://cards.scryfall.io/crop/front/7/8/7865c079-1d91-48d4-852d-d104b6e0c157.webp?1783931570"
       },
       "localImages": {},
       "layout": "normal",
@@ -165414,6 +165526,130 @@
       "faces": []
     },
     {
+      "id": "b83e9693-4996-498c-95f7-884d40341298",
+      "name": "Heliod, God of the Sun",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to white is less than five, Heliod isn't a creature. (Each {W} in the mana costs of permanents you control counts toward your devotion to white.)\nOther creatures you control have vigilance.\n{2}{W}{W}: Create a 2/1 white Cleric enchantment creature token.",
+      "power": 5,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "cmm",
+      "collectorNumber": "826",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/8/b83e9693-4996-498c-95f7-884d40341298.jpg?1783915449",
+        "normal": "https://cards.scryfall.io/normal/front/b/8/b83e9693-4996-498c-95f7-884d40341298.jpg?1783915449",
+        "large": "https://cards.scryfall.io/large/front/b/8/b83e9693-4996-498c-95f7-884d40341298.jpg?1783915449",
+        "png": "https://cards.scryfall.io/png/front/b/8/b83e9693-4996-498c-95f7-884d40341298.png?1783915449",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/8/b83e9693-4996-498c-95f7-884d40341298.jpg?1783915449",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/8/b83e9693-4996-498c-95f7-884d40341298.jpg?1783915449",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/8/b83e9693-4996-498c-95f7-884d40341298.webp?1783915449",
+        "grid": "https://cards.scryfall.io/grid/front/b/8/b83e9693-4996-498c-95f7-884d40341298.webp?1783915449",
+        "display": "https://cards.scryfall.io/display/front/b/8/b83e9693-4996-498c-95f7-884d40341298.webp?1783915449",
+        "art": "https://cards.scryfall.io/art/front/b/8/b83e9693-4996-498c-95f7-884d40341298.webp?1783915449",
+        "crop": "https://cards.scryfall.io/crop/front/b/8/b83e9693-4996-498c-95f7-884d40341298.webp?1783915449"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3245ff74-1f9c-4518-a23f-1579f338f232",
+      "name": "Heliod, Sun-Crowned",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to white is less than five, Heliod isn't a creature.\nWhenever you gain life, put a +1/+1 counter on target creature or enchantment you control.\n{1}{W}: Another target creature gains lifelink until end of turn.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "cmm",
+      "collectorNumber": "29",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.jpg?1783915722",
+        "normal": "https://cards.scryfall.io/normal/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.jpg?1783915722",
+        "large": "https://cards.scryfall.io/large/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.jpg?1783915722",
+        "png": "https://cards.scryfall.io/png/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.png?1783915722",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.jpg?1783915722",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.jpg?1783915722",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.webp?1783915722",
+        "grid": "https://cards.scryfall.io/grid/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.webp?1783915722",
+        "display": "https://cards.scryfall.io/display/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.webp?1783915722",
+        "art": "https://cards.scryfall.io/art/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.webp?1783915722",
+        "crop": "https://cards.scryfall.io/crop/front/3/2/3245ff74-1f9c-4518-a23f-1579f338f232.webp?1783915722"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "cafce2f5-f4f4-465b-96dc-bcdd29d4e4bb",
       "name": "Heliod's Pilgrim",
       "manaCost": {
@@ -182319,6 +182555,70 @@
       "faces": []
     },
     {
+      "id": "b4036bb7-835d-4690-aca1-1ab566776e9a",
+      "name": "Iroas, God of Victory",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to red and white is less than seven, Iroas isn't a creature.\nCreatures you control have menace.\nPrevent all damage that would be dealt to attacking creatures you control.",
+      "power": 7,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R",
+        "W"
+      ],
+      "colorIdentity": [
+        "R",
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "c16",
+      "collectorNumber": "205",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.jpg?1783937048",
+        "normal": "https://cards.scryfall.io/normal/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.jpg?1783937048",
+        "large": "https://cards.scryfall.io/large/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.jpg?1783937048",
+        "png": "https://cards.scryfall.io/png/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.png?1783937048",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.jpg?1783937048",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.jpg?1783937048",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.webp?1783937048",
+        "grid": "https://cards.scryfall.io/grid/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.webp?1783937048",
+        "display": "https://cards.scryfall.io/display/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.webp?1783937048",
+        "art": "https://cards.scryfall.io/art/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.webp?1783937048",
+        "crop": "https://cards.scryfall.io/crop/front/b/4/b4036bb7-835d-4690-aca1-1ab566776e9a.webp?1783937048"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "c0441583-c9d5-47a1-8754-c9162cec64bc",
       "name": "Iroas's Champion",
       "manaCost": {
@@ -184460,6 +184760,65 @@
         "normal": "izzet-signet-normal.jpg",
         "art_crop": "izzet-signet-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7051cdfa-509e-4d84-bbae-f77556c861e4",
+      "name": "Jace, Architect of Thought",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Planeswalker"
+        ],
+        "subtypes": [
+          "Jace"
+        ]
+      },
+      "rawTypeLine": "Legendary Planeswalker — Jace",
+      "oracleText": "+1: Until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn.\n−2: Reveal the top three cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other on the bottom of your library in any order.\n−8: For each player, search that player's library for a nonland card and exile it, then that player shuffles. You may cast those cards without paying their mana costs.",
+      "power": null,
+      "toughness": null,
+      "loyalty": 4,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "cmm",
+      "collectorNumber": "851",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "large": "https://cards.scryfall.io/large/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "png": "https://cards.scryfall.io/png/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.png?1783915441",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.jpg?1783915441",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "grid": "https://cards.scryfall.io/grid/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "display": "https://cards.scryfall.io/display/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "art": "https://cards.scryfall.io/art/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441",
+        "crop": "https://cards.scryfall.io/crop/front/7/0/7051cdfa-509e-4d84-bbae-f77556c861e4.webp?1783915441"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -190388,6 +190747,70 @@
       "faces": []
     },
     {
+      "id": "2bd9d26e-984c-4cf8-8c46-447f9776668f",
+      "name": "Karametra, God of Harvests",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to green and white is less than seven, Karametra isn't a creature.\nWhenever you cast a creature spell, you may search your library for a Forest or Plains card, put it onto the battlefield tapped, then shuffle.",
+      "power": 6,
+      "toughness": 7,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G",
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "c20",
+      "collectorNumber": "218",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
+        "normal": "https://cards.scryfall.io/normal/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
+        "large": "https://cards.scryfall.io/large/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
+        "png": "https://cards.scryfall.io/png/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.png?1783931146",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.jpg?1783931146",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.webp?1783931146",
+        "grid": "https://cards.scryfall.io/grid/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.webp?1783931146",
+        "display": "https://cards.scryfall.io/display/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.webp?1783931146",
+        "art": "https://cards.scryfall.io/art/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.webp?1783931146",
+        "crop": "https://cards.scryfall.io/crop/front/2/b/2bd9d26e-984c-4cf8-8c46-447f9776668f.webp?1783931146"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "6f921dca-ce93-42d1-87b1-149973558467",
       "name": "Kargan Warleader",
       "manaCost": {
@@ -195434,6 +195857,61 @@
         "display": "https://cards.scryfall.io/display/front/b/c/bc121e37-b01c-4cf3-bd41-19a1cb21caa5.webp?1784036722",
         "art": "https://cards.scryfall.io/art/front/b/c/bc121e37-b01c-4cf3-bd41-19a1cb21caa5.webp?1784036722",
         "crop": "https://cards.scryfall.io/crop/front/b/c/bc121e37-b01c-4cf3-bd41-19a1cb21caa5.webp?1784036722"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b1b6b7a7-0ac8-470a-949b-4779ded95359",
+      "name": "Klothys's Design",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Creatures you control get +X/+X until end of turn, where X is your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "thb",
+      "collectorNumber": "176",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.jpg?1783931537",
+        "normal": "https://cards.scryfall.io/normal/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.jpg?1783931537",
+        "large": "https://cards.scryfall.io/large/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.jpg?1783931537",
+        "png": "https://cards.scryfall.io/png/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.png?1783931537",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.jpg?1783931537",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.jpg?1783931537",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.webp?1783931537",
+        "grid": "https://cards.scryfall.io/grid/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.webp?1783931537",
+        "display": "https://cards.scryfall.io/display/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.webp?1783931537",
+        "art": "https://cards.scryfall.io/art/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.webp?1783931537",
+        "crop": "https://cards.scryfall.io/crop/front/b/1/b1b6b7a7-0ac8-470a-949b-4779ded95359.webp?1783931537"
       },
       "localImages": {},
       "layout": "normal",
@@ -242395,6 +242873,68 @@
       "faces": []
     },
     {
+      "id": "f185a734-a32a-4244-88e8-dabafbfd064f",
+      "name": "Nylea, God of the Hunt",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to green is less than five, Nylea isn't a creature. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)\nOther creatures you control have trample.\n{3}{G}: Target creature gets +2/+2 until end of turn.",
+      "power": 6,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "ths",
+      "collectorNumber": "166",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.jpg?1783939744",
+        "normal": "https://cards.scryfall.io/normal/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.jpg?1783939744",
+        "large": "https://cards.scryfall.io/large/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.jpg?1783939744",
+        "png": "https://cards.scryfall.io/png/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.png?1783939744",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.jpg?1783939744",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.jpg?1783939744",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.webp?1783939744",
+        "grid": "https://cards.scryfall.io/grid/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.webp?1783939744",
+        "display": "https://cards.scryfall.io/display/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.webp?1783939744",
+        "art": "https://cards.scryfall.io/art/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.webp?1783939744",
+        "crop": "https://cards.scryfall.io/crop/front/f/1/f185a734-a32a-4244-88e8-dabafbfd064f.webp?1783939744"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2cf2b6be-80a8-4464-a909-8cc658196a14",
       "name": "Nylea's Forerunner",
       "manaCost": {
@@ -242448,6 +242988,64 @@
         "display": "https://cards.scryfall.io/display/front/2/c/2cf2b6be-80a8-4464-a909-8cc658196a14.webp?1783931533",
         "art": "https://cards.scryfall.io/art/front/2/c/2cf2b6be-80a8-4464-a909-8cc658196a14.webp?1783931533",
         "crop": "https://cards.scryfall.io/crop/front/2/c/2cf2b6be-80a8-4464-a909-8cc658196a14.webp?1783931533"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2a4fe89a-0d2b-493f-883e-a1e0b0918340",
+      "name": "Nylea's Huntmaster",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Centaur",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Centaur Shaman",
+      "oracleText": "When this creature enters, target creature you control gets +X/+0 until end of turn, where X is your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)",
+      "power": 4,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "thb",
+      "collectorNumber": "187",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.jpg?1783931533",
+        "normal": "https://cards.scryfall.io/normal/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.jpg?1783931533",
+        "large": "https://cards.scryfall.io/large/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.jpg?1783931533",
+        "png": "https://cards.scryfall.io/png/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.png?1783931533",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.jpg?1783931533",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.jpg?1783931533",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.webp?1783931533",
+        "grid": "https://cards.scryfall.io/grid/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.webp?1783931533",
+        "display": "https://cards.scryfall.io/display/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.webp?1783931533",
+        "art": "https://cards.scryfall.io/art/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.webp?1783931533",
+        "crop": "https://cards.scryfall.io/crop/front/2/a/2a4fe89a-0d2b-493f-883e-a1e0b0918340.webp?1783931533"
       },
       "localImages": {},
       "layout": "normal",
@@ -267081,6 +267679,68 @@
         "display": "https://cards.scryfall.io/display/front/d/c/dc396f54-8f54-4456-b473-a9bb38e88f62.webp?1783932786",
         "art": "https://cards.scryfall.io/art/front/d/c/dc396f54-8f54-4456-b473-a9bb38e88f62.webp?1783932786",
         "crop": "https://cards.scryfall.io/crop/front/d/c/dc396f54-8f54-4456-b473-a9bb38e88f62.webp?1783932786"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4736a2c4-c89c-48db-a104-6303e7e2eee8",
+      "name": "Purphoros, God of the Forge",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to red is less than five, Purphoros isn't a creature.\nWhenever another creature you control enters, Purphoros deals 2 damage to each opponent.\n{2}{R}: Creatures you control get +1/+0 until end of turn.",
+      "power": 6,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "cmm",
+      "collectorNumber": "246",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.jpg?1783915646",
+        "normal": "https://cards.scryfall.io/normal/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.jpg?1783915646",
+        "large": "https://cards.scryfall.io/large/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.jpg?1783915646",
+        "png": "https://cards.scryfall.io/png/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.png?1783915646",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.jpg?1783915646",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.jpg?1783915646",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.webp?1783915646",
+        "grid": "https://cards.scryfall.io/grid/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.webp?1783915646",
+        "display": "https://cards.scryfall.io/display/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.webp?1783915646",
+        "art": "https://cards.scryfall.io/art/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.webp?1783915646",
+        "crop": "https://cards.scryfall.io/crop/front/4/7/4736a2c4-c89c-48db-a104-6303e7e2eee8.webp?1783915646"
       },
       "localImages": {},
       "layout": "normal",
@@ -364108,6 +364768,69 @@
       "faces": []
     },
     {
+      "id": "9f9db424-e668-48b4-b275-7b35be4e1bf8",
+      "name": "Thassa, God of the Sea",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "God"
+        ]
+      },
+      "rawTypeLine": "Legendary Enchantment Creature — God",
+      "oracleText": "Indestructible\nAs long as your devotion to blue is less than five, Thassa isn't a creature. (Each {U} in the mana costs of permanents you control counts toward your devotion to blue.)\nAt the beginning of your upkeep, scry 1.\n{1}{U}: Target creature you control can't be blocked this turn.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Indestructible",
+        "Scry"
+      ],
+      "set": "lcc",
+      "collectorNumber": "176",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.jpg?1783913880",
+        "normal": "https://cards.scryfall.io/normal/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.jpg?1783913880",
+        "large": "https://cards.scryfall.io/large/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.jpg?1783913880",
+        "png": "https://cards.scryfall.io/png/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.png?1783913880",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.jpg?1783913880",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.jpg?1783913880",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.webp?1783913880",
+        "grid": "https://cards.scryfall.io/grid/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.webp?1783913880",
+        "display": "https://cards.scryfall.io/display/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.webp?1783913880",
+        "art": "https://cards.scryfall.io/art/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.webp?1783913880",
+        "crop": "https://cards.scryfall.io/crop/front/9/f/9f9db424-e668-48b4-b275-7b35be4e1bf8.webp?1783913880"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3ac987ac-3f81-4704-b42c-651f44670641",
       "name": "Thassa's Bounty",
       "manaCost": {
@@ -367665,6 +368388,66 @@
         "normal": "three-visits-normal.jpg",
         "art_crop": "three-visits-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "242cdffb-5037-4d49-b194-4b60274a8758",
+      "name": "Threnody Singer",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Siren"
+        ]
+      },
+      "rawTypeLine": "Creature — Siren",
+      "oracleText": "Flash\nFlying\nWhen this creature enters, target creature an opponent controls gets -X/-0 until end of turn, where X is your devotion to blue. (Each {U} in the mana costs of permanents you control counts toward your devotion to blue.)",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying",
+        "Flash"
+      ],
+      "set": "thb",
+      "collectorNumber": "75",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.jpg?1783931574",
+        "normal": "https://cards.scryfall.io/normal/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.jpg?1783931574",
+        "large": "https://cards.scryfall.io/large/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.jpg?1783931574",
+        "png": "https://cards.scryfall.io/png/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.png?1783931574",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.jpg?1783931574",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.jpg?1783931574",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.webp?1783931574",
+        "grid": "https://cards.scryfall.io/grid/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.webp?1783931574",
+        "display": "https://cards.scryfall.io/display/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.webp?1783931574",
+        "art": "https://cards.scryfall.io/art/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.webp?1783931574",
+        "crop": "https://cards.scryfall.io/crop/front/2/4/242cdffb-5037-4d49-b194-4b60274a8758.webp?1783931574"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []

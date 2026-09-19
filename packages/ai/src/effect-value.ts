@@ -1450,6 +1450,16 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
    * blink of the jailer was scored.
    */
   returnExiledByThis: () => 0,
+  /**
+   * §3.162 — the third tail of the same jail (Skyclave Apparition): the exiled
+   * card's OWNER gets an X/X token when the jailer leaves, X its mana value.
+   * Zero for exactly the reason `returnExiledByThis` is: what it would make,
+   * and for whom, is written in the same cards-package-private stamp this
+   * package does not read. The jailer's ETB half is priced as the removal it
+   * is; this half is the cost of losing the jailer, and it is carried honestly
+   * at "unknown" rather than as a guess in either direction.
+   */
+  tokenForExiledByThis: () => 0,
 
   /**
    * THEFT-FOR-THE-TURN (Act of Treason): worth the stolen body's power at

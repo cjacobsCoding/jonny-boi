@@ -41,6 +41,7 @@ import type {
 } from '@jonny-boi/core';
 import {
   NOTHING_CHOSEN,
+  addCardGrant,
   asEntersOptions,
   isLegalTarget,
   asEntersPrompt,
@@ -284,7 +285,7 @@ export const mayShuffleLibrary: EffectPrimitive = (ctx) => {
  * same code with no second opinion about what `tapped` means.
  */
 interface SearchStep {
-  readonly destination: 'hand' | 'battlefield' | 'graveyard';
+  readonly destination: 'hand' | 'battlefield' | 'graveyard' | 'exile';
   readonly tapped?: boolean;
 }
 
@@ -292,10 +293,11 @@ interface SearchStep {
  * The three zones a printed library search may put a found card into. A CLOSED
  * table for the same reason the subtype table is closed: an unrecognised zone
  * word must report, never silently become "hand" — a tutor that fetched to the
- * wrong zone is a strictly different card. (`'exile'` is absent because no
- * search template compiled here prints it.)
+ * wrong zone is a strictly different card. `'exile'` joined for Jace, Architect
+ * of Thought's −8 ("search that player's library for a nonland card and exile
+ * it") — the first compiled search that prints it.
  */
-const SEARCH_DESTINATIONS: ReadonlySet<string> = new Set(['hand', 'battlefield', 'graveyard']);
+const SEARCH_DESTINATIONS: ReadonlySet<string> = new Set(['hand', 'battlefield', 'graveyard', 'exile']);
 
 /** The single destination a non-routed search uses, defaulting to hand. */
 function plainDestination(ctx: EffectContext): SearchStep['destination'] {
@@ -364,24 +366,66 @@ function routeParam(ctx: EffectContext, count: number): readonly SearchStep[] | 
 export const searchLibrary: EffectPrimitive = (ctx) => {
   const requiredZone = strParam(ctx, 'requiresTargetInZone');
   if (requiredZone !== undefined && firstTargetInstance(ctx)?.zone !== requiredZone) return;
-  const who = playerParam(ctx, 'who', 'controller');
-  if (!who) return; // e.g. the target permanent is gone — nothing to compensate
   const count = intParam(ctx, 'count', 1);
   if (count <= 0) return;
 
+  // "For each player, search THAT player's library…" (Jace, Architect of
+  // Thought's −8): one search per library, in APNAP order from the controller,
+  // and the searcher is the CONTROLLER every time — the card says who looks.
+  // Asked in that fixed order, mutating nothing until every answer is in, which
+  // is the same contract one search keeps: the first library's question parks
+  // the primitive, the re-run finds it answered and asks the second, and only a
+  // run with every answer in hand moves a card.
+  if (strParam(ctx, 'who') === 'each') {
+    const libraries: PlayerId[] = [ctx.controller, otherPlayer(ctx.controller)];
+    const answers: (readonly InstanceId[] | undefined)[] = [];
+    for (const owner of libraries) {
+      const chosen = askSearch(ctx, owner, ctx.controller, count);
+      if (chosen === undefined) return; // parked on this library's question
+      answers.push(chosen);
+    }
+    for (let i = 0; i < libraries.length; i++) {
+      settleSearch(ctx, libraries[i] as PlayerId, ctx.controller, count, answers[i] as readonly InstanceId[]);
+    }
+    return;
+  }
+
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return; // e.g. the target permanent is gone — nothing to compensate
+  // The searcher: the library's owner unless the card says the controller looks
+  // ("search target opponent's library" — Praetor's Grasp, Bribery).
+  const chooser = strParam(ctx, 'chooser') === 'controller' ? ctx.controller : who;
+
   // ASK FIRST, in a fixed order, mutating nothing until every answer is in.
   if (boolParam(ctx, 'optional', false)) {
-    const yes = ctx.confirm({ chooser: who, prompt: 'You may search your library', valence: 'gain' });
+    const yes = ctx.confirm({ chooser, prompt: 'You may search your library', valence: 'gain' });
     if (yes === undefined) return; // parked
     if (!yes) return; // declined — no search, and therefore no shuffle
   }
+  const chosen = askSearch(ctx, who, chooser, count);
+  if (chosen === undefined) return; // parked
+  settleSearch(ctx, who, chooser, count, chosen);
+};
+
+/**
+ * The QUESTION half of one library search: which of `owner`'s cards `chooser`
+ * takes. `undefined` while the question is parked. Pure of side effects, so the
+ * "for each player" form can ask it once per library before moving anything.
+ */
+function askSearch(
+  ctx: EffectContext,
+  owner: PlayerId,
+  chooser: PlayerId,
+  count: number,
+): readonly InstanceId[] | undefined {
   const route = routeParam(ctx, count);
-  const candidates = restrictToNames(ctx, collectCardOptions(ctx.state, 'library', { controller: who, filter: filterParam(ctx) }));
-  const chosen = ctx.chooseCards({
-    chooser: who,
+  const candidates = restrictToNames(ctx, collectCardOptions(ctx.state, 'library', { controller: owner, filter: filterParam(ctx) }));
+  const whose = owner === chooser ? 'your' : `${owner === 'A' ? "Player A's" : "Player B's"}`;
+  return ctx.chooseCards({
+    chooser,
     prompt: route
-      ? `Search your library for up to ${route.length} card(s), in the order they are routed`
-      : `Search your library for ${count} card(s)`,
+      ? `Search ${whose} library for up to ${route.length} card(s), in the order they are routed`
+      : `Search ${whose} library for ${count} card(s)`,
     candidates,
     // A search may always FAIL to find, so the floor is zero.
     min: 0,
@@ -393,13 +437,30 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
     valence: 'gain',
     fromZone: 'library',
   });
-  if (!chosen) return; // parked
+}
 
+/**
+ * The MOVE half of one library search: the chosen cards go where the card says,
+ * `owner`'s library is shuffled, and — for "you may cast those cards without
+ * paying their mana costs" — each card exiled gets a free-cast permission for
+ * the CHOOSER (`grantCast: 'free'`). The permission is a card grant with
+ * `castBy`, which is what lets Jace's controller cast a card sitting in the
+ * opponent's exile; see `core/card-grants.ts`.
+ */
+function settleSearch(
+  ctx: EffectContext,
+  who: PlayerId,
+  chooser: PlayerId,
+  count: number,
+  chosen: readonly InstanceId[],
+): void {
+  const route = routeParam(ctx, count);
   // The single-destination form is ONE step reused for every found card, so both
   // shapes are read through the same accessor and there is no second opinion
   // about where a card goes or whether it arrives tapped.
   const plainStep: SearchStep = { destination: plainDestination(ctx), tapped: boolParam(ctx, 'tapped', false) };
   const stepFor = (index: number): SearchStep => (route ? (route[index] as SearchStep) : plainStep);
+  const grantFreeCast = strParam(ctx, 'grantCast') === 'free';
 
   // A fetched SHOCKLAND asks its "you may pay 2 life" here, mid-resolution,
   // BEFORE anything moves (the ask-first contract): the engine has already
@@ -433,11 +494,29 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
       putOntoBattlefield(ctx, who, id, 'library', enters);
     } else {
       moveOwnedCard(ctx, who, id, 'library', step.destination);
+      if (step.destination === 'exile' && grantFreeCast) {
+        addCardGrant(
+          ctx.state,
+          {
+            targetInstanceId: id,
+            sourceInstanceId: ctx.source.instanceId,
+            zone: 'exile',
+            duration: 'permanent',
+            castFace: 'front',
+            castFree: true,
+            // The chooser may cast it — not necessarily the owner whose exile it
+            // sits in. Absent when they coincide, so an owner's own search-and-
+            // exile grants exactly what every earlier permission granted.
+            ...(chooser !== who ? { castBy: chooser } : {}),
+          },
+          ctx.emit,
+        );
+      }
     }
   }
   // Searching a library shuffles it, found or not.
   ctx.shuffleLibrary(who);
-};
+}
 
 /**
  * `revealTopCard` — a player reveals the top card of their library; if it matches

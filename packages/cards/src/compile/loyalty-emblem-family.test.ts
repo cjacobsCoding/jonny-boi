@@ -461,13 +461,15 @@ describe('the acceptance cards — what landed, and the residue BY NAME', () => 
   });
 
   /**
-   * ⚠️ §3.154 landed TWO of Jace's three. The count is still asserted exactly,
-   * for the reason it always was: it fails both ways — if the last clause
-   * quietly starts compiling, and if either landed clause regresses.
+   * §3.154 landed TWO of Jace's three, and §3.161 landed the last — the −8's
+   * cast permission that belongs to the other seat. The count is still asserted
+   * exactly (zero), for the reason it always was: it fails if any of the three
+   * regresses. The clause-by-clause history below is kept as the record of
+   * WHICH engine gap each one was.
    */
-  it('Jace REPORTS exactly ONE residual ability, and this names it', () => {
+  it('Jace now compiles COMPLETE — the −8 landed in §3.161', () => {
     const texts = missingTexts(JACE);
-    expect(texts).toHaveLength(1);
+    expect(texts).toHaveLength(0);
     // +1 ✅ §3.154: the duration-scoped delayed trigger §3.150 named, PLUS a
     // per-ATTACKER trigger event that did not exist — `attacks` is
     // self-referential, so there was no way to watch another creature attacking.
@@ -479,11 +481,12 @@ describe('the acceptance cards — what landed, and the residue BY NAME', () => 
     // VICTIM — a non-controlling player — a mid-resolution question since that
     // rule landed. The residue was one sentence and a destination table.
     expect(texts.some((t) => t.includes('separates those cards into two piles'))).toBe(false);
-    // −8 ⛔ the one left. NOT the free cast on its own: `CardGrant.castFace` +
-    // `castFree` already exists. `generateLegalActions` offers an exile cast by
-    // walking the ASKING player's own `player.exile`, and this engine models
-    // exile per player — so a card exiled from B's library sits in B's exile and
-    // A is never offered it. 321 corpus clauses / 315 shapes / 168 sole-blocked.
-    expect(texts[0]).toContain('You may cast those cards without paying their mana costs');
+    // −8 ✅ §3.161: NOT the free cast on its own — `CardGrant.castFace` +
+    // `castFree` already existed. `generateLegalActions` offered an exile cast
+    // by walking the ASKING player's own `player.exile`, and this engine models
+    // exile per player, so a card exiled from B's library sat in B's exile and A
+    // was never offered it. `CardGrant.castBy` / `CastPermission.by` is the
+    // seat the permission belongs to, and the offer, cast and play paths read it.
+    expect(texts.some((t) => t.includes('You may cast those cards without paying their mana costs'))).toBe(false);
   });
 });

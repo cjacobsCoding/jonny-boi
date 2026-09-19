@@ -127,7 +127,10 @@ const RUNAWAYS: ReadonlyArray<{
     what: 'the same mirror on Reverberate, seat B',
   },
   {
-    seed: 113343071,
+    // §3.162 — re-pinned from shuffle 113343071 to 113390585 of the SAME decks
+    // when pricing an activation's sacrifice changed the shipped pilot's turn
+    // 11 (see `soak-pinned-decks.ts`).
+    seed: 113390585,
     onPlay: 'A',
     ruling: 'pilot-will-not-stop',
     what: "the same mirror with Reverberate + Narset's Reversal, seat A",
