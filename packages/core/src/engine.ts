@@ -5773,8 +5773,13 @@ function madnessActionsFor(state: GameState): GameAction[] {
   // §3.113 — and a cascade / ripple window's (one closed table, `isFreeCastWindow`).
   const free = isFreeCastWindow(window);
   const cost = free ? undefined : card?.def.madness;
+  // A LAND in the window (Madlands prints madness {0}) is never offered the cast:
+  // a land cannot be cast (CR 305.9), so the trigger's "may cast it" has no legal
+  // answer but decline, and the apply path would refuse the offer ("lands are
+  // played, not cast"). Same shape as an unaffordable cost — pass is the way out.
   if (
     !card ||
+    isLand(card.def) ||
     (!free &&
       (cost === undefined ||
         !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))))
