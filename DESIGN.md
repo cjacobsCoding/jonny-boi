@@ -10211,6 +10211,58 @@ had never had the suite run in CI, so each failure had to be ruled on rather tha
   towards whenever the computer's beat outlasted its sleep (the game log read *"Turn 3 — Player
   1's turn."* with nothing under it). It now waits for priority, reads the phase, then passes.
 
+### 3.160 The shipped pool caught up with the compiler — +98 cards, three of them his — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.159 was the highest on `origin/main` at
+> fork (`5a010c7`). **Renumber it freely at merge** — nothing in the code refers to it.
+
+> "Make sure all the cards in all my decks in jonny boi have their mechanics working."
+
+**The measurement.** His two decks, re-counted with BOTH quoting styles (the first count matched only
+single-quoted entries and silently skipped every apostrophe name): **Thune's Life — 65 cards, 22
+distinct, all supported.** **Tamiyo + Jace Surge — 49 cards, 17 distinct, five unsupported** in the
+shipped pool: Axebane Guardian, Craterhoof Behemoth, Jace Architect of Thought, Tamiyo the Moon Sage,
+Primal Surge. But the compiler's own tests said three of those already compile — Tamiyo COMPLETE in
+§3.154, Craterhoof PLAYED in §3.155, Primal Surge in §3.156 — and the shipped pool had last been
+regenerated on **2026-09-15**, before any of those merged. The lane that owned regeneration
+(`fix/pool-refresh-3147`) had not moved since **2026-09-11** and sat **328 commits behind main**, its
+own regeneration (5,651 → 6,323) long overtaken by main's 6,944. Its four soak fixes: two were
+already on main by other routes (cascade's `cardRevealed`, `sorcerySpeedWindowFor`); the
+`graveyard-cast` discriminator and the mill leak are not, and are noted below rather than ported
+blind from a week-old tree.
+
+**The three generator commands, offline throughout**, from main `5a010c7`:
+
+| artefact | before | after |
+|---|---|---|
+| compiled pool (`expanded-pool.ts`) | 6,912 | **7,010** (+98) |
+| shipped pool (`CARD_POOL` = compiled + 32 curated) | 6,944 | **7,042** |
+| canonical index (`data-tools/data/card-index.json`) | 6,944 | 7,042 — resolved 7,042/7,042, 0 unresolved |
+| web index (derived) | 6,944 | 7,042 — `--check` passes |
+| starter-cards | 6,944 | 7,042 |
+| expansion report | 6,912 accepted / 25,470 rejected / 32,414 | 7,010 / 25,299 / 32,341 |
+
+ALL FOUR AGREE. Inputs: the scratch index (32,341 normalized cards) and the raw corpus
+`corpus-fixed.json` (32,341, md5 `718eae40` — the same file §3.155's regeneration cites), so the
+delta is the COMPILER's since the 15th, not a corpus refresh. Glossary: all 129 printed keywords
+resolve.
+
+**Tamiyo + Jace Surge after:** 5 unsupported → **2** — Jace (his −8 needs a cross-seat free cast,
+three named engine gaps in `walker-residues.test.ts`) and Axebane Guardian ("X mana in any
+combination of colors" needs a choose-N-colours production core cannot express; deliberately
+REPORTED in `defender-count-family.test.ts`). The deck is also **49 cards**, eleven short, which is
+the transcription and not the app.
+
+**Soak on the regenerated pool, this box:** `soak.test.ts` 25/25 and `loop-runaway.test.ts` 6/6,
+exit 0 — the bigger pool broke nothing the fast tier can see. CI's `verify` runs the whole suite on
+the PR; that is the gate.
+
+**Left, named:** the stale lane's `graveyard-cast` witness fix (`mechanicOfAction` reads the zone,
+so retrace/jump-start/escape are credited to flashback and the `graveyard-cast` row is inert) and its
+four remaining "turn-0 library → graveyard mill names a never-seen card" violations. Both real,
+neither reproduced by this pool's fast soak, both worth their own lane with the diff at `49a0038`
+as the starting point.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
