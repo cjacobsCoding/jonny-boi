@@ -15,7 +15,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import { buildDeckMenu, menuItemsOfOrigin, type DeckMenuItem } from './deckMenu.js';
+import { buildDeckMenu, defaultSeatKeys, menuItemsOfOrigin, type DeckMenuItem } from './deckMenu.js';
+import { validateChoice } from '../play/setup.js';
 import { DECK_ORIGINS } from './deckOrigin.js';
 import type { Deck } from '../deck.js';
 
@@ -82,5 +83,62 @@ describe('the deck picker', () => {
     expect(copy?.origin).toBe('mine');
     expect(original?.origin).toBe('builtin');
     expect(copy?.origin).not.toBe(original?.origin);
+  });
+});
+
+/**
+ * A short deck of his own: transcribed from paper, 56 cards, listed WHOLE on
+ * purpose (its row says why it cannot start). Two of these led the menu the day
+ * main went red.
+ */
+function shortDeck(id: string, name: string): Deck {
+  return {
+    id,
+    name,
+    cards: [{ cardId: 'Forest', count: 56 }],
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+/** A full, legal deck of his own — 60 basic Forests, which the engine plays. */
+const LEGAL_MINE: Deck = {
+  id: 'local-legal',
+  name: 'All Forests',
+  cards: [{ cardId: 'Forest', count: 60 }],
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+function api(decks: readonly Deck[]): Parameters<typeof buildDeckMenu>[0] {
+  return { decks } as unknown as Parameters<typeof buildDeckMenu>[0];
+}
+
+describe('where the two seats start (defaultSeatKeys)', () => {
+  it('THE RED MAIN: illegal decks lead the menu, and the seats skip past them', () => {
+    // The shape that broke the board-fits harness, made worse: his transcribed
+    // decks lead the menu and one of them cannot start (49 cards, five of them
+    // unsupported), so a seat defaulted to it and Start was disabled before
+    // anyone touched anything. Here BOTH leading decks are illegal, so a fix
+    // that skipped only one row would still fail.
+    const menu = buildDeckMenu(api([shortDeck('p1', 'Tamiyo + Jace Surge'), shortDeck('p2', "Thune's Life")]));
+    expect(menu[0]?.origin, 'the fixture must put his decks first, like the real menu').toBe('mine');
+    const { a, b } = defaultSeatKeys(menu);
+    const seatA = menu.find((m) => m.key === a)!;
+    const seatB = menu.find((m) => m.key === b)!;
+    expect(validateChoice(seatA.choice), 'seat A must open on a deck that can start').toEqual([]);
+    expect(validateChoice(seatB.choice), 'seat B must open on a deck that can start').toEqual([]);
+    expect(a, 'two legal decks exist, so the seats must differ').not.toBe(b);
+  });
+
+  it('prefers his own legal deck to a built-in, in menu order', () => {
+    const { a, b } = defaultSeatKeys(buildDeckMenu(api([shortDeck('p1', 'Short'), LEGAL_MINE])));
+    expect(a).toBe('saved:local-legal');
+    expect(b.startsWith('sample:'), 'seat B takes the first built-in rather than repeating A').toBe(true);
+  });
+
+  it('with nothing legal at all, still points at the first row so the message can explain', () => {
+    const menu = buildDeckMenu(api([shortDeck('p1', 'Only')])).slice(0, 1);
+    const { a, b } = defaultSeatKeys(menu);
+    expect(a).toBe('saved:p1');
+    expect(b).toBe('saved:p1');
   });
 });

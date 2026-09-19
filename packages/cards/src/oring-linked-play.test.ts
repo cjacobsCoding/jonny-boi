@@ -149,7 +149,9 @@ describe('the O-Ring pair, played end to end', () => {
   it('Oblivion Ring exiles the chosen permanent and GIVES IT BACK when the Ring is destroyed', () => {
     const reg = buildRegistry();
     const bears = fromPool('Grizzly Bears');
-    let { state: s, ring, prisoner } = jail(reg, OBLIVION_RING, bears);
+    const jailed = jail(reg, OBLIVION_RING, bears);
+    const { ring, prisoner } = jailed;
+    let s = jailed.state;
 
     expect(s.battlefield.some((c) => c.instanceId === prisoner), 'the prisoner leaves the battlefield').toBe(false);
     expect(s.players.B.exile.some((c) => c.instanceId === prisoner), "to its OWNER's exile").toBe(true);
@@ -172,7 +174,9 @@ describe('the O-Ring pair, played end to end', () => {
 
   it('Journey to Nowhere — the card that shipped BROKEN — gives its prisoner back too', () => {
     const reg = buildRegistry();
-    let { state: s, ring, prisoner } = jail(reg, JOURNEY_TO_NOWHERE, fromPool('Runeclaw Bear'));
+    const jailed = jail(reg, JOURNEY_TO_NOWHERE, fromPool('Runeclaw Bear'));
+    const { ring, prisoner } = jailed;
+    let s = jailed.state;
     expect(s.players.B.exile.some((c) => c.instanceId === prisoner), 'the creature is exiled').toBe(true);
 
     const demystify = put(s, fromPool('Demystify'), 'A', 'hand');

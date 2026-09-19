@@ -26,6 +26,7 @@
 
 import { Worker } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
+import { statSync } from 'node:fs';
 import type { ParallelJob, ParallelResult, WorkerInitSpec } from './parallel-slices.js';
 
 /** The machine's hardware-thread count — the input to `autoWorkerCount`. */
@@ -79,13 +80,68 @@ export type WorkerToHost = ResultMessage | TickMessage | ErrorMessage;
  * the built `dist/` it ends `.js` and the sibling `.js` exists. No path is
  * hard-coded, so a rename breaks loudly at resolve time rather than silently
  * spawning a stale file.
+ *
+ * One exception, for one reason: a `.ts` host in a process WITHOUT a TypeScript
+ * loader (Vitest) spawns the freshly BUILT worker when there is one — see
+ * {@link freshBuiltWorkerUrl} for the platform difference that forced it.
  */
 function workerModuleUrl(): { readonly url: URL; readonly isTypeScript: boolean } {
   const isTypeScript = import.meta.url.endsWith('.ts');
+  if (isTypeScript && !processHasTsLoader()) {
+    const built = freshBuiltWorkerUrl();
+    if (built !== undefined) return { url: built, isTypeScript: false };
+  }
   return {
     url: new URL(`./parallel-worker.${isTypeScript ? 'ts' : 'js'}`, import.meta.url),
     isTypeScript,
   };
+}
+
+/** Whether THIS process already runs under a TypeScript loader (the `tsx` CLI). */
+function processHasTsLoader(): boolean {
+  return process.execArgv.some((arg) => arg.includes('tsx'));
+}
+
+/**
+ * The BUILT worker — `dist/src/parallel-worker.js` — when it exists and is at
+ * least as new as every source it is compiled from; else `undefined`.
+ *
+ * ⚠️ Why a `.ts` host ever prefers a `.js` worker. Under Vitest this module is
+ * loaded from `src/` (the config aliases every workspace package to its source),
+ * so the sibling worker is `.ts` and needs a TypeScript loader INSIDE the thread.
+ * Appending `--import tsx` to the worker's `execArgv` did that on the Windows dev
+ * boxes and did nothing on the Linux CI runner: on Node 20 the worker died with
+ * `Unknown file extension ".ts"`, and on Node 22 — whose native type-stripping
+ * loads the `.ts` entry itself — it died one import later on
+ * `Cannot find module './parallel-slices.js'`, the `.js`→`.ts` rewrite being the
+ * loader's job. Whatever the reason a `Worker`'s `--import` is honoured on one
+ * platform and not the other, a test that passes only where it was written is
+ * not a test.
+ *
+ * The built worker needs no loader: its sibling imports are real `.js` files and
+ * `@jonny-boi/*` already resolves to `dist/` through package exports. It is also
+ * what the CLI actually runs, so the thing measured is the thing shipped. The
+ * freshness check is what makes this safe to prefer: a `dist/` older than its
+ * sources is exactly the trap `parallel-host.test.ts` documents ("does not
+ * provide an export named …" after merging upstream), and a stale worker would
+ * be a confident measurement of a tree that no longer exists — so it is refused,
+ * and the `.ts` route stays as the fallback it was.
+ */
+function freshBuiltWorkerUrl(): URL | undefined {
+  const built = new URL('../dist/src/parallel-worker.js', import.meta.url);
+  // The worker's own local imports, compiled into dist beside it.
+  const sources = ['./parallel-worker.ts', './parallel-slices.ts', './parallel-config.ts', './parallel-host.ts'].map(
+    (rel) => new URL(rel, import.meta.url),
+  );
+  try {
+    const builtAt = statSync(built).mtimeMs;
+    for (const source of sources) {
+      if (statSync(source).mtimeMs > builtAt) return undefined; // stale — refuse, say nothing false
+    }
+    return built;
+  } catch {
+    return undefined; // no dist at all: the .ts route, as before
+  }
 }
 
 /**
@@ -98,9 +154,7 @@ function workerModuleUrl(): { readonly url: URL; readonly isTypeScript: boolean 
  */
 function workerExecArgv(isTypeScript: boolean): readonly string[] | undefined {
   if (!isTypeScript) return undefined; // dist worker: plain JS, inherit as-is
-  const inherited = process.execArgv;
-  const hasTsLoader = inherited.some((arg) => arg.includes('tsx'));
-  return hasTsLoader ? undefined : [...inherited, '--import', 'tsx'];
+  return processHasTsLoader() ? undefined : [...process.execArgv, '--import', 'tsx'];
 }
 
 // --- the pool ------------------------------------------------------------------------
