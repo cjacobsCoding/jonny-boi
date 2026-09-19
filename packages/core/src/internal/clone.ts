@@ -77,6 +77,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // loyalty ability has been activated ever carries this, and an unconditional
   // extra property on every clone measurably costs sim throughput.
   if (inst.loyaltyActivatedTurn !== undefined) copy.loyaltyActivatedTurn = inst.loyaltyActivatedTurn;
+  // Same conditional-copy rule (§3.168), and the record is COPIED, not shared:
+  // a draft state that wrote a new turn into the previous state's record would
+  // rewrite history.
+  if (inst.onceEachTurnActivated !== undefined) copy.onceEachTurnActivated = { ...inst.onceEachTurnActivated };
   // Same conditional-copy rule as `attachedTo` (§3.150): only a permanent
   // something has actually frozen carries a skip count, and dropping it here
   // would untap a Frost Trickster's victim at the very next action boundary.

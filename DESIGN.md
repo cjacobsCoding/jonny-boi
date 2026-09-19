@@ -10614,6 +10614,50 @@ as "no printed line to check against": it now reads the printed SHAPES of a boar
 mana (a parley's exactly none) — and, sabotaged to treat every mode as fixed, it named all eleven
 cards that scale, which is the red a guard has to be able to show.
 
+### 3.168 "Activate only once each turn" — the second member of the closed activation restriction — ✅ done
+
+> "After you've done all that, start adding all the rest of the missing mechanics."
+
+**Picked from data, not intuition.** With both of his decks live (§3.164) and the whole corpus in
+the app (§3.167), the next mechanic is whichever unblocks the most cards per edit. The one-clause
+population on the 32,341-card corpus — cards that would compile if exactly one more clause did —
+is 17,545, and the families at its head (measured 2026-09-19, `probe-families`, since folded into
+this section's numbers): a granted quoted ability on an Aura or Equipment (79), **"Activate only
+once each turn" (77)**, morph/megamorph/disguise (71), "this spell costs {N} less to cast if …"
+(70), the seven-cards-in-graveyard threshold static (49). Once-each-turn is the cheapest of the
+top three — one restriction member, one instance field, one compiler tail — so it went first;
+313 cards print exactly the sentence.
+
+**Core.** `ActivationRestriction` (§3.149's closed union, one member until now) gains
+`{ kind: 'onceEachTurn' }` — and the switch in `unpayableActivationReason` is exhaustive, so the
+new member was a compile error at the one site that decides until it was handled. The memory is
+`CardInstance.onceEachTurnActivated`: for each once-a-turn ability, keyed by its index in the
+permanent's effective activated list, **the turn number it was last activated on** — the same
+design as a planeswalker's `loyaltyActivatedTurn` (compared to `GameState.turnNumber`; no reset
+pass; `resetInstanceForNewZone` forgets it, because a bounced-and-replayed permanent is a new
+object, CR 400.7), and the same conditional-copy rule in `clone.ts` so an instance that never used
+such an ability never gains the property. It is written **as the activation is paid for**, before
+the ability reaches the stack: CR 602.5d counts activations, not resolutions, so the second
+activation is off the menu while the first still waits. Per ABILITY, not per permanent — a card with
+two such abilities may use each once, and a sibling without the sentence is unlimited.
+
+**Compiler.** `ACTIVATE_ONLY_ONCE_EACH_TURN` reads the trailing sentence exactly as the sorcery and
+counter restrictions are read, anchored to the exact wording; the three cards that print
+*"Activate only once each turn and only if …"* do not match and keep reporting, and a line carrying
+two restrictions is refused rather than modelled as one.
+
+**Verification.** `core/activation-once-each-turn.test.ts`: offered once, then neither offered nor
+accepted again this turn (*"Test Biomancer's ability has already been activated this turn"*);
+off the menu with its own activation still on the stack; per ability; a new turn offers it again
+with no reset having run (the record holds the new turn); a permanent that leaves and returns has
+no memory. `cards/named-counters.test.ts`: Frilled Oculus's real text compiles whole to the new
+member with its pump intact; the two-condition form is refused as a whole ability. Pool at
+regeneration: **7,136 → 7,167** (+31 — smaller than the 77 the one-clause count promised, and the
+smaller number is the one to report: the "one clause" was the whole printed LINE, and once the
+sentence is sliced off, 46 of those bodies still print something else the compiler refuses — Mobile
+Fort's "can attack this turn as though it didn't have defender", Power Plant Worker's "instead"
+clause. They are one clause closer, not playable); index 7,199/7,199, `--check` clean.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
