@@ -10614,6 +10614,170 @@ as "no printed line to check against": it now reads the printed SHAPES of a boar
 mana (a parley's exactly none) — and, sabotaged to treat every mode as fixed, it named all eleven
 cards that scale, which is the red a guard has to be able to show.
 
+### 3.165 The Lab's A/B pickers — type to find one card, a copies menu that follows the line, an Apply that says it applied — ✅ done
+
+> "the dropdowns in Lab -> A/B Test are awful to use. Anytime we have a card selector dropdown like
+> this in the app, we must make it one where you can type to filter, and expose advanced settings to
+> filter further too - to help you find the one card." · "if there is only one copy of the card in
+> the deck, it shouldn't give all those options to swap 1, 2, 3, ect- that makes no sense" · "when
+> you click 'apply to my deck', it needs to visibly show that it applied"
+
+Three defects on one screen, all of them the same shape: the panel rendered a control that was
+CORRECT and not USABLE. The "add" side was a native `<select>` over the whole 7,000-card pool — a
+scroll wheel with no search; the copies menu listed "exactly 2/3/4" for a card the deck holds once
+(`copiesForScope` clamps them all to one, so four entries meant the same swap); and "Apply to my
+deck" wrote the change to the deck and then sat there offering it again, indistinguishable from a
+button that had done nothing.
+
+**The picker (`components/lab/CardPicker.tsx`, model in `lib/lab/cardPicker.ts`).** A combobox in
+the WAI-ARIA sense — a text input filtering a listbox, arrow keys, Enter, Escape — that EVERY
+single-card selector in the app now goes through. The model is pure and tested: it reuses the card
+browser's own `CardQuery` and `queryCards` (search, colour chips, type chips), so a filter means one
+thing in the Cards view and in the Lab, and adds the ranking a picker needs that a browser does not —
+an exact name, then names that start with the term, then a word inside the name, then a substring,
+each tier alphabetical — and a cap (`CARD_PICKER_MAX_ROWS` = 40) with an honest footer ("40 of N shown —
+keep typing to narrow it down"), so the dropdown never tries to render the pool. Mana-value bounds are the one
+"advanced" filter the browser's query does not carry (it sorts by it instead) and are applied before
+the ranking. Which cards are candidates is the CALLER's decision — the hero's cards for "cut", the
+pool for "add" — and the picker never widens or narrows that set; a card the caller lists that the
+pool cannot describe is still offered, by name. The Suggest panel's "consider cutting" is a checkbox
+GRID over the hero's twenty-odd distinct cards, not a dropdown, and stays one: the complaint is about
+finding one card in thousands, and a grid you can see whole is already found.
+
+**The copies menu (`lib/lab/swapScopeOptions.ts`).** ONE function derives the menu from the cut
+card's line, so no panel can disagree about it: a 1-of has exactly one choice ("The only copy — it is
+a 1-of", and the menu is disabled); an N-of offers the playset (all N), the single copy, and every
+exact count strictly between — "exactly 2" only appears when the line holds more than two, because
+at two it IS the playset; nothing picked yet shows the two named questions the menu always led with.
+The test pins the property that matters: every entry moves a DIFFERENT number of copies. Picking a
+1-of after a 4-of cannot leave "exactly 3" selected — the shown scope is `reconcileScope(stored,
+menu)` derived at render (the stored choice if the new line still offers it, else the menu's first),
+rather than an effect writing state back.
+
+**The applied state.** Pressing Apply records WHICH result it was pressed for, by object identity:
+the button becomes "✓ Applied to <deck>" (ghost style, disabled, its tooltip pointing at Deck
+Builder) for that result, and a new run — a new result object — gets a live button again. Component
+state, not deck state, on purpose: the deck already shows the change in Deck Builder; what was
+missing was the acknowledgement on the screen where the button was pressed.
+
+**Verification.** `lib/lab/cardPicker.test.ts` (ranking tiers, case and whitespace, the cap and its
+count, the browser's filters, the bounds); `lib/lab/swapScopeOptions.test.ts` (the 1-of, the 2-of,
+the 4-of's distinct-copies property, the round-trip of option values, reconciliation);
+`components/lab/swap-panel-pickers.test.ts` — a static render of the real panel (the
+`gauntlet-row-owner.test.ts` idiom), because every one of these was a "wire the consumer" defect
+waiting to happen: two comboboxes and no native card `<select>`; a 1-of leaves one disabled option;
+a finished verdict renders a LIVE apply button (no `disabled` attribute — matched as an attribute,
+since a false `aria-disabled` would still contain the word, which is how the first draft of this
+test failed against a button that was live).
+### 3.166 What came online — an in-app changelog of mechanics, held to the roadmap and the pool — ✅ done
+
+> "an in-app changelog of mechanics coming online"
+
+The About page could say what the engine plays (§3.99's supported list, every entry pinned by a
+witness) but not what had CHANGED since he last looked — and the answer to "did you finish the
+Tamiyo deck yet?" was a DESIGN.md section he would never open. Now About opens with **What came
+online recently**: a dated list, newest first, one row per shipped roadmap section, in his words —
+what he can now do and which cards it brought online, as chips — with the newest eight open and the
+rest folded behind "Earlier".
+
+**It is data, and it is guarded three ways (`lib/about/changelog.ts`, `changelog.test.ts`).** Every
+row names the DESIGN.md section it reports, and the test reads DESIGN.md: the `### 3.N` heading must
+exist and carry ✅, so nothing is announced before it shipped; and every ✅ heading from
+`CHANGELOG_FLOOR_SECTION` (§3.155) onward must have a row, so nothing ships without being announced —
+the failure names the section the lane forgot, which is the guard that makes this a changelog rather
+than a page that was current once. Every card a row names becomes a `card` witness against the
+shipped pool, and a `mechanic` row carries a `MechanicWitness` that must still resolve, exactly as a
+"Supported today" claim does — so "Heliod plays now" cannot outlive Heliod. The kinds are a closed
+set (`mechanic`, `fix`, `app`, `data`) with one label table read by the page and the test. No pool
+SIZES appear in a row (`pool-size-claims.test.ts` would refuse them, and rightly): a delta is true
+forever, a total is false after the next regeneration.
+
+**Reachability** (`components/about/MechanicsChangelog.tsx`, `mechanics-changelog.test.ts`): a
+static render of the real component pins the newest row's date, kind, title and cards in the markup,
+newest first, and the fold count — the "built, tested, unreachable" defect this project keeps finding
+in its own UI is the one this test exists for. Sabotaged with a fake `### 3.999 … ✅ done` heading in
+DESIGN.md, the sync guard went red naming it; restored, 36 tests green.
+
+Backfilled from §3.155 (2026-09-16) — the mass pump, iterative effects, one collection, the
+playability gate, the lethal-assignment fix, the pool catch-up, Jace's −8, Thune's six, devotion,
+derived mana, the Lab pickers, and this section.
+
+### 3.167 Every card Scryfall knows, in the app — two tiers, one badge, and a deck that says why it cannot be played — ✅ done
+
+> "work on adding all the cards from scryfall, regardless of whether we have mechanics for them yet.
+> Just make it so that if you put a card into a deck that has unsupported mechanics, it makes that
+> very clear and wont let you play or test that deck. … Do not try to get any of the stupid sets tho
+> like unglued, ect"
+
+§3.158 built the gate ("can this deck be played?" — one funnel, four consumers) for exactly this
+moment, and named it: *the moment the pool is the whole of Scryfall, luck is the only thing holding
+it*. This section is that moment. The browsable pool goes from the 7,168 cards the engine plays to
+the **32,338 the corpus knows** (the 32,341-card private corpus of `fetch-full-corpus.mjs`, which
+already excludes `set_type: funny`, digital-only cards and non-card layouts — his "stupid sets" line
+was drawn there in §3.71 — less three names the two tiers share once normalized).
+
+**Two tiers, because the shell has to work offline and 32,000 cards do not fit in it.** The POOL
+index stays bundled as before: it is what the engine plays, and a deck must open with no network.
+The CORPUS index (`packages/data-tools/data/corpus-index.json`, 25,170 cards on the merged tree) is everything else,
+written by the same `--corpus` pipeline run that writes the pool index and subtracted from it **by
+the same front-face name key the pool resolved on**, so a card is in exactly one tier and a
+regeneration moves it rather than duplicating it. Its records are RAW Scryfall records cut to the
+closed key list `normalizeCard` reads (`SLIM_CARD_KEYS` / `SLIM_FACE_KEYS`), so the app expands
+them with the one normalizer the pool went through — one card shape, no second parser — and gzip
+makes Scryfall's own key names free. Measured: 12.25 MB on disk one card per line (diffs by card),
+**2.65 MB gzipped** as the content-hashed asset Vite emits from a `?url` import (one copy in the
+repo; the browser's cache key changes exactly when the data does). It is fetched at app mount,
+expanded in 2,000-card macrotask chunks so the shell keeps painting, and it is deliberately **not
+precached** — the service worker caches it CacheFirst on first use (`vite.config.ts`), so the second
+visit is offline-capable and the first offline visit says so in the Cards view rather than pretending
+the pool is the world ("The full card list could not be loaded — showing the 7,168 cards the engine
+plays. It needs one visit online. Try again").
+
+**Image URLs are a function of the printing id.** `https://cards.scryfall.io/<size>/<face>/<a>/<b>/<id>.jpg`
+held for every one of 5,000 corpus records checked against the URLs Scryfall itself supplied, so
+the corpus tier carries no URLs at all and the pool index's projection now drops every URL that is
+exactly what its id derives (`imageUrisAreDerivable`, one place that decides). The ~600 pool rows
+whose id is an ORACLE id from an older network fetch keep theirs. Bundled `card-index` chunk:
+**7.60 → 4.84 MB** (gzip 682 KB), the web index file 10.8 → 7.7 MB. `cardImage` derives when a
+record carries nothing; a synthesized record with a non-uuid id still degrades to the text tile.
+
+**The badge, the toggle, the count, the sentence.** `queryCards` takes a `playable` filter
+(`'all'` — his default: everything, marked — or `'playable'`) answered by a caller-supplied
+predicate, so the filter module stays free of the engine pool; the predicate (`isPlayableCard`) is
+two map lookups against the memoized sim pool, because the browser asks it for 32,000 cards per
+keystroke. The toolbar gains **All cards / Playable** and reads "32,338 cards · 7,168 playable"; a
+tile the engine cannot play wears **Not playable yet** over dimmed art, in the Cards browser AND the
+deck builder's pool (where a card is added, which is where it matters most); the Lab's "add"
+picker lists playable cards only, because a swap the engine cannot simulate is not a test. The
+expensive question — *what does it need?* — is asked only for the one card in front of him:
+`deckHealth`'s closed table gains a row between "an import the compiler could not finish" and
+"anything else": **a card in the browsable corpus is compiled once, on demand, and its clauses
+named** (`corpusUnsupportedReason`, memoised per id). The detail view's new note, the deck row's ⚠
+tooltip, the deck badge and Play's refusal all read that one funnel.
+
+**Verification.** `data-tools/corpus-index.test.ts` (the closed key lists; a slim record
+normalizes to the same card as the raw one, URLs aside; corpus − pool by front-face name, first
+printing wins; one card per line round-trips), `lib/cards/corpus.test.ts` (fetch → expand → every
+lookup; idempotent; failure by name and retry; a non-index body and a 404 refused; a corpus card
+sharing a pool name never shadows it), `lib/filter.test.ts` (the playable filter), `data/card-index.test.ts`
+(derivable URLs dropped and still resolved; a non-uuid, URL-less record degrades),
+`components/unplayable-marking.test.ts` (static renders: the tile's badge, the grid's predicate,
+the toolbar's toggle and count, the detail view's sentence for a corpus card and its silence for a
+pool card). **In the browser**, on this branch (before the §3.164 merge, so 7,147 playable then): Cards showed
+*32,338 cards · 7,147 playable* with 19 of the first 24 tiles badged; *Playable* → 7,147 and no badges; opening *1996 World Champion*
+read "Not playable yet. You can add it to a deck, but that deck cannot be played or tested until the
+engine learns: the "Summon" card type; …"; in Deck Builder, *Fledgling Mawcor* (morph) added to
+Thune's Life put ⚠ on its row ("Can't be simulated yet — needs a rules template the compiler does
+not recognize yet"), the badge *1 card not playable* on the deck, and in Play → Solo the **Start
+game button was disabled** under "This deck can't be played or tested yet — 1 card (1 copy) uses
+mechanics the engine doesn't support: 1× Fledgling Mawcor … Swap it out to run the deck — everything
+else about it is fine."
+
+**Left deliberately.** The corpus still holds a few memorabilia oddities (*1996 World Champion*
+is the first card alphabetically after a badge); the fetch script's exclusion list is the place to
+draw that line, and it is a data decision to take with him. Search over 32,000 names is a plain
+substring scan per keystroke — measured fine today; if it is not on a phone, the Lab picker's ranked
+model (§3.165) is the index to reuse.
 ### 3.168 "Activate only once each turn" — the second member of the closed activation restriction — ✅ done
 
 > "After you've done all that, start adding all the rest of the missing mechanics."

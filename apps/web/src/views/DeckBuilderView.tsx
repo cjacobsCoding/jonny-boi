@@ -1,6 +1,8 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useMemo, useState, useSyncExternalStore, type ReactElement } from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { allAvailableCards } from '../lib/cards.js';
+import { corpusVersion, subscribeToCorpus } from '../lib/cards/corpus.js';
+import { isPlayableCard } from '../lib/cards/playable.js';
 import { queryCards, EMPTY_QUERY, type CardQuery } from '../lib/filter.js';
 import {
   deckSize,
@@ -60,9 +62,18 @@ export function DeckBuilderView({ decks }: { decks: DecksApi }): ReactElement {
   // re-addable exactly like a curated one.
   // `decks.decks` is an INVISIBLE dependency (see CardsView): `allAvailableCards()`
   // reads a registry deck import mutates, so this list is the only signal the pool grew.
+  // §3.167 — and the corpus tier, when it arrives (the App shell starts the load).
+  const corpusTick = useSyncExternalStore(subscribeToCorpus, corpusVersion, () => 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pool = useMemo(() => allAvailableCards(), [decks.decks]);
-  const results = useMemo(() => queryCards(pool, query), [pool, query]);
+  const pool = useMemo(() => allAvailableCards(), [decks.decks, corpusTick]);
+  const results = useMemo(
+    () => queryCards(pool, query, { isPlayable: isPlayableCard }),
+    [pool, query],
+  );
+  const playableCount = useMemo(
+    () => (query.playable === 'all' ? results.filter(isPlayableCard).length : results.length),
+    [results, query.playable],
+  );
   const active = decks.activeDeck;
 
   const deckControls = (card: NormalizedCard) => {
@@ -81,8 +92,18 @@ export function DeckBuilderView({ decks }: { decks: DecksApi }): ReactElement {
   return (
     <div className="deck-layout">
       <section aria-label="Card pool">
-        <CardToolbar query={query} onChange={setQuery} resultCount={results.length} />
-        <CardGrid cards={results} onSelect={setSelected} deckControls={deckControls} />
+        <CardToolbar
+          query={query}
+          onChange={setQuery}
+          resultCount={results.length}
+          playableCount={playableCount}
+        />
+        <CardGrid
+          cards={results}
+          onSelect={setSelected}
+          deckControls={deckControls}
+          isPlayable={isPlayableCard}
+        />
       </section>
 
       <DeckPanel decks={decks} onSelectCard={setSelected} />
@@ -333,7 +354,10 @@ function DeckPanel({
             {(active.unresolved ?? []).map((missing) => (
               <div key={missing.name} className="deck-entry deck-entry--unresolved">
                 <span className="deck-entry__count">{missing.count}×</span>
-                <span className="deck-entry__name" title={`${missing.name} is in this deck on paper, but the compiled card pool does not carry it yet. It will be added automatically when it does.`}>
+                <span
+                  className="deck-entry__name"
+                  title={`${missing.name} is in this deck on paper, but the compiled card pool does not carry it yet. It will be added automatically when it does.`}
+                >
                   {missing.name}
                 </span>
                 <button
@@ -354,7 +378,12 @@ function DeckPanel({
       {ioOpen && (
         <div>
           <div className="section-label">Export (sim-compatible JSON)</div>
-          <textarea className="io-textarea" readOnly value={exportJson} aria-label="Deck export JSON" />
+          <textarea
+            className="io-textarea"
+            readOnly
+            value={exportJson}
+            aria-label="Deck export JSON"
+          />
           <div className="import-row">
             <button
               type="button"
@@ -380,9 +409,7 @@ function DeckPanel({
       <SavedDecks decks={decks} />
       <GauntletDecks decks={decks} />
 
-      {importOpen && (
-        <ImportDeckDialog decks={decks} onClose={() => setImportOpen(false)} />
-      )}
+      {importOpen && <ImportDeckDialog decks={decks} onClose={() => setImportOpen(false)} />}
 
       {/* Adding from here puts the card straight into the deck being built —
           that is the whole reason to offer it inside the builder. */}
@@ -452,19 +479,15 @@ export function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
     <div className="builtin-decks">
       <div className="section-label">Built-in gauntlet decks</div>
       <p className="builtin-decks__intro">
-        Reference decks that ship with the app — not yours, and not editable. Copy one
-        to tune it as your own.
+        Reference decks that ship with the app — not yours, and not editable. Copy one to tune it as
+        your own.
       </p>
       <div className="builtin-deck-list">
         {list.map((sample) => {
           const copies = copiesOfGauntletDeck(sample.name, decks.decks);
           const mine = copies[0];
           return (
-            <div
-              key={sample.name}
-              className="builtin-deck"
-              {...{ [DECK_ORIGIN_ATTR]: 'builtin' }}
-            >
+            <div key={sample.name} className="builtin-deck" {...{ [DECK_ORIGIN_ATTR]: 'builtin' }}>
               <div className="builtin-deck__heading">
                 <span
                   className="deck-origin-badge deck-origin-badge--builtin"
@@ -592,9 +615,7 @@ export function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
                   and a collection of them would announce themselves before he
                   had asked anything. The icon, the colour and the sentence
                   carry it in normal reading order. */}
-              {problems !== '' && (
-                <p className="saved-deck__problems">⚠ {problems}</p>
-              )}
+              {problems !== '' && <p className="saved-deck__problems">⚠ {problems}</p>}
             </div>
           );
         })}

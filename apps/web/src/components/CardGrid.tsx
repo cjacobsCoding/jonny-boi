@@ -50,6 +50,8 @@ interface CardGridProps {
     onAdd: (card: NormalizedCard) => void;
     onRemove: (card: NormalizedCard) => void;
   };
+  /** §3.167 — which tiles wear the "Not playable yet" badge. Absent: none do. */
+  isPlayable?: (card: NormalizedCard) => boolean;
 }
 
 /**
@@ -100,7 +102,12 @@ interface CardGridProps {
  * row either side, is kept rendered wherever the user scrolls (see
  * `CARD_GRID_FOCUS_KEEP_ROWS`), which is why `planRender` returns SEGMENTS.
  */
-export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): ReactElement {
+export function CardGrid({
+  cards,
+  onSelect,
+  deckControls,
+  isPlayable,
+}: CardGridProps): ReactElement {
   const gridRef = useRef<HTMLDivElement | null>(null);
   // ⚠️ THE MEASURED METRICS ARE NOT STATE, AND THAT IS THE FIX FOR #185.
   //
@@ -268,7 +275,13 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     // The measurement reaches the bug report through the ref, not through
     // state. It is diagnostic output: nothing renders from it, so making it
     // state only bought a re-render — and, until #185, a re-entry.
-    debugRef.current = { plan: nextPlan, metrics: nextMetrics, scrollTopPx, viewportPx, focusIndex };
+    debugRef.current = {
+      plan: nextPlan,
+      metrics: nextMetrics,
+      scrollTopPx,
+      viewportPx,
+      focusIndex,
+    };
     // THE ONLY setState HERE, and only when the WINDOW moves. Scrolling fires
     // continuously and a setState per pixel would spend the frame budget this
     // component exists to save; most scroll events leave the plan identical.
@@ -368,8 +381,7 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     // deck panel, a scrollbar appearing, a rotation — none of which fire a
     // window resize), and the first rendered TILE, whose height decides the row
     // track. `sync` re-targets the tile side as the rendered set changes.
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     observerRef.current = observer;
     if (observer && grid) observer.observe(grid);
     // One more pass on the next frame. The layout effect measures as early as it
@@ -463,6 +475,7 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
               card={card}
               onSelect={onSelect}
               deck={deckControls ? deckControls(card) : undefined}
+              playable={isPlayable ? isPlayable(card) : true}
             />
           </div>
         );

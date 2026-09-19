@@ -14,3 +14,24 @@
 export * from './types.js';
 export { parseManaCost, parseTypeLine, parseStat } from './parse.js';
 export { normalizeCard } from './normalize.js';
+// §3.167 — the corpus tier's record shape and the image-URL derivation are
+// pure too, and the app reads both.
+export {
+  buildCorpusIndex,
+  serializeCorpusIndex,
+  slimCard,
+  SLIM_CARD_KEYS,
+  SLIM_FACE_KEYS,
+  type CorpusIndex,
+  type SlimScryfallCard,
+  type SlimScryfallCardFace,
+} from './corpus-index.js';
+export {
+  SCRYFALL_IMAGE_ORIGIN,
+  imageUrisAreDerivable,
+  isScryfallUuid,
+  scryfallImageUrl,
+  stripImageQuery,
+  type ScryfallFace,
+  type ScryfallImageSize,
+} from './scryfall-image.js';

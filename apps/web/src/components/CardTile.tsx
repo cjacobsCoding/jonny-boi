@@ -9,6 +9,12 @@ interface CardTileProps {
   card: NormalizedCard;
   /** Open the detail view for this card. */
   onSelect: (card: NormalizedCard) => void;
+  /**
+   * §3.167 — false when the engine cannot play this card yet; the tile then
+   * wears the "Not playable yet" badge. Omitted means playable (a caller whose
+   * list is playable by construction says nothing).
+   */
+  playable?: boolean;
   /** When provided, the tile shows an in-deck count + add/remove stepper. */
   deck?: {
     count: number;
@@ -56,12 +62,20 @@ interface CardTileProps {
  * being unset here anyway, so it was dead weight that only looked meaningful;
  * the real `.card-tile__art` box is `CardArt`'s own wrapper div.
  */
-export function CardTile({ card, onSelect, deck }: CardTileProps): ReactElement {
+export function CardTile({ card, onSelect, deck, playable = true }: CardTileProps): ReactElement {
   const pt =
     card.power !== null && card.toughness !== null ? `${card.power}/${card.toughness}` : null;
 
   return (
-    <div className="card-tile">
+    <div className={`card-tile${playable ? '' : ' card-tile--unplayable'}`}>
+      {!playable && (
+        <span
+          className="card-tile__unplayable"
+          title="The engine cannot play this card yet — open it to see what it needs"
+        >
+          Not playable yet
+        </span>
+      )}
       {deck && deck.count > 0 && (
         <span className="count-badge" aria-label={`${deck.count} in deck`}>
           {deck.count}

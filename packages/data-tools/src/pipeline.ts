@@ -13,7 +13,14 @@ import { dirname } from 'node:path';
 import { downloadArt, type DownloadArtSummary } from './art.js';
 import { createFetchHttpClient, ScryfallClient } from './client.js';
 import { normalizeCard } from './normalize.js';
-import { cardIndexPath, imageCacheDir, rawCacheDir, starterCardListPath } from './paths.js';
+import { buildCorpusIndex, serializeCorpusIndex, type CorpusIndex } from './corpus-index.js';
+import {
+  cardIndexPath,
+  corpusIndexPath,
+  imageCacheDir,
+  rawCacheDir,
+  starterCardListPath,
+} from './paths.js';
 import type { CardIndex, NormalizedCard } from './types.js';
 import { frontFaceName } from './verify.js';
 
@@ -48,6 +55,13 @@ export interface PipelineOptions {
    * are two files that eventually disagree.
    */
   rawCards?: readonly unknown[];
+  /**
+   * §3.167 — where a CORPUS run writes the slim index of everything it did not
+   * select into the pool. Defaults to the committed location; ignored (nothing
+   * is written) when `rawCards` is absent, because a network run has no corpus
+   * to subtract the pool from.
+   */
+  corpusIndexPath?: string;
 }
 
 export interface PipelineResult {
@@ -56,6 +70,8 @@ export interface PipelineResult {
   resolved: number;
   unresolved: string[];
   art: DownloadArtSummary | null;
+  /** §3.167 — the corpus index a corpus run wrote, or null for a network run. */
+  corpus: { index: CorpusIndex; outputPath: string } | null;
 }
 
 /** Load the committed curated starter card-name list. */
@@ -177,7 +193,29 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   await writeFile(outputPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
   console.info(`[pipeline] wrote ${cards.length} cards → ${outputPath}`);
 
-  return { index, outputPath, resolved: rawCards.length, unresolved, art };
+  // §3.167 — the other tier: everything in the corpus the pool did not take,
+  // keyed by the same front-face name the selection above resolved on, so the
+  // two files are disjoint by construction and a regeneration moves a card
+  // between them rather than duplicating it.
+  let corpus: PipelineResult['corpus'] = null;
+  if (options.rawCards !== undefined) {
+    const poolNames = new Set(cards.map((card) => frontFaceName(card.name)));
+    const corpusIndex = buildCorpusIndex(
+      options.rawCards,
+      (key) => poolNames.has(key),
+      frontFaceName,
+      ATTRIBUTION,
+    );
+    const corpusPath = options.corpusIndexPath ?? corpusIndexPath();
+    await mkdir(dirname(corpusPath), { recursive: true });
+    await writeFile(corpusPath, serializeCorpusIndex(corpusIndex), 'utf8');
+    console.info(
+      `[pipeline] wrote ${corpusIndex.cards.length} corpus-only cards (of ${corpusIndex.corpusSize}) → ${corpusPath}`,
+    );
+    corpus = { index: corpusIndex, outputPath: corpusPath };
+  }
+
+  return { index, outputPath, resolved: rawCards.length, unresolved, art, corpus };
 }
 
 /**
@@ -201,7 +239,10 @@ async function writeRawCache(rawCards: { name: string }[]): Promise<void> {
   await mkdir(dir, { recursive: true });
   await Promise.all(
     rawCards.map(async (raw) => {
-      const safe = raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const safe = raw.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
       await writeFile(`${dir}/${safe}.json`, JSON.stringify(raw, null, 2), 'utf8');
     }),
   );

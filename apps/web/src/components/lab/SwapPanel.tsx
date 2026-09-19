@@ -8,6 +8,8 @@ import { DEFAULT_SWAP_SCOPE, GAMES_PER_PAIRED_GAME, type SwapScope } from '@jonn
 import { PilotStamp, RunCostNote } from './PilotControls.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 import type { CardOption } from './panel-types.js';
+import { CardPicker } from './CardPicker.js';
+import { reconcileScope, scopeFromOptionValue, scopeOptionValue, swapScopeOptions } from '../../lib/lab/swapScopeOptions.js';
 import './swap-scope.css';
 
 /**
@@ -42,6 +44,20 @@ export function SwapPanel({
   const [untilDecided, setUntilDecided] = useState(true);
   const [outId, setOutId] = useState<string>(outOptions[0]?.cardId ?? '');
   const [inId, setInId] = useState<string>('');
+  // §3.165 — which RESULT "Apply to my deck" has already been pressed for, by
+  // identity: a new run is a new object and gets a live button again, while
+  // the one that was applied stays visibly applied.
+  const [appliedFor, setAppliedFor] = useState<object | null>(null);
+
+  // §3.165 — the copies menu follows the CUT card's line: a 1-of has one
+  // choice, an N-of offers the playset, one, and every count between. When the
+  // cut changes, a scope the new line cannot express snaps to the menu's first.
+  const outLine = outOptions.find((o) => o.cardId === outId)?.count;
+  const scopeOptions = swapScopeOptions(outId === '' ? undefined : outLine);
+  // Derived at render rather than written back by an effect: the stored choice
+  // is what the player last picked; what the run USES is that choice if the
+  // line still offers it, else the menu's first entry.
+  const effectiveScope = reconcileScope(scope, scopeOptions);
 
   const running = sim.status === 'running';
   const sameCard = outId !== '' && outId === inId;
@@ -69,42 +85,33 @@ export function SwapPanel({
       </p>
 
       <div className="lab-controls lab-controls--swap">
-        <label className="lab-field">
-          <span className="section-label">Cut (out)</span>
-          <select
-            className="select"
+        {/* §3.165 — type-to-filter pickers with the browser's filters one click
+            away, in place of two native selects (the "add" one listed the whole
+            7,000-card pool). The cut picker lists the hero's cards with their
+            copy counts; the add picker lists the pool. */}
+        <div className="lab-field lab-field--picker">
+          <CardPicker
+            label="Cut (out)"
+            options={outOptions}
             value={outId}
-            onChange={(ev) => setOutId(ev.target.value)}
+            onChange={setOutId}
             disabled={running}
-            aria-label="Card to cut"
-          >
-            {outOptions.map((o) => (
-              <option key={o.cardId} value={o.cardId}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            placeholder="Type a card in your deck…"
+          />
+        </div>
         <span className="lab-swap-arrow" aria-hidden="true">
           →
         </span>
-        <label className="lab-field">
-          <span className="section-label">Add (in)</span>
-          <select
-            className="select"
+        <div className="lab-field lab-field--picker">
+          <CardPicker
+            label="Add (in)"
+            options={inOptions}
             value={inId}
-            onChange={(ev) => setInId(ev.target.value)}
+            onChange={setInId}
             disabled={running}
-            aria-label="Card to add"
-          >
-            <option value="">Pick a card…</option>
-            {inOptions.map((o) => (
-              <option key={o.cardId} value={o.cardId}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            placeholder="Type any card in the pool…"
+          />
+        </div>
       </div>
 
       <label className="lab-field lab-scope">
@@ -116,29 +123,23 @@ export function SwapPanel({
         */}
         <select
           className="select"
-          value={typeof scope === 'string' ? scope : String(scope.copies)}
-          onChange={(ev) =>
-            setScope(
-              ev.target.value === 'playset' || ev.target.value === 'one'
-                ? ev.target.value
-                : { copies: Number(ev.target.value) },
-            )
-          }
-          disabled={running}
+          value={scopeOptionValue(effectiveScope)}
+          onChange={(ev) => setScope(scopeFromOptionValue(ev.target.value))}
+          disabled={running || scopeOptions.length === 1}
           aria-label="How many copies to swap"
         >
-          <option value="playset">The whole playset — does this card belong at all?</option>
-          <option value="one">A single copy — is the last copy earning its slot?</option>
-          <option value="2">Exactly 2 copies</option>
-          <option value="3">Exactly 3 copies</option>
-          <option value="4">Exactly 4 copies</option>
+          {scopeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
         <span className="lab-scope__hint">
-          {scope === 'playset'
+          {effectiveScope === 'playset'
             ? 'Every copy of the cut card is replaced. Much larger effect, so a verdict is reachable in far fewer games.'
-            : scope === 'one'
+            : effectiveScope === 'one'
               ? 'One copy is replaced. A small effect — expect “inconclusive” unless you run a lot of games.'
-              : `Up to ${scope.copies} copies are replaced (fewer if the deck runs fewer). The more copies, the larger the effect and the sooner a verdict lands.`}
+              : `Up to ${effectiveScope.copies} copies are replaced (fewer if the deck runs fewer). The more copies, the larger the effect and the sooner a verdict lands.`}
         </span>
       </label>
 
@@ -186,7 +187,7 @@ export function SwapPanel({
               inCardId: inId,
               gamesPerOpponent: games,
               seed,
-              swapScope: scope,
+              swapScope: effectiveScope,
               untilDecided,
               pilotId,
             })
@@ -209,16 +210,30 @@ export function SwapPanel({
               −{e.copiesSwapped}× {e.outName} +{e.copiesSwapped}× {e.inName} ·{' '}
               {signedPct(e.delta)} win rate
             </span>
-            {onApplySwap && (
-              <button
-                type="button"
-                className="btn btn--primary verdict-banner__apply"
-                onClick={() => onApplySwap(outId, inId, e.copiesSwapped)}
-                title={`Make this change to ${hero?.name ?? 'your deck'}`}
-              >
-                Apply to my deck
-              </button>
-            )}
+            {onApplySwap &&
+              (() => {
+                // Pressing Apply records THIS result; the button then says it
+                // applied instead of offering the same change forever.
+                const applied = appliedFor === result;
+                return (
+                  <button
+                    type="button"
+                    className={`btn verdict-banner__apply ${applied ? 'btn--ghost verdict-banner__apply--done' : 'btn--primary'}`}
+                    disabled={applied}
+                    onClick={() => {
+                      onApplySwap(outId, inId, e.copiesSwapped);
+                      setAppliedFor(result);
+                    }}
+                    title={
+                      applied
+                        ? `${hero?.name ?? 'Your deck'} now runs this change — open Deck Builder to see it`
+                        : `Make this change to ${hero?.name ?? 'your deck'}`
+                    }
+                  >
+                    {applied ? `✓ Applied to ${hero?.name ?? 'your deck'}` : 'Apply to my deck'}
+                  </button>
+                );
+              })()}
           </div>
 
           <PilotStamp pilotId={result.pilotId} />

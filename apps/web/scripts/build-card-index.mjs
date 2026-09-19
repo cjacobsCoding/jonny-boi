@@ -28,6 +28,10 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+// The URL derivation is data-tools' (one place decides, for the app and this
+// projection alike) and is read from its BUILT browser entry — so `npm run
+// verify` builds data-tools before this check runs (root package.json).
+import { imageUrisAreDerivable } from '@jonny-boi/data-tools/pure';
 
 /** Canonical, full-fidelity index produced by `@jonny-boi/data-tools`. */
 export const SOURCE_INDEX_URL = new URL(
@@ -52,14 +56,22 @@ export const DISPLAYED_IMAGE_VARIANTS = ['small', 'normal', 'large', 'art_crop']
 /** Indentation of the emitted JSON — matches the canonical index's formatting. */
 const JSON_INDENT = 2;
 
-/** Keep only the image variants the app can render, preserving their order. */
-function projectImageUris(imageUris) {
+/**
+ * Keep only the image variants the app can render, preserving their order —
+ * and (§3.167) keep NONE when every one of them is exactly what the app derives
+ * from the printing id (`cardImage` → `scryfallImageUrl`). Scryfall's URL is a
+ * pure function of the id for every modern printing, so for those rows the
+ * URLs were 41% of the bundled bytes saying nothing the id did not. The ~600
+ * rows whose id is an ORACLE id (an older network fetch) do not derive and
+ * keep their URLs; `imageUrisAreDerivable` is the one place that decides.
+ */
+function projectImageUris(imageUris, printingId, face = 'front') {
   const kept = {};
   for (const variant of DISPLAYED_IMAGE_VARIANTS) {
     const url = imageUris?.[variant];
     if (typeof url === 'string' && url.length > 0) kept[variant] = url;
   }
-  return kept;
+  return imageUrisAreDerivable(printingId, kept, face) ? {} : kept;
 }
 
 /**
@@ -73,12 +85,13 @@ export function projectCardIndex(source) {
     ...source,
     cards: source.cards.map((card) => ({
       ...card,
-      imageUris: projectImageUris(card.imageUris),
+      imageUris: projectImageUris(card.imageUris, card.id),
       // Faces carry their own art; a DFC's back face is displayed by the same
       // `cardImage` path, so it gets the same projection rather than the full set.
-      faces: (card.faces ?? []).map((face) => ({
+      // Face 0 is the front, face 1 the back — the two paths Scryfall serves.
+      faces: (card.faces ?? []).map((face, index) => ({
         ...face,
-        imageUris: projectImageUris(face.imageUris),
+        imageUris: projectImageUris(face.imageUris, card.id, index === 0 ? 'front' : 'back'),
       })),
     })),
   };

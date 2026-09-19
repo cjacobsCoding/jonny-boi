@@ -20,10 +20,12 @@
  * definition of the card shape (no duplicated interfaces here).
  */
 import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools';
+import { scryfallImageUrl, type ScryfallImageSize } from '@jonny-boi/data-tools/pure';
 import { COPY_ID_SUFFIX } from '@jonny-boi/core';
 import rawIndex from '../data/card-index.json';
+import { corpusCard, corpusCardByName, corpusCards, corpusVersion } from './cards/corpus.js';
 import { engineDisplayCards } from './cards/enginePool.js';
-import { importedCard, importedCards } from './decklist/importedCards.js';
+import { importedCard, importedCardCount, importedCards } from './decklist/importedCards.js';
 import { normalizeName } from './scryfall/collection.js';
 
 /** The bundled, normalized card index. */
@@ -105,7 +107,7 @@ const backFaceCache = new Map<string, NormalizedCard | undefined>();
 function backFaceRecord(backId: string): NormalizedCard | undefined {
   if (backFaceCache.has(backId)) return backFaceCache.get(backId);
   const frontId = backId.slice(0, -BACK_FACE_ID_SUFFIX.length);
-  const front = cardsById.get(frontId) ?? importedCard(frontId);
+  const front = cardsById.get(frontId) ?? importedCard(frontId) ?? corpusCard(frontId);
   const face = front?.faces?.[BACK_FACE_INDEX];
   const record: NormalizedCard | undefined =
     front && face
@@ -120,7 +122,12 @@ function backFaceRecord(backId: string): NormalizedCard | undefined {
           power: face.power,
           toughness: face.toughness,
           colors: face.colors,
-          imageUris: face.imageUris,
+          // §3.167 — a record with no face URLs (the corpus tier, a slimmed
+          // pool record) derives them from the PRINTING id, back face.
+          imageUris:
+            Object.keys(face.imageUris).length > 0
+              ? face.imageUris
+              : derivedImageUris(frontId, 'back'),
           // Face records carry no localImages of their own; remote art only.
           localImages: {},
           faces: [],
@@ -149,7 +156,7 @@ export function getCard(id: string): NormalizedCard | undefined {
   if (id.endsWith(COPY_ID_SUFFIX)) {
     return getCard(id.slice(0, -COPY_ID_SUFFIX.length));
   }
-  return cardsById.get(id) ?? importedCard(id);
+  return cardsById.get(id) ?? importedCard(id) ?? corpusCard(id);
 }
 
 /**
@@ -162,7 +169,7 @@ export function getCardByName(name: string): NormalizedCard | undefined {
   const key = normalizeName(name);
   const pooled = displayableByName.get(key);
   if (pooled) return pooled;
-  return importedCards().find((card) => normalizeName(card.name) === key);
+  return importedCards().find((card) => normalizeName(card.name) === key) ?? corpusCardByName(name);
 }
 
 /**
@@ -180,16 +187,51 @@ export function getCardByName(name: string): NormalizedCard | undefined {
  * offered as if it were a different card.
  */
 export function allAvailableCards(): readonly NormalizedCard[] {
+  // §3.167 — memoized on the two stores that can change it: the merged list
+  // is tens of thousands of cards once the corpus tier has arrived, and every
+  // view asks for it per render.
+  const key = `${importedCardCount()}|${corpusVersion()}`;
+  if (availableMemo && availableMemo.key === key) return availableMemo.cards;
   const imported = importedCards();
-  if (imported.length === 0) return displayablePool;
   const extras = new Map<string, NormalizedCard>();
   for (const card of imported) {
     const key = normalizeName(card.name);
     if (!displayableByName.has(key) && !extras.has(key)) extras.set(key, card);
   }
-  if (extras.size === 0) return displayablePool;
-  return [...displayablePool, ...extras.values()].sort((a, b) => a.name.localeCompare(b.name));
+  // The corpus tier is disjoint from the pool BY CONSTRUCTION (data-tools
+  // subtracts the pool by the same name key); an import may still shadow a
+  // corpus card by name, and the import wins because it may have compiled.
+  for (const card of corpusCards()) {
+    const key = normalizeName(card.name);
+    if (!displayableByName.has(key) && !extras.has(key)) extras.set(key, card);
+  }
+  const cards =
+    extras.size === 0
+      ? displayablePool
+      : [...displayablePool, ...extras.values()].sort((a, b) => a.name.localeCompare(b.name));
+  availableMemo = { key, cards };
+  return cards;
 }
+
+let availableMemo: { readonly key: string; readonly cards: readonly NormalizedCard[] } | null =
+  null;
+
+/**
+ * The four variants `cardImage` can return, derived from a printing id — for a
+ * record that carries no URLs of its own (§3.167). Empty when the id is not a
+ * Scryfall uuid, which is exactly when the record has to carry them itself.
+ */
+function derivedImageUris(printingId: string, face: 'front' | 'back'): NormalizedCard['imageUris'] {
+  const derived: Record<string, string> = {};
+  for (const size of DERIVED_IMAGE_SIZES) {
+    const url = scryfallImageUrl(printingId, size, face);
+    if (url !== undefined) derived[size] = url;
+  }
+  return derived;
+}
+
+/** The sizes the app displays — the same four the index projection keeps. */
+const DERIVED_IMAGE_SIZES: readonly ScryfallImageSize[] = ['small', 'normal', 'large', 'art_crop'];
 
 /**
  * Pick the best available image URL for a card at the requested size, degrading
@@ -200,7 +242,10 @@ export function cardImage(
   card: NormalizedCard,
   size: 'normal' | 'art_crop' | 'large' = 'normal',
 ): string | undefined {
-  const uris = card.imageUris;
+  // §3.167 — a record with no URLs derives them from its printing id (the
+  // corpus tier, and every pool record whose URLs said nothing the id did not).
+  const uris =
+    Object.keys(card.imageUris).length > 0 ? card.imageUris : derivedImageUris(card.id, 'front');
   if (size === 'art_crop') {
     return uris.art_crop ?? uris.normal ?? uris.large ?? uris.small;
   }
@@ -217,9 +262,7 @@ export function displayRarity(rarity: string): string {
 
 /** True when the card is a basic land (exempt from the deck 4-of rule). */
 export function isBasicLand(card: NormalizedCard): boolean {
-  return (
-    card.typeLine.supertypes.includes('Basic') && card.typeLine.types.includes('Land')
-  );
+  return card.typeLine.supertypes.includes('Basic') && card.typeLine.types.includes('Land');
 }
 
 /** The primary card type used for grouping/filtering (first listed type). */
