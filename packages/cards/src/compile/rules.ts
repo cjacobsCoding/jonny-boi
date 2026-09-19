@@ -4227,6 +4227,31 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * §3.170 — "**attach it to target creature you control**", the body of
+     * "When this Equipment enters, …" (44 cards print the sentence: Maul of the
+     * Skyclaves, Bramble Armor, Scavenged Blade, Squire's Lightblade …). The
+     * SAME primitive and the SAME target the Equip ability compiles to, so an
+     * Equipment that enters attached and one that is equipped by hand go
+     * through one attach path with one legality check. "it" / "~" is the
+     * source — the trigger body's own object — which is why this row lives
+     * here rather than needing a subject noun.
+     */
+    id: 'attach-self-to-target-creature-you-control',
+    description: '"Attach it to target creature you control" (the enters trigger on Maul of the Skyclaves, Bramble Armor)',
+    pattern: /^attach (?:it|~) to target creature you control$/,
+    needsChosenTarget: true,
+    build(_match, ctx) {
+      // Only a permanent that can be attached at all may attach itself: an
+      // Equipment carries `attachesAs` from its Equip line. A card without one
+      // (a misfiled printing) reports rather than compiling an attach that
+      // core's attachment seam would refuse at resolution.
+      const isEquipment = ctx.card.typeLine.subtypes.some((s) => /^equipment$/i.test(s));
+      if (!isEquipment) return null;
+      return effects({ primitive: 'attachToTarget', params: { targets: EQUIP_TARGET } });
+    },
+  },
+  {
     id: 'destroy-target-artifact',
     description: '"Destroy target artifact"',
     pattern: /^destroy target artifact$/,

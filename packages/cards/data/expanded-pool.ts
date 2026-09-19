@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7290 cards.
+ * 7306 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -13911,6 +13911,38 @@ const POOL_1: readonly CardDefinition[] = [
       { primitive: 'putFromHandOnTop', params: { count: 2 } },
     ],
   },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+1.
+  // Equip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'f3017ae1-9744-493b-a1a2-fb2a60f7e7e4',
+    name: 'Bramble Armor',
+    types: ['artifact'],
+    cost: { generic: 1, G: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 1, keywords: {} },
+    },
+  },
   // Whenever this creature attacks, it gets +5/+0 until end of turn.
   {
     id: '74148e2e-ac21-414a-9b6c-410988d7fdd0',
@@ -18202,6 +18234,9 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['badger'],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Whenever this creature attacks, it gets +2/+0 until end of turn.
   {
     id: '1721ee11-c7ee-4878-b2ab-4f090e0c5def',
@@ -18219,9 +18254,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Flying (This creature can't be blocked except by creatures with flying or reach.)
   // Whenever this creature attacks, it gets +1/+1 until end of turn.
   {
@@ -19722,6 +19754,38 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
     subtypes: ['kor', 'scout'],
+  },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature has flying.
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'eebf8f67-49d0-42de-a5cc-ad13d19d2c55',
+    name: 'Cliffhaven Kitesail',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true } },
+    },
   },
   {
     id: '7f334767-4353-4379-a934-fa67075db439',
@@ -27181,6 +27245,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // Return target permanent to its owner's hand.
   // Flashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -27210,9 +27277,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Demon Bolt deals 4 damage to target creature or planeswalker.
   // Foretell {R} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)
   {
@@ -31503,6 +31567,40 @@ const POOL_3: readonly CardDefinition[] = [
         targets: 'instantOrSorcerySpell',
       },
     ],
+  },
+  // Flash
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+0.
+  // Equip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'c304118a-c83b-490a-b0e2-721734a996ee',
+    name: 'Dueling Rapier',
+    types: ['artifact'],
+    cost: { R: 1 },
+    keywords: { flash: true },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 0, keywords: {} },
+    },
   },
   {
     id: '923cb904-c725-4d57-bc17-7aa87a7cd8e0',
@@ -36394,6 +36492,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // Reveal the top five cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other into your graveyard.
   {
     id: '04588d2f-9e90-4f83-b85e-67e4bc222a62',
@@ -36426,9 +36527,6 @@ const POOL_3: readonly CardDefinition[] = [
     cost: { generic: 2, G: 1 },
     effects: [{ primitive: 'exileTarget', params: { targets: 'artifactOrEnchantment' } }],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // Flash
   // Flying
   // When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.
@@ -36647,6 +36745,38 @@ const POOL_4: readonly CardDefinition[] = [
       { primitive: 'drawCards', params: { count: 2 } },
       { primitive: 'discardCard', params: { who: 'controller', count: 2 } },
     ],
+  },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +1/+1 and has flying and ward {1}. (Whenever equipped creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)
+  // Equip {2}{U} ({2}{U}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '20e93f86-9e20-4e08-9bf7-ae6ebebf6876',
+    name: 'Falcon\'s Wing Harness',
+    types: ['artifact'],
+    cost: { generic: 1, U: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, U: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}{u}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}{u}',
+      modifies: { power: 1, toughness: 1, keywords: { flying: true, ward: 1 } },
+    },
   },
   // Flying
   // Haste (This creature can attack and {T} as soon as it comes under your control.)
@@ -40724,6 +40854,38 @@ const POOL_4: readonly CardDefinition[] = [
     cost: { generic: 3, U: 2 },
     castTriggers: [{ keyword: 'cascade', label: 'Cascade', effects: [{ primitive: 'cascade' }] }],
     effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
+  },
+  // Equipped creature gets +3/+0 and has vigilance and trample.
+  // Whenever equipped creature dies, attach this Equipment to target creature you control.
+  // Equip {3}
+  {
+    id: '2570fb88-358f-4f36-87e3-d8375824d126',
+    name: 'Forebear\'s Blade',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'dies', watches: 'attachedHost' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Equipped creature dies: attach ~ to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 3, toughness: 0, keywords: { vigilance: true, trample: true } },
+    },
   },
   // {T}: Add {C}.
   // {T}, Sacrifice this land: Search your library for a basic Swamp, Forest, or Island card, put it onto the battlefield tapped, then shuffle.
@@ -45569,6 +45731,9 @@ const POOL_4: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Flying
   // Whenever another artifact you control enters, this creature gets +2/+2 until end of turn.
   {
@@ -45688,9 +45853,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Flying
   // When this creature enters, scry 1. (Look at the top card of your library. You may put it on the bottom.)
   {
@@ -53857,6 +54019,35 @@ const POOL_5: readonly CardDefinition[] = [
       { primitive: 'createTokenCopy', params: { chooseCreatureTokenYouControl: true, count: 1 } },
     ],
   },
+  // Equipped creature gets +1/+1 and has trample.
+  // {G}{G}: Attach this Equipment to target creature you control.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '749c408a-0a19-44a3-a436-295380573f91',
+    name: 'Horned Helm',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { G: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: '{g}{g}: attach ~ to target creature you control',
+      },
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 1, toughness: 1, keywords: { trample: true } },
+    },
+  },
   // {G}: Regenerate this creature.
   {
     id: 'fffce2f7-b619-4483-a75e-916343194641',
@@ -54354,6 +54545,9 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Deathtouch
   {
     id: '817b5b18-beb5-48c8-aa45-0515ff9ca5da',
@@ -54446,9 +54640,6 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { hexproof: true },
     subtypes: ['homunculus'],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.)
   {
     id: '4049abac-cb54-4af2-b2df-ffb8fdc22e84',
@@ -63730,6 +63921,9 @@ const POOL_6: readonly CardDefinition[] = [
     ],
     effects: [{ primitive: 'destroyTarget', params: { targets: 'land' } }],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   {
     id: 'b4be6f22-e9e8-462a-956b-e1c78bbadacc',
     name: 'Lazotep Behemoth',
@@ -63835,9 +64029,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
   {
     id: 'aebab65c-7d5f-4086-8eb1-7dc445e801e9',
@@ -67506,6 +67697,40 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flash
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+2.
+  // Equip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'df6776a4-cc01-46a3-90df-04e1e3ba513c',
+    name: 'Malamet Scythe',
+    types: ['artifact'],
+    cost: { generic: 2, G: 1 },
+    keywords: { flash: true },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 2, keywords: {} },
+    },
+  },
   // When this creature enters, creatures you control get +2/+1 until end of turn.
   {
     id: 'b92a6ba0-cea0-4084-92f1-2bd60ea25fb0',
@@ -68838,6 +69063,38 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+2 and has flying and first strike.(It deals combat damage before creatures without first strike.)
+  // Equip {2}{W}{W}
+  {
+    id: '3213c1f9-bff5-4629-a0b6-0c81ccf6c80d',
+    name: 'Maul of the Skyclaves',
+    types: ['artifact'],
+    cost: { generic: 2, W: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, W: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}{w}{w}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}{w}{w}',
+      modifies: { power: 2, toughness: 2, keywords: { flying: true, firstStrike: true } },
+    },
+  },
   // Menace
   // Fabricate 1 (When this creature enters, put a +1/+1 counter on it or create a 1/1 colorless Servo artifact creature token.)
   {
@@ -69121,6 +69378,38 @@ const POOL_7: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ W: 1 }, { U: 1 }],
   },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature has flying. (It can't be blocked except by creatures with flying or reach.)
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '9deda16b-ce26-4228-9bc2-28b7358d3f7c',
+    name: 'Mechanical Glider',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true } },
+    },
+  },
   // When this creature enters, create a 1/1 colorless Robot artifact creature token.
   {
     id: '2cb65388-dc6c-4e2a-93ac-49ea484849e9',
@@ -69290,6 +69579,38 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { flying: true, protectionFrom: ['black'] },
     subtypes: ['angel', 'spirit'],
+  },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+1 and has reach.
+  // Equip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'd75629cb-91e2-46fa-9c80-6feb29e1ceb8',
+    name: 'Meltstrider\'s Gear',
+    types: ['artifact'],
+    cost: { G: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {5}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {5}',
+      modifies: { power: 2, toughness: 1, keywords: { reach: true } },
+    },
   },
   {
     id: '7663ac7c-1de3-4250-b96a-fae9dbd66a27',
@@ -71216,6 +71537,40 @@ const POOL_7: readonly CardDefinition[] = [
     characteristicPT: { power: { countOf: 'landsYouControl' }, toughness: { countOf: 'landsYouControl' } },
     subtypes: ['elf', 'ranger'],
   },
+  // Flash
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+0.
+  // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'ee4d00b8-1373-47b2-9be5-2199e0b12540',
+    name: 'Mirran Banesplitter',
+    types: ['artifact'],
+    cost: { R: 1 },
+    keywords: { flash: true },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 2, toughness: 0, keywords: {} },
+    },
+  },
   // Double strike, protection from black and from green
   {
     id: 'fe69d9bd-2a60-4b33-a0d8-1ca18c2b6705',
@@ -72782,6 +73137,9 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['human', 'warrior'],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // {1}{B}, Sacrifice this creature: You draw two cards and you lose 2 life.
   {
     id: '480311ae-b9af-4fb7-881b-35566598cf07',
@@ -72944,9 +73302,6 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 6,
     subtypes: ['elemental'],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // Deathtouch
   {
     id: 'a4d35ec4-0e0d-4611-8ad9-39d2c8a2ad6e',
@@ -75298,6 +75653,35 @@ const POOL_8: readonly CardDefinition[] = [
         label: '{1}{u}, sacrifice ~: return target creature to its owner\'s hand',
       },
     ],
+  },
+  // Equipped creature has shroud. (It can't be the target of spells or abilities.)
+  // {U}{U}: Attach this Equipment to target creature you control.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'd5e58c74-0ba6-452a-94a6-8256c4f6aba8',
+    name: 'Neurok Stealthsuit',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { U: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: '{u}{u}: attach ~ to target creature you control',
+      },
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 0, toughness: 0, keywords: { shroud: true } },
+    },
   },
   // Counter target spell.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -79526,6 +79910,40 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flash
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +0/+2.
+  // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '2e13b103-202f-41d7-a855-a6807e5fb4b7',
+    name: 'Paladin\'s Shield',
+    types: ['artifact'],
+    cost: { generic: 1, W: 1 },
+    keywords: { flash: true },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 0, toughness: 2, keywords: {} },
+    },
+  },
   // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
   {
     id: '7f19c2a3-6403-4a78-bf45-6e339578d673',
@@ -81992,6 +82410,9 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
   {
     id: '8f5d3dac-98df-433f-a417-bcb9c91722fb',
@@ -82184,9 +82605,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.)
   // Creatures you control get +2/+1 until end of turn.
   {
@@ -91136,6 +91554,9 @@ const POOL_9: readonly CardDefinition[] = [
       label: 'Equip {2}',
     },
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {4}, {T}: Target creature can't be blocked this turn.
   {
@@ -91364,9 +91785,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Sacrifice a Forest: Regenerate this creature.
   {
     id: '3a840bba-4725-45fd-885f-1b3d615dfa97',
@@ -94453,6 +94871,38 @@ const POOL_10: readonly CardDefinition[] = [
     cost: { generic: 2, R: 1 },
     castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] }],
     effects: [{ primitive: 'dealDamage', params: { amount: 1, targets: 'creature' } }],
+  },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +2/+0.
+  // Equip {2}{R} ({2}{R}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '3280f0d0-de0d-4f87-a6ef-c941cb7c9784',
+    name: 'Scavenged Blade',
+    types: ['artifact'],
+    cost: { generic: 1, R: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}{r}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}{r}',
+      modifies: { power: 2, toughness: 0, keywords: {} },
+    },
   },
   // Enchant creature
   // When this Aura enters, draw a card.
@@ -100065,6 +100515,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
   // Choose one —
   // • Destroy target artifact.
@@ -100380,9 +100833,6 @@ const POOL_10: readonly CardDefinition[] = [
     subtypes: ['starfish'],
     activated: [{ cost: { tap: true }, effects: [{ primitive: 'scry' }], label: '{t}: scry 1' }],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // Target player draws two cards and loses 2 life.
   {
     id: 'c6207f6a-a624-4754-88f5-dbe700c841ff',
@@ -104986,6 +105436,35 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+  // Equipped creature has first strike.
+  // {R}{R}: Attach this Equipment to target creature you control.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '5fc31145-19b4-4dbe-8756-f49791aa147e',
+    name: 'Sparring Collar',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { R: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: '{r}{r}: attach ~ to target creature you control',
+      },
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 0, toughness: 0, keywords: { firstStrike: true } },
+    },
+  },
   // When this creature dies, put a +1/+1 counter on target creature you control.
   {
     id: 'badc7db8-386e-4fb6-aefa-591e99747eb2',
@@ -109355,6 +109834,9 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Flying
   {
     id: 'c2e03297-3124-4f83-98ef-772fa213a422',
@@ -109627,9 +110109,6 @@ const POOL_11: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['scarecrow', 'soldier'],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   {
     id: 'd5313054-91a5-401c-84d1-03a2cd265060',
     name: 'Streetbreaker Wurm',
@@ -118159,6 +118638,9 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // {8}, {T}: Draw four cards.
   {
     id: '7622d6fe-73f2-417c-806c-8ca13192d271',
@@ -118398,9 +118880,6 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   {
     id: '01deb3cc-91e8-4ef3-964f-f36c6a21207c',
     name: 'Trained Jackal',
@@ -122181,6 +122660,38 @@ const POOL_13: readonly CardDefinition[] = [
         label: '{r}: regenerate ~',
       },
     ],
+  },
+  // When this Equipment enters, attach it to target creature you control.
+  // Equipped creature gets +1/+1.
+  // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '1e5c781d-cd89-4671-8fbe-fae82c33357b',
+    name: 'Utility Knife',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        label: 'Enters: attach it to target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // {T}: Add one mana of any color.
   {
@@ -127036,6 +127547,9 @@ const POOL_13: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 4 } },
     ],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // Equipped creature gets +3/+1.
   // Equip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -127265,9 +127779,6 @@ const POOL_13: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['faerie', 'soldier'],
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // As an additional cost to cast this spell, discard a card.
   // Target creature gets -5/-5 until end of turn.
   {
