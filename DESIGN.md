@@ -11199,11 +11199,19 @@ drop; a turn in progress at game end not judged); `onState` fires once per actio
 misses all three and is mana-screwed, not colour-screwed; Plains-and-Elves is colour-screwed; the
 runner without a watch is byte-identical in shape, with one every record and slot carries a reading
 and a skipped game inherits; a variant arm refuses another size; **Selesnya Blink rigged to 15 lands
-against its 24-land self over 40 paired games: more missed drops, fewer lands by turn four, both
-verdicts 'better' for the 24 and 'worse' in reverse**; `runManabaseSweep` end to end. Web:
-`manabaseApply.test.ts` (acceptance 4 — the variant's lands and nothing else, agreeing card for card
-with the played deck, all-or-nothing on an edited deck), `manabase-panel.test.ts` (both axes, the
-rule, NOT MEASURED, Apply only for an editable hero). Red-then-green per claim in the lane report.
+against its 24-land self over 40 paired games vs Mono-Red (seed 0xc0ffee): missed a drop in 45.0% of
+games → 17.5%, lands at the start of turn four 2.56 → 2.90, colour screw 17.5% → 17.5%; verdicts
+'better' (p 2.6e-3) and 'better' (p 1.7e-3) for the 24, inconclusive on colour, and 'worse' in
+reverse; 28 → 34 wins**; `runManabaseSweep` end to end. Web: `manabaseApply.test.ts` (acceptance 4 —
+the variant's lands and nothing else, agreeing card for card with the played deck, all-or-nothing on
+an edited deck, a modal DFC matched by its front face), `manabase-panel.test.ts` (both axes, the
+rule, NOT MEASURED, Apply only for an editable hero). Red-then-green: six deliberate defects (the
+copy-limit rule, a played land counted as a miss, a skipped game losing its reading, "not worse"
+forced true, a step of the variant dropped on Apply, the NOT MEASURED line) failed 17 of 45 tests
+across the four lane files; restored, 167 of 167 across those and the paired-arms, swap-scope,
+changelog and lab-config files. Throughput: the paired runner with the watch on runs at 0.945× its
+speed without it (median of three, 45.7 → 43.2 games/s, Selesnya Blink over two opponents); every
+run that does not watch pays one `if` per decision.
 
 **Left out, on purpose.** No CLI command (the tab is the deliverable; `runManabaseSweep` is exported
 for one). Panel settings are component state like the other tabs', not persisted. No per-turn
