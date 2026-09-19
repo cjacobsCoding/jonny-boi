@@ -10,6 +10,19 @@
 #
 # No path filter on purpose: root configs, lint rules and package manifests all
 # change what verify means, and a filter that skipped them is a gate with a gap.
+#
+# ## Two jobs, and the tests in SHARDS (2026-09-19)
+#
+# One job running `npm run verify` end to end hit the 30-minute ceiling as the
+# pool grew past 7,700 cards: the `main` runs after PR #75 and #76 were cancelled
+# at 30:00 with the suite still going, and PR #77's run was too. A cancelled gate
+# is not a red gate — it is no gate — so the suite is now split the way the
+# script itself is split: `gate` does the offline checks and the build once,
+# and `tests` runs the Vitest suite in three shards in parallel (each shard is
+# the same `vitest run` over a third of the files — Vitest's own `--shard`, so
+# every file is in exactly one shard). The suite runs against SOURCES
+# (`vitest.config.ts` aliases every workspace package to its `src`), which is
+# what lets a test shard skip the build. Wall time ≈ the longest shard.
 name: Verify
 
 on:
@@ -23,7 +36,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  gate:
+    name: gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -39,7 +53,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Offline by construction: this is the ROOT verify. The data-tools package
-      # has its own `verify` that re-fetches from Scryfall and must never run here.
-      - name: Lint, generated-data check, build, full test suite
-        run: npm run verify
+      # Offline by construction: this is the ROOT verify minus its test half. The
+      # data-tools package has its own `verify` that re-fetches from Scryfall and
+      # must never run here.
+      - name: Lint, generated-data check, build (type-check)
+        run: npm run lint && npm run build -w @jonny-boi/data-tools && node apps/web/scripts/build-card-index.mjs --check && npm run build
+
+  tests:
+    name: tests (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # One third of the suite, against sources. `--shard` partitions the FILE
+      # list, so a file is never run twice and never skipped; the three summaries
+      # together are the one `npm test` used to print.
+      - name: Vitest shard
+        run: npx vitest run --shard=${{ matrix.shard }}/3
