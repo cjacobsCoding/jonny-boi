@@ -352,7 +352,9 @@ describe('adventures — exile on resolution, cast the creature later (CR 715.3d
     expect(exiled, 'the adventurer should be in exile, not the graveyard').toBeDefined();
     // The face reverted: what waits in exile is the CREATURE (CR 715.2).
     expect(exiled!.def.name).toBe('Bonecrusher Giant');
-    expect(castPermissionFor(state, exiled as CardInstance)).toEqual({ face: 'front', free: false });
+    // `by` is the OWNER's seat — every permission before §3.161 was the owner's
+    // own, and an absent `castBy` on the grant still resolves to exactly that.
+    expect(castPermissionFor(state, exiled as CardInstance)).toEqual({ face: 'front', free: false, by: 'A' });
   });
 
   it('offers the creature half from exile, and casting it resolves to the battlefield', () => {
@@ -449,7 +451,7 @@ describe('Sieges — the reward half after the last defense counter (CR 310.4)',
     const { state, instanceId } = defeatBattle(SIEGE);
     const exiled = state.players.A.exile.find((c) => c.instanceId === instanceId);
     expect(exiled, 'a defeated Siege is exiled, not buried').toBeDefined();
-    expect(castPermissionFor(state, exiled as CardInstance)).toEqual({ face: 'back', free: true });
+    expect(castPermissionFor(state, exiled as CardInstance)).toEqual({ face: 'back', free: true, by: 'A' });
   });
 
   it('offers the reward with an EMPTY pool — it is cast without paying its mana cost', () => {
@@ -480,7 +482,7 @@ describe('the permission survives the per-action clone (the clone.ts field-by-fi
     state = resolveTop(state, reg);
     const copy = cloneState(state);
     const exiled = copy.players.A.exile.find((c) => c.instanceId === card!.instanceId);
-    expect(castPermissionFor(copy, exiled as CardInstance)).toEqual({ face: 'front', free: false });
+    expect(castPermissionFor(copy, exiled as CardInstance)).toEqual({ face: 'front', free: false, by: 'A' });
     // …and it is a COPY: mutating the clone's grant cannot reach the original.
     (copy.cardGrants ?? []).length = 0;
     const original = state.players.A.exile.find((c) => c.instanceId === card!.instanceId);

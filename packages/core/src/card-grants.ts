@@ -35,7 +35,7 @@
  */
 
 import type { ManaCost } from './mana.js';
-import type { CardInstance, GameState, InstanceId, ZoneName } from './state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import type { GameEvent } from './events.js';
 
@@ -106,12 +106,28 @@ export interface CardGrant {
    * plotted card is "cast as a sorcery" (CR 702.170a).
    */
   readonly castAsSorcery?: boolean;
+  /**
+   * WHO may cast under this permission, when it is not the card's owner.
+   *
+   * Every permission before Jace's −8 was the owner's own — an adventurer, a
+   * Siege reward, a foretold card all sit in their owner's exile and are cast by
+   * that owner. "You may cast those cards without paying their mana costs",
+   * said of cards exiled from EACH player's library, is the first grant whose
+   * caster is another seat: the card sits in its owner's exile (this engine
+   * models exile per player) and Jace's controller is the one allowed to cast
+   * it. Absent means the owner, which keeps every existing grant byte-identical.
+   * `castPermissionFor` resolves it to {@link CastPermission.by}, and the offer
+   * loop, the cast path and the pilot all compare THAT to the acting player.
+   */
+  readonly castBy?: PlayerId;
 }
 
 /** What `castPermissionFor` answers — see the grant fields it reads. */
 export interface CastPermission {
   readonly face: import('./actions.js').CastFace;
   readonly free: boolean;
+  /** The seat this permission belongs to: `CardGrant.castBy`, else the card's owner. */
+  readonly by: PlayerId;
   /** §3.112 — the cost the permission charges in place of the printed one. */
   readonly cost?: ManaCost;
   /**
@@ -146,6 +162,7 @@ export function castPermissionFor(state: GameState, card: CardInstance): CastPer
     return {
       face: grant.castFace,
       free: grant.castFree === true,
+      by: grant.castBy ?? card.owner,
       ...(grant.castCost !== undefined ? { cost: grant.castCost } : {}),
       ...(grant.castAsSorcery === true ? { asSorcery: true } : {}),
     };
@@ -200,6 +217,8 @@ export interface CardGrantRequest {
   readonly castCost?: ManaCost;
   readonly castAfterTurn?: number;
   readonly castAsSorcery?: boolean;
+  /** See `CardGrant.castBy` — the caster when it is not the owner. */
+  readonly castBy?: PlayerId;
 }
 
 /**
@@ -226,6 +245,7 @@ export function addCardGrant(
     ...(request.castCost !== undefined ? { castCost: { ...request.castCost } } : {}),
     ...(request.castAfterTurn !== undefined ? { castAfterTurn: request.castAfterTurn } : {}),
     ...(request.castAsSorcery === true ? { castAsSorcery: true } : {}),
+    ...(request.castBy !== undefined ? { castBy: request.castBy } : {}),
   };
   (state.cardGrants ??= []).push(grant);
   emit({

@@ -10332,6 +10332,49 @@ four remaining "turn-0 library → graveyard mill names a never-seen card" viola
 neither reproduced by this pool's fast soak, both worth their own lane with the diff at `49a0038`
 as the starting point.
 
+### 3.161 Jace, Architect of Thought's −8 — a cast permission that belongs to the other seat — ✅ done
+
+> "why aren't the mechanics for Tamiyo and Jace Surge deck finished yet? I asked you to prioritize
+> those a while ago."
+
+The last of Jace's residues, pinned by name in §3.150 and §3.154 with three engine gaps:
+`SEARCH_DESTINATIONS` had no `exile` row; a search could only be of your OWN library; and — the
+real one — a cast permission could not cross seats. "For each player, search that player's
+library for a nonland card and exile it … You may cast those cards without paying their mana
+costs" puts the opponent's card in the OPPONENT's exile (this engine models exile per player), and
+`generateLegalActions` offered exile casts by walking the asking player's own exile, the cast
+path looked the card up there, and the removal on cast took it out of there. Three places that
+agreed only because owner and caster had always been the same player.
+
+**Core (`card-grants.ts`, `engine.ts`).** `CardGrant.castBy` names the caster when it is not the
+owner; `castPermissionFor` resolves it to `CastPermission.by` (the owner when absent, so every
+existing grant is byte-identical); the two offer loops walk the GRANT LIST and find each card in
+whichever exile holds it (`exiledCardsUnderPermission`, shorter than an exile zone and behind the
+same `hasCardGrants` fast path); the cast path looks the card up in any exile, refuses a seat the
+permission does not name — *"that permission to cast from exile belongs to another player"* — and
+removes the card from its OWNER's exile. And a correction the feature exposed: **the card's
+`controller` was never set to the caster on cast**, which was invisible while the two were always
+equal and put a cross-seat cast onto the battlefield under the owner. CR 112.2 / 608.3a: the spell
+and the permanent it becomes are the caster's; ownership does not move, so an instant or sorcery
+still goes to its owner's graveyard (608.2n). `core/cross-seat-cast.test.ts` pins all of it, with
+the owner-only control that must stay exactly as it was.
+
+**Cards (`choice-primitives.ts`, `rules.ts`).** ONE search funnel, three new rows rather than a
+second primitive: `searchLibrary` takes `who: 'each'` (APNAP from the controller, ask-first across
+both libraries, then move), `chooser: 'controller'` (the card says who looks), the `exile`
+destination, and `grantCast: 'free'` (a permanent `castBy` permission on every card it exiled).
+The −8 compiles by a whole-line rule beside the tutors; "nonland" is the one negative noun it adds
+to the shared noun parser. `jace-ultimate-play.test.ts` drives the ability through a real game:
+two questions, both answered by A; both cards in their owners' exile; A offered both casts free,
+B offered neither; the Angel cast out of B's exile entering under A's control, owned by B.
+`walker-residues.test.ts`'s residue pin is flipped to COMPLETE.
+
+**His deck after this:** *Tamiyo + Jace Surge* has ONE unsupported card left — Axebane Guardian,
+whose "Add X mana in any combination of colors" is a board-derived mana AMOUNT that core cannot
+express. Measured 2026-09-19 on the 32,341-card corpus: **72 cards print "Add {C} for each …", 71
+"Add X mana", 32 "…in any combination of colors" — none playable.** That is the next family, and it
+is a family, not a card (Priest of Titania, Gaea's Cradle, Elvish Archdruid sit in it).
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
