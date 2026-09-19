@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T12:43:53.581Z",
+  "generatedAt": "2026-09-19T12:47:10.332Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7168,
+  "requested": 7199,
   "unresolved": [],
   "cards": [
     {
@@ -5717,6 +5717,64 @@
         "display": "https://cards.scryfall.io/display/front/c/9/c9045fcb-b633-4c35-8058-6234311551ae.webp?1783934610",
         "art": "https://cards.scryfall.io/art/front/c/9/c9045fcb-b633-4c35-8058-6234311551ae.webp?1783934610",
         "crop": "https://cards.scryfall.io/crop/front/c/9/c9045fcb-b633-4c35-8058-6234311551ae.webp?1783934610"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "bfef6acb-a11c-4a3f-9cfb-9394dece2675",
+      "name": "Akki Avalanchers",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin Warrior",
+      "oracleText": "Sacrifice a land: This creature gets +2/+0 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "chk",
+      "collectorNumber": "151",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.jpg?1783944307",
+        "normal": "https://cards.scryfall.io/normal/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.jpg?1783944307",
+        "large": "https://cards.scryfall.io/large/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.jpg?1783944307",
+        "png": "https://cards.scryfall.io/png/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.png?1783944307",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.jpg?1783944307",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.jpg?1783944307",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.webp?1783944307",
+        "grid": "https://cards.scryfall.io/grid/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.webp?1783944307",
+        "display": "https://cards.scryfall.io/display/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.webp?1783944307",
+        "art": "https://cards.scryfall.io/art/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.webp?1783944307",
+        "crop": "https://cards.scryfall.io/crop/front/b/f/bfef6acb-a11c-4a3f-9cfb-9394dece2675.webp?1783944307"
       },
       "localImages": {},
       "layout": "normal",
@@ -23021,6 +23079,65 @@
       "faces": []
     },
     {
+      "id": "854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601",
+      "name": "Azimaet Drake",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Drake"
+        ]
+      },
+      "rawTypeLine": "Creature — Drake",
+      "oracleText": "Flying\n{U}: This creature gets +1/+0 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "mir",
+      "collectorNumber": "53",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.jpg?1783947113",
+        "normal": "https://cards.scryfall.io/normal/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.jpg?1783947113",
+        "large": "https://cards.scryfall.io/large/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.jpg?1783947113",
+        "png": "https://cards.scryfall.io/png/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.png?1783947113",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.jpg?1783947113",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.jpg?1783947113",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.webp?1783947113",
+        "grid": "https://cards.scryfall.io/grid/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.webp?1783947113",
+        "display": "https://cards.scryfall.io/display/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.webp?1783947113",
+        "art": "https://cards.scryfall.io/art/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.webp?1783947113",
+        "crop": "https://cards.scryfall.io/crop/front/8/5/854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601.webp?1783947113"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "50ef0ac3-e911-4d67-a751-8d86160ae843",
       "name": "Azorius Chancery",
       "manaCost": {
@@ -27183,6 +27300,65 @@
         "normal": "basilisk-collar-normal.jpg",
         "art_crop": "basilisk-collar-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "26bfde99-7761-48e1-851a-522f888d0f6c",
+      "name": "Basking Rootwalla",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard",
+      "oracleText": "{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.\nMadness {0} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "uma",
+      "collectorNumber": "156",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.jpg?1783933796",
+        "normal": "https://cards.scryfall.io/normal/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.jpg?1783933796",
+        "large": "https://cards.scryfall.io/large/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.jpg?1783933796",
+        "png": "https://cards.scryfall.io/png/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.png?1783933796",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.jpg?1783933796",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.jpg?1783933796",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.webp?1783933796",
+        "grid": "https://cards.scryfall.io/grid/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.webp?1783933796",
+        "display": "https://cards.scryfall.io/display/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.webp?1783933796",
+        "art": "https://cards.scryfall.io/art/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.webp?1783933796",
+        "crop": "https://cards.scryfall.io/crop/front/2/6/26bfde99-7761-48e1-851a-522f888d0f6c.webp?1783933796"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -34075,6 +34251,65 @@
         "display": "https://cards.scryfall.io/display/front/a/8/a8b85603-0ac6-4587-9724-e35ac06ffab9.webp?1783921848",
         "art": "https://cards.scryfall.io/art/front/a/8/a8b85603-0ac6-4587-9724-e35ac06ffab9.webp?1783921848",
         "crop": "https://cards.scryfall.io/crop/front/a/8/a8b85603-0ac6-4587-9724-e35ac06ffab9.webp?1783921848"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4404fc9c-ef02-479c-9638-0cc163f0b48f",
+      "name": "Blazing Rootwalla",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard",
+      "oracleText": "{R}: This creature gets +2/+0 until end of turn. Activate only once each turn.\nMadness {0} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "mh2",
+      "collectorNumber": "115",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.jpg?1783926849",
+        "normal": "https://cards.scryfall.io/normal/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.jpg?1783926849",
+        "large": "https://cards.scryfall.io/large/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.jpg?1783926849",
+        "png": "https://cards.scryfall.io/png/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.png?1783926849",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.jpg?1783926849",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.jpg?1783926849",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.webp?1783926849",
+        "grid": "https://cards.scryfall.io/grid/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.webp?1783926849",
+        "display": "https://cards.scryfall.io/display/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.webp?1783926849",
+        "art": "https://cards.scryfall.io/art/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.webp?1783926849",
+        "crop": "https://cards.scryfall.io/crop/front/4/4/4404fc9c-ef02-479c-9638-0cc163f0b48f.webp?1783926849"
       },
       "localImages": {},
       "layout": "normal",
@@ -77451,6 +77686,64 @@
       ]
     },
     {
+      "id": "6b23b3e4-58cf-4b5d-bdcb-410a403b4987",
+      "name": "Cutthroat Contender",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire Warrior",
+      "oracleText": "Pay 1 life: This creature gets +1/+0 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "snc",
+      "collectorNumber": "73",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.jpg?1783923133",
+        "normal": "https://cards.scryfall.io/normal/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.jpg?1783923133",
+        "large": "https://cards.scryfall.io/large/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.jpg?1783923133",
+        "png": "https://cards.scryfall.io/png/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.png?1783923133",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.jpg?1783923133",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.jpg?1783923133",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.webp?1783923133",
+        "grid": "https://cards.scryfall.io/grid/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.webp?1783923133",
+        "display": "https://cards.scryfall.io/display/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.webp?1783923133",
+        "art": "https://cards.scryfall.io/art/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.webp?1783923133",
+        "crop": "https://cards.scryfall.io/crop/front/6/b/6b23b3e4-58cf-4b5d-bdcb-410a403b4987.webp?1783923133"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "233f4a05-057b-48f4-8f56-8d4a060a40e4",
       "name": "Cycle of Renewal",
       "manaCost": {
@@ -78036,6 +78329,65 @@
         "display": "https://cards.scryfall.io/display/front/e/7/e72a38b9-29aa-4804-ab27-4c40321f0bc3.webp?1783909498",
         "art": "https://cards.scryfall.io/art/front/e/7/e72a38b9-29aa-4804-ab27-4c40321f0bc3.webp?1783909498",
         "crop": "https://cards.scryfall.io/crop/front/e/7/e72a38b9-29aa-4804-ab27-4c40321f0bc3.webp?1783909498"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3e1b9878-62b4-45eb-943e-0230a6e78764",
+      "name": "Dai Li Censor",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier",
+          "Advisor"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier Advisor",
+      "oracleText": "{1}, Sacrifice another creature: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tle",
+      "collectorNumber": "102",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.jpg?1783904827",
+        "normal": "https://cards.scryfall.io/normal/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.jpg?1783904827",
+        "large": "https://cards.scryfall.io/large/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.jpg?1783904827",
+        "png": "https://cards.scryfall.io/png/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.png?1783904827",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.jpg?1783904827",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.jpg?1783904827",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.webp?1783904827",
+        "grid": "https://cards.scryfall.io/grid/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.webp?1783904827",
+        "display": "https://cards.scryfall.io/display/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.webp?1783904827",
+        "art": "https://cards.scryfall.io/art/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.webp?1783904827",
+        "crop": "https://cards.scryfall.io/crop/front/3/e/3e1b9878-62b4-45eb-943e-0230a6e78764.webp?1783904827"
       },
       "localImages": {},
       "layout": "normal",
@@ -80936,6 +81288,63 @@
         "normal": "darksteel-sentinel-normal.jpg",
         "art_crop": "darksteel-sentinel-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fec37c5a-8223-441c-a8a6-8da1a2dfc3fb",
+      "name": "Darkthicket Wolf",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wolf"
+        ]
+      },
+      "rawTypeLine": "Creature — Wolf",
+      "oracleText": "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "isd",
+      "collectorNumber": "175",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.jpg?1783940921",
+        "normal": "https://cards.scryfall.io/normal/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.jpg?1783940921",
+        "large": "https://cards.scryfall.io/large/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.jpg?1783940921",
+        "png": "https://cards.scryfall.io/png/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.png?1783940921",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.jpg?1783940921",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.jpg?1783940921",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.webp?1783940921",
+        "grid": "https://cards.scryfall.io/grid/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.webp?1783940921",
+        "display": "https://cards.scryfall.io/display/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.webp?1783940921",
+        "art": "https://cards.scryfall.io/art/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.webp?1783940921",
+        "crop": "https://cards.scryfall.io/crop/front/f/e/fec37c5a-8223-441c-a8a6-8da1a2dfc3fb.webp?1783940921"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -88997,6 +89406,63 @@
       "faces": []
     },
     {
+      "id": "63c87009-ff1b-44b9-88b1-e26219094c67",
+      "name": "Desolation Prowler",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wolf"
+        ]
+      },
+      "rawTypeLine": "Creature — Wolf",
+      "oracleText": "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "hob",
+      "collectorNumber": "64",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.jpg?1785237955",
+        "normal": "https://cards.scryfall.io/normal/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.jpg?1785237955",
+        "large": "https://cards.scryfall.io/large/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.jpg?1785237955",
+        "png": "https://cards.scryfall.io/png/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.png?1785237955",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.jpg?1785237955",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.jpg?1785237955",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.webp?1785237955",
+        "grid": "https://cards.scryfall.io/grid/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.webp?1785237955",
+        "display": "https://cards.scryfall.io/display/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.webp?1785237955",
+        "art": "https://cards.scryfall.io/art/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.webp?1785237955",
+        "crop": "https://cards.scryfall.io/crop/front/6/3/63c87009-ff1b-44b9-88b1-e26219094c67.webp?1785237955"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "f37a4bc1-3702-44d7-8b29-dca99b563c6b",
       "name": "Despark",
       "manaCost": {
@@ -96770,6 +97236,65 @@
         "display": "https://cards.scryfall.io/display/front/2/8/28ebd1f5-55ee-48c9-a8df-85c8c4bf3473.webp?1783942668",
         "art": "https://cards.scryfall.io/art/front/2/8/28ebd1f5-55ee-48c9-a8df-85c8c4bf3473.webp?1783942668",
         "crop": "https://cards.scryfall.io/crop/front/2/8/28ebd1f5-55ee-48c9-a8df-85c8c4bf3473.webp?1783942668"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "64ee32f9-6120-4f15-a692-89a4cd8167c6",
+      "name": "Drake Hatchling",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Drake"
+        ]
+      },
+      "rawTypeLine": "Creature — Drake",
+      "oracleText": "Flying\n{U}: This creature gets +1/+0 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "mmq",
+      "collectorNumber": "76",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.jpg?1783945968",
+        "normal": "https://cards.scryfall.io/normal/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.jpg?1783945968",
+        "large": "https://cards.scryfall.io/large/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.jpg?1783945968",
+        "png": "https://cards.scryfall.io/png/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.png?1783945968",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.jpg?1783945968",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.jpg?1783945968",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.webp?1783945968",
+        "grid": "https://cards.scryfall.io/grid/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.webp?1783945968",
+        "display": "https://cards.scryfall.io/display/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.webp?1783945968",
+        "art": "https://cards.scryfall.io/art/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.webp?1783945968",
+        "crop": "https://cards.scryfall.io/crop/front/6/4/64ee32f9-6120-4f15-a692-89a4cd8167c6.webp?1783945968"
       },
       "localImages": {},
       "layout": "normal",
@@ -121580,6 +122105,66 @@
       "faces": []
     },
     {
+      "id": "83a6fa37-8351-403b-ae05-b67e9bf74bbb",
+      "name": "Festerleech",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie",
+          "Leech"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie Leech",
+      "oracleText": "Whenever this creature deals combat damage to a player, you mill two cards.\n{1}{B}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Mill"
+      ],
+      "set": "mkm",
+      "collectorNumber": "85",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.jpg?1783912897",
+        "normal": "https://cards.scryfall.io/normal/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.jpg?1783912897",
+        "large": "https://cards.scryfall.io/large/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.jpg?1783912897",
+        "png": "https://cards.scryfall.io/png/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.png?1783912897",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.jpg?1783912897",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.jpg?1783912897",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.webp?1783912897",
+        "grid": "https://cards.scryfall.io/grid/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.webp?1783912897",
+        "display": "https://cards.scryfall.io/display/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.webp?1783912897",
+        "art": "https://cards.scryfall.io/art/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.webp?1783912897",
+        "crop": "https://cards.scryfall.io/crop/front/8/3/83a6fa37-8351-403b-ae05-b67e9bf74bbb.webp?1783912897"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d8d050c1-ae0c-46c1-8aa7-7cde4606105b",
       "name": "Festival Crasher",
       "manaCost": {
@@ -123686,6 +124271,65 @@
         "display": "https://cards.scryfall.io/display/front/7/2/72c6eb99-759d-4baa-8ce9-f20583671e82.webp?1783942614",
         "art": "https://cards.scryfall.io/art/front/7/2/72c6eb99-759d-4baa-8ce9-f20583671e82.webp?1783942614",
         "crop": "https://cards.scryfall.io/crop/front/7/2/72c6eb99-759d-4baa-8ce9-f20583671e82.webp?1783942614"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2afdb5e8-31ba-4013-93c9-36e9f755f238",
+      "name": "Fire Drake",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Drake"
+        ]
+      },
+      "rawTypeLine": "Creature — Drake",
+      "oracleText": "Flying\n{R}: This creature gets +1/+0 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "me3",
+      "collectorNumber": "98",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.jpg?1783942219",
+        "normal": "https://cards.scryfall.io/normal/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.jpg?1783942219",
+        "large": "https://cards.scryfall.io/large/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.jpg?1783942219",
+        "png": "https://cards.scryfall.io/png/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.png?1783942219",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.jpg?1783942219",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.jpg?1783942219",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.webp?1783942219",
+        "grid": "https://cards.scryfall.io/grid/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.webp?1783942219",
+        "display": "https://cards.scryfall.io/display/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.webp?1783942219",
+        "art": "https://cards.scryfall.io/art/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.webp?1783942219",
+        "crop": "https://cards.scryfall.io/crop/front/2/a/2afdb5e8-31ba-4013-93c9-36e9f755f238.webp?1783942219"
       },
       "localImages": {},
       "layout": "normal",
@@ -133485,6 +134129,121 @@
       "faces": []
     },
     {
+      "id": "d9f3a08f-403e-4d6c-87c7-add8170bde8b",
+      "name": "Frilled Oculus",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Homunculus"
+        ]
+      },
+      "rawTypeLine": "Creature — Homunculus",
+      "oracleText": "{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "G",
+        "U"
+      ],
+      "keywords": [],
+      "set": "gtc",
+      "collectorNumber": "35",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.jpg?1783940139",
+        "normal": "https://cards.scryfall.io/normal/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.jpg?1783940139",
+        "large": "https://cards.scryfall.io/large/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.jpg?1783940139",
+        "png": "https://cards.scryfall.io/png/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.png?1783940139",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.jpg?1783940139",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.jpg?1783940139",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.webp?1783940139",
+        "grid": "https://cards.scryfall.io/grid/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.webp?1783940139",
+        "display": "https://cards.scryfall.io/display/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.webp?1783940139",
+        "art": "https://cards.scryfall.io/art/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.webp?1783940139",
+        "crop": "https://cards.scryfall.io/crop/front/d/9/d9f3a08f-403e-4d6c-87c7-add8170bde8b.webp?1783940139"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "73c755ff-3fbb-4128-9357-0874eb61ff4c",
+      "name": "Frilled Sandwalla",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard",
+      "oracleText": "{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "m20",
+      "collectorNumber": "340",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.jpg?1783932899",
+        "normal": "https://cards.scryfall.io/normal/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.jpg?1783932899",
+        "large": "https://cards.scryfall.io/large/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.jpg?1783932899",
+        "png": "https://cards.scryfall.io/png/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.png?1783932899",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.jpg?1783932899",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.jpg?1783932899",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.webp?1783932899",
+        "grid": "https://cards.scryfall.io/grid/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.webp?1783932899",
+        "display": "https://cards.scryfall.io/display/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.webp?1783932899",
+        "art": "https://cards.scryfall.io/art/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.webp?1783932899",
+        "crop": "https://cards.scryfall.io/crop/front/7/3/73c755ff-3fbb-4128-9357-0874eb61ff4c.webp?1783932899"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3941e799-a254-423e-90bb-091dbe56ca6a",
       "name": "Frog Tongue",
       "manaCost": {
@@ -140461,6 +141220,67 @@
         "display": "https://cards.scryfall.io/display/front/c/9/c9786c4f-f09b-46ce-966c-10efb1e5e609.webp?1783946236",
         "art": "https://cards.scryfall.io/art/front/c/9/c9786c4f-f09b-46ce-966c-10efb1e5e609.webp?1783946236",
         "crop": "https://cards.scryfall.io/crop/front/c/9/c9786c4f-f09b-46ce-966c-10efb1e5e609.webp?1783946236"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "00cab68b-ee26-46eb-a18b-9b42bf2d10e5",
+      "name": "Ghor-Clan Bloodscale",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard Warrior",
+      "oracleText": "First strike\n{3}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "G",
+        "R"
+      ],
+      "keywords": [
+        "First strike"
+      ],
+      "set": "gpt",
+      "collectorNumber": "66",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.jpg?1783943502",
+        "normal": "https://cards.scryfall.io/normal/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.jpg?1783943502",
+        "large": "https://cards.scryfall.io/large/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.jpg?1783943502",
+        "png": "https://cards.scryfall.io/png/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.png?1783943502",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.jpg?1783943502",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.jpg?1783943502",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.webp?1783943502",
+        "grid": "https://cards.scryfall.io/grid/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.webp?1783943502",
+        "display": "https://cards.scryfall.io/display/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.webp?1783943502",
+        "art": "https://cards.scryfall.io/art/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.webp?1783943502",
+        "crop": "https://cards.scryfall.io/crop/front/0/0/00cab68b-ee26-46eb-a18b-9b42bf2d10e5.webp?1783943502"
       },
       "localImages": {},
       "layout": "normal",
@@ -197157,6 +197977,65 @@
       "faces": []
     },
     {
+      "id": "c908f812-a7ee-411e-89f1-1f84793d095d",
+      "name": "Knight of the Skyward Eye",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Knight"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Knight",
+      "oracleText": "{3}{G}: This creature gets +3/+3 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [],
+      "set": "a25",
+      "collectorNumber": "19",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.jpg?1783935195",
+        "normal": "https://cards.scryfall.io/normal/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.jpg?1783935195",
+        "large": "https://cards.scryfall.io/large/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.jpg?1783935195",
+        "png": "https://cards.scryfall.io/png/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.png?1783935195",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.jpg?1783935195",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.jpg?1783935195",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.webp?1783935195",
+        "grid": "https://cards.scryfall.io/grid/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.webp?1783935195",
+        "display": "https://cards.scryfall.io/display/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.webp?1783935195",
+        "art": "https://cards.scryfall.io/art/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.webp?1783935195",
+        "crop": "https://cards.scryfall.io/crop/front/c/9/c908f812-a7ee-411e-89f1-1f84793d095d.webp?1783935195"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2f81d2a0-5301-4cae-ac83-ad51647146e3",
       "name": "Knight of the Tusk",
       "manaCost": {
@@ -198809,6 +199688,64 @@
       "faces": []
     },
     {
+      "id": "d80665ae-fcb2-48fd-95be-8768293bcef7",
+      "name": "Kozilek's Translator",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Eldrazi",
+          "Drone"
+        ]
+      },
+      "rawTypeLine": "Creature — Eldrazi Drone",
+      "oracleText": "Devoid (This card has no color.)\nPay 1 life: Add {C}. Activate only once each turn. ({C} represents colorless mana.)",
+      "power": 3,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Devoid"
+      ],
+      "set": "ogw",
+      "collectorNumber": "74",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.jpg?1783937915",
+        "normal": "https://cards.scryfall.io/normal/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.jpg?1783937915",
+        "large": "https://cards.scryfall.io/large/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.jpg?1783937915",
+        "png": "https://cards.scryfall.io/png/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.png?1783937915",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.jpg?1783937915",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.jpg?1783937915",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.webp?1783937915",
+        "grid": "https://cards.scryfall.io/grid/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.webp?1783937915",
+        "display": "https://cards.scryfall.io/display/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.webp?1783937915",
+        "art": "https://cards.scryfall.io/art/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.webp?1783937915",
+        "crop": "https://cards.scryfall.io/crop/front/d/8/d80665ae-fcb2-48fd-95be-8768293bcef7.webp?1783937915"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "cc1f65c8-4941-41ac-9340-f741725ec71c",
       "name": "Kraken Hatchling",
       "manaCost": {
@@ -199325,6 +200262,64 @@
         "display": "https://cards.scryfall.io/display/front/c/6/c6f8e16a-3e90-4be2-bf1a-989c86552251.webp?1783912530",
         "art": "https://cards.scryfall.io/art/front/c/6/c6f8e16a-3e90-4be2-bf1a-989c86552251.webp?1783912530",
         "crop": "https://cards.scryfall.io/crop/front/c/6/c6f8e16a-3e90-4be2-bf1a-989c86552251.webp?1783912530"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "86c415d8-1d2d-4339-955b-0f2aebeb3c95",
+      "name": "Kraven's Cats",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Cat",
+          "Villain"
+        ]
+      },
+      "rawTypeLine": "Creature — Cat Villain",
+      "oracleText": "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "spm",
+      "collectorNumber": "104",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.jpg?1783905326",
+        "normal": "https://cards.scryfall.io/normal/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.jpg?1783905326",
+        "large": "https://cards.scryfall.io/large/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.jpg?1783905326",
+        "png": "https://cards.scryfall.io/png/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.png?1783905326",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.jpg?1783905326",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.jpg?1783905326",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.webp?1783905326",
+        "grid": "https://cards.scryfall.io/grid/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.webp?1783905326",
+        "display": "https://cards.scryfall.io/display/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.webp?1783905326",
+        "art": "https://cards.scryfall.io/art/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.webp?1783905326",
+        "crop": "https://cards.scryfall.io/crop/front/8/6/86c415d8-1d2d-4339-955b-0f2aebeb3c95.webp?1783905326"
       },
       "localImages": {},
       "layout": "normal",
@@ -208606,6 +209601,66 @@
         "display": "https://cards.scryfall.io/display/front/5/4/54b3a547-6f74-4cb4-ad98-7e1b75f1a120.webp?1783907893",
         "art": "https://cards.scryfall.io/art/front/5/4/54b3a547-6f74-4cb4-ad98-7e1b75f1a120.webp?1783907893",
         "crop": "https://cards.scryfall.io/crop/front/5/4/54b3a547-6f74-4cb4-ad98-7e1b75f1a120.webp?1783907893"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "bd269842-4c31-4398-9451-be0d941397ac",
+      "name": "Locust Swarm",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Insect"
+        ]
+      },
+      "rawTypeLine": "Creature — Insect",
+      "oracleText": "Flying\n{G}: Regenerate this creature.\n{G}: Untap this creature. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Flying",
+        "Regenerate"
+      ],
+      "set": "mir",
+      "collectorNumber": "226",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.jpg?1783947063",
+        "normal": "https://cards.scryfall.io/normal/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.jpg?1783947063",
+        "large": "https://cards.scryfall.io/large/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.jpg?1783947063",
+        "png": "https://cards.scryfall.io/png/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.png?1783947063",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.jpg?1783947063",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.jpg?1783947063",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.webp?1783947063",
+        "grid": "https://cards.scryfall.io/grid/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.webp?1783947063",
+        "display": "https://cards.scryfall.io/display/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.webp?1783947063",
+        "art": "https://cards.scryfall.io/art/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.webp?1783947063",
+        "crop": "https://cards.scryfall.io/crop/front/b/d/bd269842-4c31-4398-9451-be0d941397ac.webp?1783947063"
       },
       "localImages": {},
       "layout": "normal",
@@ -225019,6 +226074,64 @@
         "display": "https://cards.scryfall.io/display/front/9/4/947f44b0-91be-4115-b499-57893f0f69a9.webp?1783940136",
         "art": "https://cards.scryfall.io/art/front/9/4/947f44b0-91be-4115-b499-57893f0f69a9.webp?1783940136",
         "crop": "https://cards.scryfall.io/crop/front/9/4/947f44b0-91be-4115-b499-57893f0f69a9.webp?1783940136"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53",
+      "name": "Mindful Biomancer",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dryad",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Dryad Druid",
+      "oracleText": "When this creature enters, you gain 1 life.\n{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "sos",
+      "collectorNumber": "154",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.jpg?1783903656",
+        "normal": "https://cards.scryfall.io/normal/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.jpg?1783903656",
+        "large": "https://cards.scryfall.io/large/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.jpg?1783903656",
+        "png": "https://cards.scryfall.io/png/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.png?1783903656",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.jpg?1783903656",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.jpg?1783903656",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.webp?1783903656",
+        "grid": "https://cards.scryfall.io/grid/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.webp?1783903656",
+        "display": "https://cards.scryfall.io/display/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.webp?1783903656",
+        "art": "https://cards.scryfall.io/art/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.webp?1783903656",
+        "crop": "https://cards.scryfall.io/crop/front/2/c/2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53.webp?1783903656"
       },
       "localImages": {},
       "layout": "normal",
@@ -261061,6 +262174,63 @@
       "faces": []
     },
     {
+      "id": "4bf4da70-c656-4e40-bb0f-68e9dda024c9",
+      "name": "Plated Rootwalla",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard",
+      "oracleText": "{2}{G}: This creature gets +3/+3 until end of turn. Activate only once each turn.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "exo",
+      "collectorNumber": "116",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.jpg?1783946504",
+        "normal": "https://cards.scryfall.io/normal/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.jpg?1783946504",
+        "large": "https://cards.scryfall.io/large/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.jpg?1783946504",
+        "png": "https://cards.scryfall.io/png/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.png?1783946504",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.jpg?1783946504",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.jpg?1783946504",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.webp?1783946504",
+        "grid": "https://cards.scryfall.io/grid/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.webp?1783946504",
+        "display": "https://cards.scryfall.io/display/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.webp?1783946504",
+        "art": "https://cards.scryfall.io/art/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.webp?1783946504",
+        "crop": "https://cards.scryfall.io/crop/front/4/b/4bf4da70-c656-4e40-bb0f-68e9dda024c9.webp?1783946504"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e83a74c4-026e-4419-9dde-3b044ef507a0",
       "name": "Plated Seastrider",
       "manaCost": {
@@ -268731,6 +269901,66 @@
         "display": "https://cards.scryfall.io/display/front/3/3/333406d5-abcc-4629-a33b-395d0662ba1b.webp?1783933123",
         "art": "https://cards.scryfall.io/art/front/3/3/333406d5-abcc-4629-a33b-395d0662ba1b.webp?1783933123",
         "crop": "https://cards.scryfall.io/crop/front/3/3/333406d5-abcc-4629-a33b-395d0662ba1b.webp?1783933123"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c901a8d7-e230-4a08-afe5-00e9d1c85544",
+      "name": "Putrid Leech",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie",
+          "Leech"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie Leech",
+      "oracleText": "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "G"
+      ],
+      "colorIdentity": [
+        "B",
+        "G"
+      ],
+      "keywords": [],
+      "set": "ddm",
+      "collectorNumber": "51",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.jpg?1783939483",
+        "normal": "https://cards.scryfall.io/normal/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.jpg?1783939483",
+        "large": "https://cards.scryfall.io/large/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.jpg?1783939483",
+        "png": "https://cards.scryfall.io/png/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.png?1783939483",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.jpg?1783939483",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.jpg?1783939483",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.webp?1783939483",
+        "grid": "https://cards.scryfall.io/grid/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.webp?1783939483",
+        "display": "https://cards.scryfall.io/display/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.webp?1783939483",
+        "art": "https://cards.scryfall.io/art/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.webp?1783939483",
+        "crop": "https://cards.scryfall.io/crop/front/c/9/c901a8d7-e230-4a08-afe5-00e9d1c85544.webp?1783939483"
       },
       "localImages": {},
       "layout": "normal",
@@ -289970,6 +291200,63 @@
       "faces": []
     },
     {
+      "id": "f5177a97-cf3b-4a82-adc4-14835152880d",
+      "name": "Rootwalla",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard",
+      "oracleText": "{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "w17",
+      "collectorNumber": "27",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.jpg?1783936544",
+        "normal": "https://cards.scryfall.io/normal/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.jpg?1783936544",
+        "large": "https://cards.scryfall.io/large/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.jpg?1783936544",
+        "png": "https://cards.scryfall.io/png/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.png?1783936544",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.jpg?1783936544",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.jpg?1783936544",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.webp?1783936544",
+        "grid": "https://cards.scryfall.io/grid/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.webp?1783936544",
+        "display": "https://cards.scryfall.io/display/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.webp?1783936544",
+        "art": "https://cards.scryfall.io/art/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.webp?1783936544",
+        "crop": "https://cards.scryfall.io/crop/front/f/5/f5177a97-cf3b-4a82-adc4-14835152880d.webp?1783936544"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3a840bba-4725-45fd-885f-1b3d615dfa97",
       "name": "Rootwater Alligator",
       "manaCost": {
@@ -308663,6 +309950,63 @@
       "faces": []
     },
     {
+      "id": "5b302bc8-683f-4a26-ab86-87eaa19dce4d",
+      "name": "Sepulcher Ghoul",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie",
+      "oracleText": "Sacrifice another creature: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "afr",
+      "collectorNumber": "118",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.jpg?1783926490",
+        "normal": "https://cards.scryfall.io/normal/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.jpg?1783926490",
+        "large": "https://cards.scryfall.io/large/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.jpg?1783926490",
+        "png": "https://cards.scryfall.io/png/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.png?1783926490",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.jpg?1783926490",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.jpg?1783926490",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.webp?1783926490",
+        "grid": "https://cards.scryfall.io/grid/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.webp?1783926490",
+        "display": "https://cards.scryfall.io/display/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.webp?1783926490",
+        "art": "https://cards.scryfall.io/art/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.webp?1783926490",
+        "crop": "https://cards.scryfall.io/crop/front/5/b/5b302bc8-683f-4a26-ab86-87eaa19dce4d.webp?1783926490"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "38c588ae-7254-4fae-aa9a-03e2a5524492",
       "name": "Seraph of Dawn",
       "manaCost": {
@@ -310307,6 +311651,66 @@
         "display": "https://cards.scryfall.io/display/front/7/6/7680a8e1-cd59-43c5-8f06-426b918692c8.webp?1783915420",
         "art": "https://cards.scryfall.io/art/front/7/6/7680a8e1-cd59-43c5-8f06-426b918692c8.webp?1783915420",
         "crop": "https://cards.scryfall.io/crop/front/7/6/7680a8e1-cd59-43c5-8f06-426b918692c8.webp?1783915420"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "35d2ae77-b16c-4a01-84ce-5c78be5a54d8",
+      "name": "Setessan Griffin",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Griffin"
+        ]
+      },
+      "rawTypeLine": "Creature — Griffin",
+      "oracleText": "Flying\n{2}{G}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "ths",
+      "collectorNumber": "30",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.jpg?1783939808",
+        "normal": "https://cards.scryfall.io/normal/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.jpg?1783939808",
+        "large": "https://cards.scryfall.io/large/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.jpg?1783939808",
+        "png": "https://cards.scryfall.io/png/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.png?1783939808",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.jpg?1783939808",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.jpg?1783939808",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.webp?1783939808",
+        "grid": "https://cards.scryfall.io/grid/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.webp?1783939808",
+        "display": "https://cards.scryfall.io/display/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.webp?1783939808",
+        "art": "https://cards.scryfall.io/art/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.webp?1783939808",
+        "crop": "https://cards.scryfall.io/crop/front/3/5/35d2ae77-b16c-4a01-84ce-5c78be5a54d8.webp?1783939808"
       },
       "localImages": {},
       "layout": "normal",
@@ -329512,6 +330916,63 @@
       "faces": []
     },
     {
+      "id": "ecd271d7-a3c8-4448-b8e2-bcef5d7e9118",
+      "name": "Snarling Wolf",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wolf"
+        ]
+      },
+      "rawTypeLine": "Creature — Wolf",
+      "oracleText": "{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "vow",
+      "collectorNumber": "219",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.jpg?1783924801",
+        "normal": "https://cards.scryfall.io/normal/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.jpg?1783924801",
+        "large": "https://cards.scryfall.io/large/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.jpg?1783924801",
+        "png": "https://cards.scryfall.io/png/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.png?1783924801",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.jpg?1783924801",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.jpg?1783924801",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.webp?1783924801",
+        "grid": "https://cards.scryfall.io/grid/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.webp?1783924801",
+        "display": "https://cards.scryfall.io/display/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.webp?1783924801",
+        "art": "https://cards.scryfall.io/art/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.webp?1783924801",
+        "crop": "https://cards.scryfall.io/crop/front/e/c/ecd271d7-a3c8-4448-b8e2-bcef5d7e9118.webp?1783924801"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "569c9e8c-7808-49d0-82c1-72d5b835f51c",
       "name": "Sneaking Guide",
       "manaCost": {
@@ -338422,6 +339883,65 @@
       "faces": []
     },
     {
+      "id": "c9ec1676-f59b-4ab6-995c-d2525ac11370",
+      "name": "Spitting Drake",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Drake"
+        ]
+      },
+      "rawTypeLine": "Creature — Drake",
+      "oracleText": "Flying\n{R}: This creature gets +1/+0 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "6ed",
+      "collectorNumber": "207",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.jpg?1783946167",
+        "normal": "https://cards.scryfall.io/normal/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.jpg?1783946167",
+        "large": "https://cards.scryfall.io/large/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.jpg?1783946167",
+        "png": "https://cards.scryfall.io/png/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.png?1783946167",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.jpg?1783946167",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.jpg?1783946167",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.webp?1783946167",
+        "grid": "https://cards.scryfall.io/grid/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.webp?1783946167",
+        "display": "https://cards.scryfall.io/display/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.webp?1783946167",
+        "art": "https://cards.scryfall.io/art/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.webp?1783946167",
+        "crop": "https://cards.scryfall.io/crop/front/c/9/c9ec1676-f59b-4ab6-995c-d2525ac11370.webp?1783946167"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "de1aa8f9-8200-4ddd-9ab5-1a8181cc1792",
       "name": "Spitting Earth",
       "manaCost": {
@@ -341009,6 +342529,64 @@
         "display": "https://cards.scryfall.io/display/front/5/c/5c0eed33-553a-4865-9b22-30c33fbd1c51.webp?1783942666",
         "art": "https://cards.scryfall.io/art/front/5/c/5c0eed33-553a-4865-9b22-30c33fbd1c51.webp?1783942666",
         "crop": "https://cards.scryfall.io/crop/front/5/c/5c0eed33-553a-4865-9b22-30c33fbd1c51.webp?1783942666"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "12bc5b4c-a809-43f0-8848-38812ce865c2",
+      "name": "Stalking Drone",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Eldrazi",
+          "Drone"
+        ]
+      },
+      "rawTypeLine": "Creature — Eldrazi Drone",
+      "oracleText": "Devoid (This card has no color.)\n{C}: This creature gets +1/+2 until end of turn. Activate only once each turn. ({C} represents colorless mana.)",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Devoid"
+      ],
+      "set": "ogw",
+      "collectorNumber": "124",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.jpg?1783937904",
+        "normal": "https://cards.scryfall.io/normal/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.jpg?1783937904",
+        "large": "https://cards.scryfall.io/large/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.jpg?1783937904",
+        "png": "https://cards.scryfall.io/png/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.png?1783937904",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.jpg?1783937904",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.jpg?1783937904",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.webp?1783937904",
+        "grid": "https://cards.scryfall.io/grid/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.webp?1783937904",
+        "display": "https://cards.scryfall.io/display/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.webp?1783937904",
+        "art": "https://cards.scryfall.io/art/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.webp?1783937904",
+        "crop": "https://cards.scryfall.io/crop/front/1/2/12bc5b4c-a809-43f0-8848-38812ce865c2.webp?1783937904"
       },
       "localImages": {},
       "layout": "normal",
@@ -381991,6 +383569,66 @@
       "faces": []
     },
     {
+      "id": "0092d7a0-bd00-45e5-a052-c0a9d970bc2e",
+      "name": "Twinblade Slasher",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Warrior",
+      "oracleText": "Wither (This deals damage to creatures in the form of -1/-1 counters.)\n{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Wither"
+      ],
+      "set": "eve",
+      "collectorNumber": "79",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.jpg?1783942678",
+        "normal": "https://cards.scryfall.io/normal/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.jpg?1783942678",
+        "large": "https://cards.scryfall.io/large/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.jpg?1783942678",
+        "png": "https://cards.scryfall.io/png/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.png?1783942678",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.jpg?1783942678",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.jpg?1783942678",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.webp?1783942678",
+        "grid": "https://cards.scryfall.io/grid/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.webp?1783942678",
+        "display": "https://cards.scryfall.io/display/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.webp?1783942678",
+        "art": "https://cards.scryfall.io/art/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.webp?1783942678",
+        "crop": "https://cards.scryfall.io/crop/front/0/0/0092d7a0-bd00-45e5-a052-c0a9d970bc2e.webp?1783942678"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8f878efc-850f-43d2-a6fe-5ea8d1dd5afb",
       "name": "Twincast",
       "manaCost": {
@@ -394835,6 +396473,68 @@
         "display": "https://cards.scryfall.io/display/front/5/f/5fa18f23-c995-4fcc-8e95-bbf76426e703.webp?1783943645",
         "art": "https://cards.scryfall.io/art/front/5/f/5fa18f23-c995-4fcc-8e95-bbf76426e703.webp?1783943645",
         "crop": "https://cards.scryfall.io/crop/front/5/f/5fa18f23-c995-4fcc-8e95-bbf76426e703.webp?1783943645"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a441fae0-a9c7-4d91-a69e-8ea1f8fa6947",
+      "name": "Viashino Slaughtermaster",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard Warrior",
+      "oracleText": "Double strike\n{B}{G}: This creature gets +1/+1 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "B",
+        "G",
+        "R"
+      ],
+      "keywords": [
+        "Double strike"
+      ],
+      "set": "mm2",
+      "collectorNumber": "133",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.jpg?1783938401",
+        "normal": "https://cards.scryfall.io/normal/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.jpg?1783938401",
+        "large": "https://cards.scryfall.io/large/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.jpg?1783938401",
+        "png": "https://cards.scryfall.io/png/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.png?1783938401",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.jpg?1783938401",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.jpg?1783938401",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.webp?1783938401",
+        "grid": "https://cards.scryfall.io/grid/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.webp?1783938401",
+        "display": "https://cards.scryfall.io/display/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.webp?1783938401",
+        "art": "https://cards.scryfall.io/art/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.webp?1783938401",
+        "crop": "https://cards.scryfall.io/crop/front/a/4/a441fae0-a9c7-4d91-a69e-8ea1f8fa6947.webp?1783938401"
       },
       "localImages": {},
       "layout": "normal",
@@ -410307,6 +412007,66 @@
       "faces": []
     },
     {
+      "id": "feffa722-fe05-4e70-ba4c-1cf110b3662f",
+      "name": "Wild Aesthir",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Bird"
+        ]
+      },
+      "rawTypeLine": "Creature — Bird",
+      "oracleText": "Flying, first strike\n{W}{W}: This creature gets +2/+0 until end of turn. Activate only once each turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "First strike"
+      ],
+      "set": "me4",
+      "collectorNumber": "34",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.jpg?1783941456",
+        "normal": "https://cards.scryfall.io/normal/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.jpg?1783941456",
+        "large": "https://cards.scryfall.io/large/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.jpg?1783941456",
+        "png": "https://cards.scryfall.io/png/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.png?1783941456",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.jpg?1783941456",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.jpg?1783941456",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.webp?1783941456",
+        "grid": "https://cards.scryfall.io/grid/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.webp?1783941456",
+        "display": "https://cards.scryfall.io/display/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.webp?1783941456",
+        "art": "https://cards.scryfall.io/art/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.webp?1783941456",
+        "crop": "https://cards.scryfall.io/crop/front/f/e/feffa722-fe05-4e70-ba4c-1cf110b3662f.webp?1783941456"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "6b9e72f4-0087-4a79-b9af-296c8b930a25",
       "name": "Wild Celebrants",
       "manaCost": {
@@ -415213,6 +416973,69 @@
         "display": "https://cards.scryfall.io/display/front/2/c/2c419a2b-4389-49bc-91f1-a613ffcbfa0b.webp?1783932954",
         "art": "https://cards.scryfall.io/art/front/2/c/2c419a2b-4389-49bc-91f1-a613ffcbfa0b.webp?1783932954",
         "crop": "https://cards.scryfall.io/crop/front/2/c/2c419a2b-4389-49bc-91f1-a613ffcbfa0b.webp?1783932954"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "81c604fd-9e3e-4527-9ed8-2fdeaabf0870",
+      "name": "Wolfsbane, Highland Hero",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Mutant",
+          "Werewolf",
+          "Hero"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Mutant Werewolf Hero",
+      "oracleText": "Trample (This creature can deal excess combat damage to the player she's attacking.)\n{2}{G}: Wolfsbane gets +2/+2 until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Trample"
+      ],
+      "set": "msc",
+      "collectorNumber": "767",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.jpg?1783903023",
+        "normal": "https://cards.scryfall.io/normal/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.jpg?1783903023",
+        "large": "https://cards.scryfall.io/large/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.jpg?1783903023",
+        "png": "https://cards.scryfall.io/png/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.png?1783903023",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.jpg?1783903023",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.jpg?1783903023",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.webp?1783903023",
+        "grid": "https://cards.scryfall.io/grid/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.webp?1783903023",
+        "display": "https://cards.scryfall.io/display/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.webp?1783903023",
+        "art": "https://cards.scryfall.io/art/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.webp?1783903023",
+        "crop": "https://cards.scryfall.io/crop/front/8/1/81c604fd-9e3e-4527-9ed8-2fdeaabf0870.webp?1783903023"
       },
       "localImages": {},
       "layout": "normal",
