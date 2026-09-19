@@ -1869,24 +1869,37 @@ export interface ActivatedAbility {
  * must make its card REPORT, never compile to one that is silently always true
  * (a strictly better card) or always false (a dead one).
  *
- * One member so far. 226 cards in the corpus print an "Activate only if" of
- * some shape and 8 of them print THIS shape, so the rest keep reporting until
- * their own conditions are built — deliberately, rather than being widened into
- * this one.
+ * Two members. 226 cards in the corpus print an "Activate only if" of some
+ * shape and 8 of them print the counter shape; 313 print "Activate only once
+ * each turn" (§3.168). The rest keep reporting until their own conditions are
+ * built — deliberately, rather than being widened into one of these.
  */
-export type ActivationRestriction = {
-  /**
-   * "Activate only if ~ has four or more **quest** counters on it" (Luminarch
-   * Ascension, Glistening Sphere, Cryptex). Counts counters of one KIND on the
-   * ability's own source; a source no longer on the battlefield has none, so
-   * the condition fails rather than defaulting to true.
-   */
-  readonly kind: 'sourceHasCounters';
-  /** The counter kind, exactly as `CardInstance.counters` keys it. */
-  readonly counter: string;
-  /** The printed floor — "four **or more**" is `min: 4`. */
-  readonly min: number;
-};
+export type ActivationRestriction =
+  | {
+      /**
+       * "Activate only if ~ has four or more **quest** counters on it" (Luminarch
+       * Ascension, Glistening Sphere, Cryptex). Counts counters of one KIND on the
+       * ability's own source; a source no longer on the battlefield has none, so
+       * the condition fails rather than defaulting to true.
+       */
+      readonly kind: 'sourceHasCounters';
+      /** The counter kind, exactly as `CardInstance.counters` keys it. */
+      readonly counter: string;
+      /** The printed floor — "four **or more**" is `min: 4`. */
+      readonly min: number;
+    }
+  | {
+      /**
+       * "**Activate only once each turn.**" (CR 602.5d) — this ability, on this
+       * permanent, at most once per turn: the memory is
+       * `CardInstance.onceEachTurnActivated`, kept the way a planeswalker's
+       * loyalty turn is (the turn number, compared to `GameState.turnNumber`), so
+       * a new turn needs no reset and a permanent that leaves and returns is a
+       * new object with no memory (CR 400.7). Per ABILITY, not per permanent: a
+       * card with two such abilities may activate each once.
+       */
+      readonly kind: 'onceEachTurn';
+    };
 
 /**
  * One printed CYCLING ability: what it costs and what cycling it does.

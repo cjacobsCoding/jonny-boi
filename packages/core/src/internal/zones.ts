@@ -247,6 +247,9 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // bounced and replayed in one turn may activate again — the once-per-turn
   // marker does not survive the move. Same shape-guard as `attachedTo`.
   if (inst.loyaltyActivatedTurn !== undefined) delete inst.loyaltyActivatedTurn;
+  // §3.168 — "Activate only once each turn" is a memory of THIS object (CR
+  // 400.7): a bounced-and-replayed permanent may activate again this turn.
+  if (inst.onceEachTurnActivated !== undefined) delete inst.onceEachTurnActivated;
   // How the SPELL was kicked is a fact about that announcement, and CR 400.7
   // makes a permanent leaving the battlefield a new object — so a bounced-and-
   // recast creature is kicked (or not) by its own new cast, never by its last

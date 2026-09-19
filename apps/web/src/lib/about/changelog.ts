@@ -70,6 +70,16 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.168',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: '"Activate only once each turn"',
+    summary:
+      'Mindful Biomancer, Frilled Oculus, Twinblade Slasher, Sepulcher Ghoul and 27 more once-a-turn abilities play as printed: the second activation in a turn is simply not offered, and the memory belongs to that permanent on that turn.',
+    cards: ['Mindful Biomancer', 'Frilled Oculus', 'Twinblade Slasher', 'Sepulcher Ghoul'],
+    witness: { kind: 'card', name: 'Frilled Oculus' },
+  },
+  {
     section: '3.167',
     date: '2026-09-19',
     kind: 'app',

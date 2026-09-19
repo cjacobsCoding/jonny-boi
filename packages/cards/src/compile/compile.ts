@@ -998,6 +998,15 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
     activateOnly = { kind: 'sourceHasCounters', counter, min };
     effectText = effectText.slice(0, counterGate.index).trim();
   }
+  // §3.168 — "**Activate only once each turn.**" Read from the same trailing
+  // position. A line printing BOTH restrictions ("… and only if …") is not this
+  // sentence and stays refused: the regex is anchored to the exact wording.
+  const onceEachTurn = ACTIVATE_ONLY_ONCE_EACH_TURN.exec(effectText);
+  if (onceEachTurn) {
+    if (activateOnly !== undefined) return false; // two restrictions on one line: not modelled
+    activateOnly = { kind: 'onceEachTurn' };
+    effectText = effectText.slice(0, onceEachTurn.index).trim();
+  }
   // §3.149 — "~ deals damage equal to ITS power to any target" (Spikeshot
   // Goblin). Run AFTER the printed restrictions above are sliced off: the
   // counter gate's own sentence contains "on it", and rewriting pronouns
@@ -1055,6 +1064,13 @@ const ACTIVATE_ONLY_IF_COUNTERS =
  * which are conditions this engine cannot check and must keep reporting.
  */
 const SORCERY_SPEED_ONLY = /\.\s*activate only as a sorcery\.?$/;
+
+/**
+ * "Activate only once each turn" (CR 602.5d), as the trailing sentence — 313
+ * cards print exactly this; the three that print "… and only if …" do not match
+ * and keep reporting (§3.168). Anchored like the two restrictions above.
+ */
+const ACTIVATE_ONLY_ONCE_EACH_TURN = /\.\s*activate only once each turn\.?$/;
 
 /**
  * Split `COST: EFFECT` on the FIRST colon, rejecting lines whose colon is not an

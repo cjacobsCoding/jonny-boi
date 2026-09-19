@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7136 cards.
+ * 7167 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -1941,6 +1941,24 @@ const POOL_0: readonly CardDefinition[] = [
         condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['creature'] } },
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'creature (you) enters: you gain 1 life',
+      },
+    ],
+  },
+  // Sacrifice a land: This creature gets +2/+0 until end of turn. Activate only once each turn.
+  {
+    id: 'bfef6acb-a11c-4a3f-9cfb-9394dece2675',
+    name: 'Akki Avalanchers',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['goblin', 'warrior'],
+    activated: [
+      {
+        cost: { sacrificeAnother: { anyOfTypes: ['land'] } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Sacrifice a land: ~ gets +2/+0 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -7238,6 +7256,26 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'legendary' }] },
     subtypes: ['spirit'],
   },
+  // Flying
+  // {U}: This creature gets +1/+0 until end of turn. Activate only once each turn.
+  {
+    id: '854ba4e0-f6f3-4b6c-b6cb-ab2b93d64601',
+    name: 'Azimaet Drake',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['drake'],
+    activated: [
+      {
+        cost: { mana: { U: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{u}: ~ gets +1/+0 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // This land enters tapped.
   // When this land enters, return a land you control to its owner's hand.
   // {T}: Add {W}{U}.
@@ -8466,6 +8504,26 @@ const POOL_0: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { deathtouch: true, lifelink: true } },
     },
   },
+  // {1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  // Madness {0} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '26bfde99-7761-48e1-851a-522f888d0f6c',
+    name: 'Basking Rootwalla',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['lizard'],
+    madness: { generic: 0 },
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Put a +1/+1 counter on each creature you control.
   {
     id: 'c2e6fdc0-bdd4-4bba-b8f1-bbc8dfad038e',
@@ -9194,6 +9252,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // Beast of Burden's power and toughness are each equal to the number of creatures on the battlefield.
   {
     id: 'e1a19f6d-4fab-4be6-af9e-c66acc16e4f8',
@@ -9247,9 +9308,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // When this creature enters, if you control a creature with power 4 or greater, draw a card.
   // Plot {1}{G} (You may pay {1}{G} and exile this card from your hand. Cast it as a sorcery on a later turn without paying its mana cost. Plot only as a sorcery.)
   {
@@ -10647,6 +10705,26 @@ const POOL_1: readonly CardDefinition[] = [
         },
         effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
         label: '{1}, sacrifice another creature: ~ deals 1 damage to any target',
+      },
+    ],
+  },
+  // {R}: This creature gets +2/+0 until end of turn. Activate only once each turn.
+  // Madness {0} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '4404fc9c-ef02-479c-9638-0cc163f0b48f',
+    name: 'Blazing Rootwalla',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['lizard'],
+    madness: { generic: 0 },
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{r}: ~ gets +2/+0 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -18065,6 +18143,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Trample
   // At the beginning of your upkeep, sacrifice this creature unless you pay {G}{G}.
   // {1}{G}: Regenerate this creature.
@@ -18153,9 +18234,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Haste
   // When this creature enters, create a 1/1 red Phyrexian Goblin creature token.
   {
@@ -23634,6 +23712,24 @@ const POOL_2: readonly CardDefinition[] = [
     backFaceCastable: true,
     backFaceCastZones: ['graveyard'],
   },
+  // Pay 1 life: This creature gets +1/+0 until end of turn. Activate only once each turn.
+  {
+    id: '6b23b3e4-58cf-4b5d-bdcb-410a403b4987',
+    name: 'Cutthroat Contender',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['vampire', 'warrior'],
+    activated: [
+      {
+        cost: { life: 1 },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Pay 1 life: ~ gets +1/+0 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Sacrifice a land. Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
   {
     id: '233f4a05-057b-48f4-8f56-8d4a060a40e4',
@@ -23794,6 +23890,28 @@ const POOL_2: readonly CardDefinition[] = [
           },
         ],
         label: 'Islandcycling {2}',
+      },
+    ],
+  },
+  // {1}, Sacrifice another creature: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '3e1b9878-62b4-45eb-943e-0230a6e78764',
+    name: 'Dai Li Censor',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'soldier', 'advisor'],
+    activated: [
+      {
+        cost: {
+          mana: { generic: 1 },
+          sacrificeAnother: { anyOfTypes: ['creature'] },
+          sacrificeExcludesSelf: true,
+        },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}, sacrifice another creature: ~ gets +2/+2 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -24513,6 +24631,24 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { flash: true, vigilance: true, indestructible: true },
     subtypes: ['golem'],
+  },
+  // {2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: 'fec37c5a-8223-441c-a8a6-8da1a2dfc3fb',
+    name: 'Darkthicket Wolf',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['wolf'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{2}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
   },
   // Protection from black
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -26903,6 +27039,9 @@ const POOL_2: readonly CardDefinition[] = [
     cost: { generic: 4, G: 2 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'permanent' } }],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // This land enters tapped unless you control two or more other lands.
   // {T}: Add {W} or {U}.
   {
@@ -26952,6 +27091,24 @@ const POOL_2: readonly CardDefinition[] = [
     types: ['land'],
     manaAbilities: [{ produces: [{ W: 1, B: 1 }], cost: { mana: { generic: 1 } } }],
   },
+  // Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '63c87009-ff1b-44b9-88b1-e26219094c67',
+    name: 'Desolation Prowler',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['wolf'],
+    activated: [
+      {
+        cost: { life: 2 },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Pay 2 life: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Exile target permanent with mana value 4 or greater.
   {
     id: 'f37a4bc1-3702-44d7-8b29-dca99b563c6b',
@@ -26998,9 +27155,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Target creature gets +2/+2 and gains flying until end of turn. You gain 2 life.
   {
     id: '69ce134a-25ef-4f8d-a385-7c29fc5707dc',
@@ -29348,6 +29502,26 @@ const POOL_3: readonly CardDefinition[] = [
     effects: [
       { primitive: 'destroyTarget', params: { targets: 'land' } },
       { primitive: 'gainLife', params: { amount: 2 } },
+    ],
+  },
+  // Flying
+  // {U}: This creature gets +1/+0 until end of turn. Activate only once each turn.
+  {
+    id: '64ee32f9-6120-4f15-a692-89a4cd8167c6',
+    name: 'Drake Hatchling',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['drake'],
+    activated: [
+      {
+        cost: { mana: { U: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{u}: ~ gets +1/+0 until end of turn. activate only once each turn',
+      },
     ],
   },
   // {T}: Add {U} or {B}.
@@ -36047,6 +36221,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
   {
     id: '489c6a2f-38b4-4ff9-95f7-431384480ed9',
@@ -36182,9 +36359,6 @@ const POOL_3: readonly CardDefinition[] = [
     cost: { generic: 2, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 3 } }, { primitive: 'scry' }],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // {1}{R}: This creature gets +1/+0 until end of turn.
   {
     id: '52280963-ba5b-4735-b5cb-67866f8624c9',
@@ -37024,6 +37198,32 @@ const POOL_4: readonly CardDefinition[] = [
     ],
     producesOptions: [{ B: 1 }, { G: 1 }],
   },
+  // Whenever this creature deals combat damage to a player, you mill two cards.
+  // {1}{B}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '83a6fa37-8351-403b-ae05-b67e9bf74bbb',
+    name: 'Festerleech',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['zombie', 'leech'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'mill', params: { amount: 2, self: true } }],
+        label: 'Combat damage to a player: you mill two cards',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{b}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Whenever you cast an instant or sorcery spell, this creature gets +2/+0 until end of turn.
   {
     id: 'd8d050c1-ae0c-46c1-8aa7-7cde4606105b',
@@ -37679,6 +37879,26 @@ const POOL_4: readonly CardDefinition[] = [
         ],
         label: 'Enters: it deals damage to target creature equal to the number of mountains you control',
         targets: 'creature',
+      },
+    ],
+  },
+  // Flying
+  // {R}: This creature gets +1/+0 until end of turn. Activate only once each turn.
+  {
+    id: '2afdb5e8-31ba-4013-93c9-36e9f755f238',
+    name: 'Fire Drake',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 1,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['drake'],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{r}: ~ gets +1/+0 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -40659,6 +40879,42 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // {1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: 'd9f3a08f-403e-4d6c-87c7-add8170bde8b',
+    name: 'Frilled Oculus',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['homunculus'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
+  // {1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '73c755ff-3fbb-4128-9357-0874eb61ff4c',
+    name: 'Frilled Sandwalla',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['lizard'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Enchant creature
   // When this Aura enters, draw a card.
   // Enchanted creature has reach. (It can block creatures with flying.)
@@ -43018,6 +43274,26 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // First strike
+  // {3}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '00cab68b-ee26-46eb-a18b-9b42bf2d10e5',
+    name: 'Ghor-Clan Bloodscale',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { firstStrike: true },
+    subtypes: ['lizard', 'warrior'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{3}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Trample
   // Bloodrush — {R}{G}, Discard this card: Target attacking creature gets +4/+4 and gains trample until end of turn.
   {
@@ -45152,6 +45428,9 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { firstStrike: true, haste: true },
     subtypes: ['goblin', 'berserker'],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Sacrifice a creature: This enchantment deals 1 damage to any target.
   {
     id: 'e262f55e-9239-4a97-a19e-9b08fb34502e',
@@ -45371,9 +45650,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Flash
   // {7}, {T}, Sacrifice this artifact: Destroy target permanent.
   {
@@ -53880,6 +54156,9 @@ const POOL_5: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.
   {
     id: 'd0b7cecf-b51b-4d30-b7e9-cd7976271e07',
@@ -54115,9 +54394,6 @@ const POOL_5: readonly CardDefinition[] = [
     changeling: true,
     subtypes: ['shapeshifter'],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Enchant creature
   // Enchanted creature gets +2/+5.
   // Cycling {3} ({3}, Discard this card: Draw a card.)
@@ -60222,6 +60498,24 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // {3}{G}: This creature gets +3/+3 until end of turn. Activate only once each turn.
+  {
+    id: 'c908f812-a7ee-411e-89f1-1f84793d095d',
+    name: 'Knight of the Skyward Eye',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'knight'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{3}{g}: ~ gets +3/+3 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Vigilance (Attacking doesn't cause this creature to tap.)
   {
     id: '2f81d2a0-5301-4cae-ac83-ad51647146e3',
@@ -60778,6 +61072,26 @@ const POOL_6: readonly CardDefinition[] = [
     subtypes: ['eldrazi'],
     produces: ['C', 'C'],
   },
+  // Devoid (This card has no color.)
+  // Pay 1 life: Add {C}. Activate only once each turn. ({C} represents colorless mana.)
+  {
+    id: 'd80665ae-fcb2-48fd-95be-8768293bcef7',
+    name: 'Kozilek\'s Translator',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 5,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { life: 1 },
+        effects: [{ primitive: 'addMana', params: { mana: ['C'] } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Pay 1 life: add {c}. activate only once each turn',
+      },
+    ],
+  },
   {
     id: 'cc1f65c8-4941-41ac-9340-f741725ec71c',
     name: 'Kraken Hatchling',
@@ -60908,6 +61222,24 @@ const POOL_6: readonly CardDefinition[] = [
         cost: { mana: { generic: 5, G: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3 } }],
         label: '{5}{g}: ~ gets +3/+3 until end of turn',
+      },
+    ],
+  },
+  // {2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '86c415d8-1d2d-4339-955b-0f2aebeb3c95',
+    name: 'Kraven\'s Cats',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['cat', 'villain'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{2}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -63189,6 +63521,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -63532,9 +63867,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // Protection from black
   {
     id: 'e6c75d89-e432-49aa-a407-555b223b7eff',
@@ -63712,6 +64044,32 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -1, toughness: -1, targets: 'creature' } }],
+  },
+  // Flying
+  // {G}: Regenerate this creature.
+  // {G}: Untap this creature. Activate only once each turn.
+  {
+    id: 'bd269842-4c31-4398-9451-be0d941397ac',
+    name: 'Locust Swarm',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['insect'],
+    activated: [
+      {
+        cost: { mana: { G: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{g}: regenerate ~',
+      },
+      {
+        cost: { mana: { G: 1 } },
+        effects: [{ primitive: 'untapSelf', params: {} }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{g}: untap ~. activate only once each turn',
+      },
+    ],
   },
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Enchant creature
@@ -68809,6 +69167,32 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // When this creature enters, you gain 1 life.
+  // {2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '2c3a6eb8-ce0c-4dc8-9ed6-d2a9223eef53',
+    name: 'Mindful Biomancer',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['dryad', 'druid'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: 'Enters: you gain 1 life',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{2}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // All Slivers have "{1}, Sacrifice this permanent: Each player discards a card."
   {
     id: 'f8c54575-dc1d-491c-a4f6-41f76eba2a2d',
@@ -72182,6 +72566,9 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // {B}: This creature gets +1/+1 until end of turn.
   {
     id: 'fb4c5dd4-79dc-4bd2-8c18-897924a4a959',
@@ -72516,9 +72903,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // As this land enters, you may reveal a Swamp or Forest card from your hand. If you don't, this land enters tapped.
   // {T}: Add {B} or {G}.
   {
@@ -79789,6 +80173,24 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // {2}{G}: This creature gets +3/+3 until end of turn. Activate only once each turn.
+  {
+    id: '4bf4da70-c656-4e40-bb0f-68e9dda024c9',
+    name: 'Plated Rootwalla',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['lizard'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{2}{g}: ~ gets +3/+3 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   {
     id: 'e83a74c4-026e-4419-9dde-3b044ef507a0',
     name: 'Plated Seastrider',
@@ -81271,6 +81673,9 @@ const POOL_8: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['griffin'],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // All creatures able to block this creature do so.
   {
     id: 'baac1604-379f-4f03-97ae-9ec10921167c',
@@ -81689,9 +82094,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // Equipped creature gets +0/+2 and has toxic 1. (Players dealt combat damage by equipped creature also get a poison counter.)
   // Equip {1}
   {
@@ -82178,6 +82580,24 @@ const POOL_9: readonly CardDefinition[] = [
         condition: { on: 'dies' },
         effects: [{ primitive: 'persistReturn', params: { minusCounters: 1 } }],
         label: 'Persist: return with a -1/-1 counter',
+      },
+    ],
+  },
+  // Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: 'c901a8d7-e230-4a08-afe5-00e9d1c85544',
+    name: 'Putrid Leech',
+    types: ['creature'],
+    cost: { B: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['zombie', 'leech'],
+    activated: [
+      {
+        cost: { life: 2 },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Pay 2 life: ~ gets +2/+2 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -88807,6 +89227,24 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // {1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: 'f5177a97-cf3b-4a82-adc4-14835152880d',
+    name: 'Rootwalla',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['lizard'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Sacrifice a Forest: Regenerate this creature.
   {
     id: '3a840bba-4725-45fd-885f-1b3d615dfa97',
@@ -90269,6 +90707,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // When this creature enters, scry 2.
   {
     id: '20ceccb4-c7c7-487e-8f74-2d89d2a86f34',
@@ -90712,9 +91153,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
     id: '65ce3960-abf1-4f28-8434-ab3b27d3b7cb',
@@ -94411,6 +94849,24 @@ const POOL_10: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 2 } },
     ],
   },
+  // Sacrifice another creature: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '5b302bc8-683f-4a26-ab86-87eaa19dce4d',
+    name: 'Sepulcher Ghoul',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['zombie'],
+    activated: [
+      {
+        cost: { sacrificeAnother: { anyOfTypes: ['creature'] }, sacrificeExcludesSelf: true },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Sacrifice another creature: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Flying, lifelink
   {
     id: '38c588ae-7254-4fae-aa9a-03e2a5524492',
@@ -94915,6 +95371,26 @@ const POOL_10: readonly CardDefinition[] = [
           { primitive: 'drawCards', params: { count: 1 } },
         ],
         label: 'enchantment (you) enters: put a +1/+1 counter on ~ and draw a card',
+      },
+    ],
+  },
+  // Flying
+  // {2}{G}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '35d2ae77-b16c-4a01-84ce-5c78be5a54d8',
+    name: 'Setessan Griffin',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['griffin'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 2 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{2}{g}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -99318,6 +99794,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   {
     id: '5e3fbafb-e915-43eb-8a68-245840ba73ff',
@@ -99741,9 +100220,6 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // Target creature gets +3/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)
   {
     id: '65ec8b61-e602-41f2-ac1a-64e150b2ce18',
@@ -100849,6 +101325,24 @@ const POOL_11: readonly CardDefinition[] = [
         },
         effects: [{ primitive: 'surveil' }],
         label: 'another creature (you) enters: surveil 1',
+      },
+    ],
+  },
+  // {1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: 'ecd271d7-a3c8-4448-b8e2-bcef5d7e9118',
+    name: 'Snarling Wolf',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['wolf'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -103657,6 +104151,26 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // {R}: This creature gets +1/+0 until end of turn. Activate only once each turn.
+  {
+    id: 'c9ec1676-f59b-4ab6-995c-d2525ac11370',
+    name: 'Spitting Drake',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['drake'],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{r}: ~ gets +1/+0 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Spitting Earth deals damage to target creature equal to the number of Mountains you control.
   {
     id: 'de1aa8f9-8200-4ddd-9ab5-1a8181cc1792',
@@ -104563,6 +105077,26 @@ const POOL_11: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }, { kind: 'subtype', subtype: 'forest' }] },
     subtypes: ['hag'],
+  },
+  // Devoid (This card has no color.)
+  // {C}: This creature gets +1/+2 until end of turn. Activate only once each turn. ({C} represents colorless mana.)
+  {
+    id: '12bc5b4c-a809-43f0-8848-38812ce865c2',
+    name: 'Stalking Drone',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { mana: { C: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{c}: ~ gets +1/+2 until end of turn. activate only once each turn',
+      },
+    ],
   },
   // This creature can't be blocked by more than one creature.
   {
@@ -108417,6 +108951,9 @@ const POOL_11: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 2, keywords: {} },
     },
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // First strike
   // Ripple 4 (When you cast this spell, you may reveal the top four cards of your library. You may cast spells with the same name as this spell from among those cards without paying their mana costs. Put the rest on the bottom of your library.)
   {
@@ -108957,9 +109494,6 @@ const POOL_11: readonly CardDefinition[] = [
     keywords: { flash: true, reach: true },
     subtypes: ['spider'],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Double strike (This creature deals both first-strike and regular combat damage.)
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
@@ -116941,6 +117475,26 @@ const POOL_12: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { doubleStrike: true } },
     },
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  // {1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '0092d7a0-bd00-45e5-a052-c0a9d970bc2e',
+    name: 'Twinblade Slasher',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { wither: true },
+    subtypes: ['elf', 'warrior'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // Copy target instant or sorcery spell. You may choose new targets for the copy.
   {
     id: '8f878efc-850f-43d2-a6fe-5ea8d1dd5afb',
@@ -117370,6 +117924,9 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // Flying
   // {3}{G}, Sacrifice this creature: Destroy target artifact.
   {
@@ -117915,9 +118472,6 @@ const POOL_12: readonly CardDefinition[] = [
     types: ['land'],
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ U: 1 }, { B: 1 }], rider: { damageToController: 1 } }],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // ({T}: Add {U} or {B}.)
   {
     id: '26cee543-6eab-494e-a803-33a5d48d7d74',
@@ -120876,6 +121430,26 @@ const POOL_13: readonly CardDefinition[] = [
         cost: { mana: { R: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: -1 } }],
         label: '{r}: ~ gets +1/-1 until end of turn',
+      },
+    ],
+  },
+  // Double strike
+  // {B}{G}: This creature gets +1/+1 until end of turn. Activate only once each turn.
+  {
+    id: 'a441fae0-a9c7-4d91-a69e-8ea1f8fa6947',
+    name: 'Viashino Slaughtermaster',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { doubleStrike: true },
+    subtypes: ['lizard', 'warrior'],
+    activated: [
+      {
+        cost: { mana: { B: 1, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{b}{g}: ~ gets +1/+1 until end of turn. activate only once each turn',
       },
     ],
   },
@@ -125242,6 +125816,26 @@ const POOL_13: readonly CardDefinition[] = [
     cost: { generic: 1, G: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 4, toughness: 4, targets: 'creature' } }],
   },
+  // Flying, first strike
+  // {W}{W}: This creature gets +2/+0 until end of turn. Activate only once each turn.
+  {
+    id: 'feffa722-fe05-4e70-ba4c-1cf110b3662f',
+    name: 'Wild Aesthir',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, firstStrike: true },
+    subtypes: ['bird'],
+    activated: [
+      {
+        cost: { mana: { W: 2 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{w}{w}: ~ gets +2/+0 until end of turn. activate only once each turn',
+      },
+    ],
+  },
   // When this creature enters, you may destroy target artifact.
   {
     id: '6b9e72f4-0087-4a79-b9af-296c8b930a25',
@@ -125853,6 +126447,9 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // Vigilance
   {
     id: '1fb92365-1ee7-4240-a20e-8011a8e52846',
@@ -126409,9 +127006,6 @@ const POOL_13: readonly CardDefinition[] = [
       },
     },
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // When this artifact enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
   // {3}{U}, Sacrifice this artifact: Draw two cards.
   {
@@ -126722,6 +127316,27 @@ const POOL_14: readonly CardDefinition[] = [
       label: 'Enchant creature',
       modifies: { power: 2, toughness: 2, keywords: {} },
     },
+  },
+  // Trample (This creature can deal excess combat damage to the player she's attacking.)
+  // {2}{G}: Wolfsbane gets +2/+2 until end of turn. Activate only once each turn.
+  {
+    id: '81c604fd-9e3e-4527-9ed8-2fdeaabf0870',
+    name: 'Wolfsbane, Highland Hero',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    legendary: true,
+    keywords: { trample: true },
+    subtypes: ['mutant', 'werewolf', 'hero'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{2}{g}: ~ gets +2/+2 until end of turn. activate only once each turn',
+      },
+    ],
   },
   // Rampage 2 (Whenever this creature becomes blocked, it gets +2/+2 until end of turn for each creature blocking it beyond the first.)
   {
