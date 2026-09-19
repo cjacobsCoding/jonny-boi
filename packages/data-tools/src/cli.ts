@@ -48,6 +48,11 @@ async function main(): Promise<void> {
     );
   }
   console.info(`index:      ${result.outputPath}`);
+  if (result.corpus) {
+    console.info(
+      `corpus:     ${result.corpus.index.cards.length} cards the pool does not hold → ${result.corpus.outputPath}`,
+    );
+  }
 }
 
 main().catch((error: unknown) => {

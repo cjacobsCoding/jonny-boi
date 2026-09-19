@@ -70,6 +70,14 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.167',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'Every card Scryfall knows, in the app',
+    summary:
+      'The card browser and deck builder now hold the whole of Magic — not just the cards the engine plays. A card the engine cannot play yet wears "Not playable yet", its detail view says what it needs, and a deck holding one cannot be started in Play or tested in the Lab until it is swapped out.',
+  },
+  {
     section: '3.166',
     date: '2026-09-19',
     kind: 'app',

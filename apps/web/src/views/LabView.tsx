@@ -1,6 +1,7 @@
 import { useMemo, type ReactElement } from 'react';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import { allAvailableCards } from '../lib/cards.js';
+import { isPlayableCard } from '../lib/cards/playable.js';
 import { resolveEntries, type Deck } from '../lib/deck.js';
 import { gauntletHeroDecks, isGauntletDeckId } from '../lib/decklist/gauntletDecks.js';
 import { applySwapToDeck, describeApplied } from '../lib/decklist/applySwapToDeck.js';
@@ -31,15 +32,34 @@ const LAB_TABS = [
   { id: 'suggest', label: 'Suggestions' },
 ] as const;
 
-
 /**
  * The Lab (DESIGN §3.7): pick one of your saved decks as the hero, choose which
  * gauntlet decks to test against, then run a gauntlet, an A/B single-card swap,
  * or a ranked suggestions search — all in a Web Worker so the UI never freezes.
  */
-export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWorkerApi; selection: LabSelection }): ReactElement {
-  const { tab, setTab, heroId, setHeroId, seed, setSeed, pilotId, setPilotId, opponentNames, setOpponentNames, applyNote, setApplyNote } = selection;
-
+export function LabView({
+  decks,
+  sim,
+  selection,
+}: {
+  decks: DecksApi;
+  sim: SimWorkerApi;
+  selection: LabSelection;
+}): ReactElement {
+  const {
+    tab,
+    setTab,
+    heroId,
+    setHeroId,
+    seed,
+    setSeed,
+    pilotId,
+    setPilotId,
+    opponentNames,
+    setOpponentNames,
+    applyNote,
+    setApplyNote,
+  } = selection;
 
   // Anything selectable as the hero: your saved decks, then the gauntlet decks.
   // The gauntlet decks are decks — being able to test one against the field (or
@@ -48,10 +68,7 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
   const heroCandidates = useMemo(() => [...decks.decks, ...gauntletHeroDecks()], [decks.decks]);
 
   const hero =
-    heroCandidates.find((d) => d.id === heroId) ??
-    decks.activeDeck ??
-    heroCandidates[0] ??
-    null;
+    heroCandidates.find((d) => d.id === heroId) ?? decks.activeDeck ?? heroCandidates[0] ?? null;
 
   // The hero validated through the SIM's own rules (60-card / 4-of), so the
   // message matches exactly what the engine would reject — not a UI approximation.
@@ -177,9 +194,7 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
       )}
 
       <div className="lab-panel">
-        {tab === 'gauntlet' && (
-          <GauntletPanel {...sharedProps} gamesConfig={GAUNTLET_GAMES} />
-        )}
+        {tab === 'gauntlet' && <GauntletPanel {...sharedProps} gamesConfig={GAUNTLET_GAMES} />}
         {tab === 'swap' && (
           <SwapPanel
             {...sharedProps}
@@ -228,14 +243,23 @@ function heroOutOptions(hero: Deck): CardOption[] {
  * shortlist.)
  */
 function poolInOptions(): CardOption[] {
-  return [...allAvailableCards()]
+  // §3.167 — the browsable pool is the whole of Scryfall; the Lab offers only
+  // what the engine can PLAY, because a swap it cannot simulate is not a test.
+  return allAvailableCards()
+    .filter(isPlayableCard)
     .map((c) => ({ cardId: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** The top config bar: hero picker, seed, and the gauntlet-opponent toggles. */
 /** One labelled group of hero options; renders nothing when the group is empty. */
-function HeroOptionGroup({ label, decks }: { label: string; decks: readonly Deck[] }): ReactElement {
+function HeroOptionGroup({
+  label,
+  decks,
+}: {
+  label: string;
+  decks: readonly Deck[];
+}): ReactElement {
   if (decks.length === 0) return <></>;
   return (
     <optgroup label={label}>
@@ -351,7 +375,3 @@ function EmptyDecksPrompt(): ReactElement {
     </div>
   );
 }
-
-
-
-

@@ -10702,6 +10702,82 @@ Backfilled from §3.155 (2026-09-16) — the mass pump, iterative effects, one c
 playability gate, the lethal-assignment fix, the pool catch-up, Jace's −8, Thune's six, devotion,
 derived mana, the Lab pickers, and this section.
 
+### 3.167 Every card Scryfall knows, in the app — two tiers, one badge, and a deck that says why it cannot be played — ✅ done
+
+> "work on adding all the cards from scryfall, regardless of whether we have mechanics for them yet.
+> Just make it so that if you put a card into a deck that has unsupported mechanics, it makes that
+> very clear and wont let you play or test that deck. … Do not try to get any of the stupid sets tho
+> like unglued, ect"
+
+§3.158 built the gate ("can this deck be played?" — one funnel, four consumers) for exactly this
+moment, and named it: *the moment the pool is the whole of Scryfall, luck is the only thing holding
+it*. This section is that moment. The browsable pool goes from the 7,168 cards the engine plays to
+the **32,338 the corpus knows** (the 32,341-card private corpus of `fetch-full-corpus.mjs`, which
+already excludes `set_type: funny`, digital-only cards and non-card layouts — his "stupid sets" line
+was drawn there in §3.71 — less three names the two tiers share once normalized).
+
+**Two tiers, because the shell has to work offline and 32,000 cards do not fit in it.** The POOL
+index stays bundled as before: it is what the engine plays, and a deck must open with no network.
+The CORPUS index (`packages/data-tools/data/corpus-index.json`, 25,170 cards on the merged tree) is everything else,
+written by the same `--corpus` pipeline run that writes the pool index and subtracted from it **by
+the same front-face name key the pool resolved on**, so a card is in exactly one tier and a
+regeneration moves it rather than duplicating it. Its records are RAW Scryfall records cut to the
+closed key list `normalizeCard` reads (`SLIM_CARD_KEYS` / `SLIM_FACE_KEYS`), so the app expands
+them with the one normalizer the pool went through — one card shape, no second parser — and gzip
+makes Scryfall's own key names free. Measured: 12.25 MB on disk one card per line (diffs by card),
+**2.65 MB gzipped** as the content-hashed asset Vite emits from a `?url` import (one copy in the
+repo; the browser's cache key changes exactly when the data does). It is fetched at app mount,
+expanded in 2,000-card macrotask chunks so the shell keeps painting, and it is deliberately **not
+precached** — the service worker caches it CacheFirst on first use (`vite.config.ts`), so the second
+visit is offline-capable and the first offline visit says so in the Cards view rather than pretending
+the pool is the world ("The full card list could not be loaded — showing the 7,168 cards the engine
+plays. It needs one visit online. Try again").
+
+**Image URLs are a function of the printing id.** `https://cards.scryfall.io/<size>/<face>/<a>/<b>/<id>.jpg`
+held for every one of 5,000 corpus records checked against the URLs Scryfall itself supplied, so
+the corpus tier carries no URLs at all and the pool index's projection now drops every URL that is
+exactly what its id derives (`imageUrisAreDerivable`, one place that decides). The ~600 pool rows
+whose id is an ORACLE id from an older network fetch keep theirs. Bundled `card-index` chunk:
+**7.60 → 4.84 MB** (gzip 682 KB), the web index file 10.8 → 7.7 MB. `cardImage` derives when a
+record carries nothing; a synthesized record with a non-uuid id still degrades to the text tile.
+
+**The badge, the toggle, the count, the sentence.** `queryCards` takes a `playable` filter
+(`'all'` — his default: everything, marked — or `'playable'`) answered by a caller-supplied
+predicate, so the filter module stays free of the engine pool; the predicate (`isPlayableCard`) is
+two map lookups against the memoized sim pool, because the browser asks it for 32,000 cards per
+keystroke. The toolbar gains **All cards / Playable** and reads "32,338 cards · 7,168 playable"; a
+tile the engine cannot play wears **Not playable yet** over dimmed art, in the Cards browser AND the
+deck builder's pool (where a card is added, which is where it matters most); the Lab's "add"
+picker lists playable cards only, because a swap the engine cannot simulate is not a test. The
+expensive question — *what does it need?* — is asked only for the one card in front of him:
+`deckHealth`'s closed table gains a row between "an import the compiler could not finish" and
+"anything else": **a card in the browsable corpus is compiled once, on demand, and its clauses
+named** (`corpusUnsupportedReason`, memoised per id). The detail view's new note, the deck row's ⚠
+tooltip, the deck badge and Play's refusal all read that one funnel.
+
+**Verification.** `data-tools/corpus-index.test.ts` (the closed key lists; a slim record
+normalizes to the same card as the raw one, URLs aside; corpus − pool by front-face name, first
+printing wins; one card per line round-trips), `lib/cards/corpus.test.ts` (fetch → expand → every
+lookup; idempotent; failure by name and retry; a non-index body and a 404 refused; a corpus card
+sharing a pool name never shadows it), `lib/filter.test.ts` (the playable filter), `data/card-index.test.ts`
+(derivable URLs dropped and still resolved; a non-uuid, URL-less record degrades),
+`components/unplayable-marking.test.ts` (static renders: the tile's badge, the grid's predicate,
+the toolbar's toggle and count, the detail view's sentence for a corpus card and its silence for a
+pool card). **In the browser**, on this branch (before the §3.164 merge, so 7,147 playable then): Cards showed
+*32,338 cards · 7,147 playable* with 19 of the first 24 tiles badged; *Playable* → 7,147 and no badges; opening *1996 World Champion*
+read "Not playable yet. You can add it to a deck, but that deck cannot be played or tested until the
+engine learns: the "Summon" card type; …"; in Deck Builder, *Fledgling Mawcor* (morph) added to
+Thune's Life put ⚠ on its row ("Can't be simulated yet — needs a rules template the compiler does
+not recognize yet"), the badge *1 card not playable* on the deck, and in Play → Solo the **Start
+game button was disabled** under "This deck can't be played or tested yet — 1 card (1 copy) uses
+mechanics the engine doesn't support: 1× Fledgling Mawcor … Swap it out to run the deck — everything
+else about it is fine."
+
+**Left deliberately.** The corpus still holds a few memorabilia oddities (*1996 World Champion*
+is the first card alphabetically after a badge); the fetch script's exclusion list is the place to
+draw that line, and it is a data decision to take with him. Search over 32,000 names is a plain
+substring scan per keystroke — measured fine today; if it is not on a phone, the Lab picker's ranked
+model (§3.165) is the index to reuse.
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
