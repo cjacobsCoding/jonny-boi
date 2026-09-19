@@ -954,6 +954,48 @@ button {
   color: var(--color-warning);
 }
 
+/*
+ * CARDS THE APP ADDED TO ONE OF HIS DECKS AT HIS REQUEST (§3.162).
+ *
+ * Success-coloured and inside the deck, like the wish-list above it, because an
+ * addition he did not watch happen must be told to him where the deck is — a
+ * deck that quietly grew by twelve cards reads as a deck he does not remember
+ * building. Dismissable; the cards stay.
+ */
+.deck-group--revision .deck-group__title {
+  color: var(--color-success);
+  border-bottom-color: var(--color-success);
+}
+
+.deck-revision__note {
+  margin: 0.25rem 0 0.5rem;
+  color: var(--color-fg-muted);
+  font-size: 0.9rem;
+}
+
+.deck-revision__added {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.deck-revision__dismiss {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-success);
+  background: transparent;
+  color: var(--color-success);
+  cursor: pointer;
+}
+
+.deck-revision__dismiss:hover {
+  background: rgba(96, 200, 120, 0.12);
+}
+
 .deck-entry__count {
   font-variant-numeric: tabular-nums;
   font-weight: 700;

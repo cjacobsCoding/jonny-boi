@@ -50,6 +50,7 @@ function api(decks: Deck[]): DecksApi {
     addCard: () => {},
     removeCard: () => {},
     removeUnresolvedCard: () => {},
+    dismissRevisionNote: () => {},
     setEntryPrinting: () => {},
     replaceActive: () => {},
     importDeck: () => {},

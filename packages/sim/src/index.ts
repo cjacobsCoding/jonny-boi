@@ -53,9 +53,11 @@ export { SAMPLE_DECKS } from '../data/decks/index.js';
 export {
   OWNER_DECKS,
   OWNER_DECK_ENTRIES,
+  applyDeckRevisions,
+  currentOwnerDeck,
   transcribedSize,
 } from '../data/owner-decks/index.js';
-export type { OwnerDeckEntry } from '../data/owner-decks/index.js';
+export type { DeckRevision, OwnerDeckEntry } from '../data/owner-decks/index.js';
 
 // Statistics (pure).
 export type { ProportionCI, PairedTable, McNemarResult, MultipleComparisonsMethod } from './stats.js';
