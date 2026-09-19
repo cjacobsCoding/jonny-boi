@@ -10129,6 +10129,75 @@ family and left: **21 NOUN** (subtypes and "other"/"attacking" — a deliberate 
 **1 ORDER-or-SENTENCE**. The row this family was supposed to live in holds 123 of it; the rest is
 scattered over **21 other rows**, which is §8a item 3 for the eleventh time.
 
+### 3.158 One question — "can this deck be played?" — had four answers, and only the weakest one blocked anything — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.157 was the highest anywhere on
+> `origin/main` at fork (`3501c27`); §3.158 was the next free number. **Renumber it freely at
+> merge** — nothing in the code refers to it.
+
+> "Just make it so that if you put a card into a deck that has unsupported mechanics, it makes
+> that very clear and wont let you play or test that deck."
+
+The prerequisite for growing the card pool past what the engine can play. A card the engine
+cannot play behaves as a **blank**: the deck still shuffles, still draws, still "works", and the
+A/B verdict that comes back is confidently wrong. Today that is rare enough to survive by luck —
+every browsable card happens to have a definition. The moment the pool is the whole of Scryfall,
+luck is the only thing holding it, and luck is not a gate.
+
+**The measurement that started it.** Four places answered "can this deck be played?", and they
+answered it four different ways:
+
+| surface | asked | answer for a deck holding an unsupported card |
+|---|---|---|
+| Play (`validateChoice`) | the sim's `validateDeck`, i.e. **pool membership** | `unknown card "…-cafe" (not in the pool by id or name)` **and** `deck size 56 is below the minimum of 60` |
+| Lab / Match (`validateHero`) | `unsupportedCardNames`, i.e. **the import store** | names the card, never says what it needs |
+| Deck builder badge (`assessDeckHealth`) | `unsupportedReason`, i.e. **the import store** | names the card AND the system — and blocked nothing |
+| Deck builder card row | `unsupportedReason` again | a ⚠ on the line |
+
+Only the third was right, and it was the one wired to nothing. Play's answer is the interesting
+one: it refused the deck, but **by accident** — not because the card is unsupported, because the
+card is not in the pool. Those are the same sentence only while the browsable pool and the
+playable pool are the same set. It also produced a *false* second line: the deck really is 60
+cards, and 56 is just how many of them resolved.
+
+**The fix is one funnel and one closed table.** `decklist/deckHealth.ts` now owns the question,
+as an ordered table where adding a case is a ROW:
+
+1. the engine resolves it — **by id then by name**, exactly as `sim/deck.ts: resolveCard` does,
+   because saved decks key cards by Scryfall uuid and the bundled sample decks key them by name;
+2. an import the compiler could not finish — it knows precisely which clauses blocked it;
+3. anything else — **no definition, and no account of why**.
+
+Row 3 is the one that matters and the one that did not exist. The old rule was "unsupported only
+if the import store says so", which reports an id it has never heard of as **playable** — the
+single most dangerous answer available, and the exact shape the all-of-Scryfall pool creates by
+the thousand.
+
+**Wired, not authored.** `validateChoice` (Play), `validateHero` (Lab + Match),
+`assessDeckHealth` (builder badge) and `whyUnplayable` (the ⚠ on a card's line) are now four
+consumers of one answer. `SetupScreen` already disabled Start on a non-empty problem list, so
+the gate reaches the button without a new control; `PlayView` shows the same sentence in its
+error phase. The two weaker copies — `deck.ts: hasUnsupportedCards` and `unsupportedCardNames` —
+are **deleted**, with a comment where they were saying why, so the next reader does not helpfully
+add them back.
+
+`hotseatPool()` was a second memoized copy of `lib/sim-pool.ts`'s pool, built with identical
+arguments and its own store subscription. It now delegates: one pool, one subscription.
+
+**The guard.** `unsupported-deck-gate.test.ts` asks all three entry points the same four
+questions (all-curated · a playable import · an import that failed to compile · **a card nothing
+knows**) and fails on any disagreement — the divergence itself is what is pinned, because two
+places answering one question is the only reason the first two were ever wrong.
+
+Red-then-green, on the real thing: before the fix **4 of 12 failed**, and the messages are the
+record — Play said `unknown card "test-unsupported-…-cafe" … deck size 56 is below the minimum
+of 60`, the Lab said the card's name with no system, and deck health called an id nothing knows
+`playable`.
+
+**Left deliberately.** The deck DROPDOWN still lists an unplayable deck without a marker in its
+label: the problem appears under the control the moment it is picked, and health-checking every
+saved deck on every render to decorate an `<option>` buys a worse trade. Said here rather than
+discovered later.
 ### 3.159 A blocked attacker threw away every point past lethal — lifelink gained 1 from a 100-damage hit — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.157 was the highest anywhere on

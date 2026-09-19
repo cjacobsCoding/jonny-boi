@@ -32,3 +32,13 @@ export function loadCardPool(): CardPool {
   cached = loadSimPool({ onWarn: () => {}, extraCards: importedDefinitions() });
   return cached;
 }
+
+/**
+ * Drop the memo. The subscription above covers the normal path; this exists for
+ * tests, which register imported cards and then need the very next read to see
+ * them, and for the play path's own `invalidateHotseatPool`, which used to clear
+ * a second copy of this pool.
+ */
+export function invalidateCardPool(): void {
+  cached = null;
+}

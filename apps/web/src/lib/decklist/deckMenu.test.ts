@@ -15,8 +15,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import { buildDeckMenu, defaultSeatKeys, menuItemsOfOrigin, type DeckMenuItem } from './deckMenu.js';
-import { validateChoice } from '../play/setup.js';
+import { buildDeckMenu, defaultSeatKeys, firstStartableKey, menuItemsOfOrigin, type DeckMenuItem } from './deckMenu.js';
+import { validateChoice, validateChoiceForOnline, type DeckChoice } from '../play/setup.js';
 import { DECK_ORIGINS } from './deckOrigin.js';
 import type { Deck } from '../deck.js';
 
@@ -140,5 +140,34 @@ describe('where the two seats start (defaultSeatKeys)', () => {
     const { a, b } = defaultSeatKeys(menu);
     expect(a).toBe('saved:p1');
     expect(b).toBe('saved:p1');
+  });
+});
+
+describe('the ONLINE lobby default (firstStartableKey, judged by the server\'s rules)', () => {
+  // The lobby is the third picker, and it had gone back to menu[0]. Its legality
+  // question is different — the server knows only the curated pool — so the
+  // same picker takes that surface's own predicate rather than guessing.
+  it('skips a deck the server would refuse and lands on the first it would accept', () => {
+    const menu = buildDeckMenu(api([shortDeck('p1', 'Short'), LEGAL_MINE]));
+    const online = (c: DeckChoice): boolean => validateChoiceForOnline(c).length === 0;
+    expect(firstStartableKey(menu, online)).toBe('saved:local-legal');
+  });
+
+  it('a predicate that accepts nothing still yields the first row, never an empty pick', () => {
+    const menu = buildDeckMenu(api([shortDeck('p1', 'Short')]));
+    expect(firstStartableKey(menu, () => false)).toBe('saved:p1');
+    expect(firstStartableKey([], () => true)).toBe('');
+  });
+
+  it('the local default and the online default can legitimately differ on one menu', () => {
+    // The point of taking the predicate: an import the ENGINE plays is legal
+    // locally and refused online (the server has no definition for it), so the
+    // two surfaces must be allowed to open on different decks.
+    const menu = buildDeckMenu(api([LEGAL_MINE]));
+    const localPick = firstStartableKey(menu);
+    const onlinePick = firstStartableKey(menu, (c) => validateChoiceForOnline(c).length === 0);
+    expect(localPick).toBe('saved:local-legal');
+    expect(onlinePick).toBe('saved:local-legal'); // Forests are curated: both agree here …
+    expect(firstStartableKey(menu, () => false)).toBe('saved:local-legal'); // … and the fallback is the row, not ''
   });
 });

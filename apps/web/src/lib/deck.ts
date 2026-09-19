@@ -9,7 +9,7 @@
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { getCard, isBasicLand, primaryType } from './cards.js';
 import { isEntryPrinting, type EntryPrinting } from './printings/entryPrinting.js';
-import { unsupportedReason } from './decklist/importedCards.js';
+import { whyUnplayable } from './decklist/deckHealth.js';
 import {
   MAX_COPIES_PER_CARD,
   MIN_DECK_SIZE,
@@ -347,21 +347,14 @@ export function describeMissingCard(entry: DeckEntry): string {
     : `A card in this deck (${copies}) isn’t in the pool, and this deck was saved before names were recorded, so it can only be identified by id ${entry.cardId} — re-import the deck to name it.`;
 }
 
-/** True when a deck contains a card the engine cannot simulate yet. */
-export function hasUnsupportedCards(deck: Deck): boolean {
-  return deck.cards.some((entry) => unsupportedReason(entry.cardId) !== undefined);
-}
-
-/** The unsupported cards in a deck, by name — for gates that must explain why. */
-export function unsupportedCardNames(deck: Deck): string[] {
-  const names: string[] = [];
-  for (const entry of deck.cards) {
-    if (!unsupportedReason(entry.cardId)) continue;
-    const card = getCard(entry.cardId);
-    if (card && !names.includes(card.name)) names.push(card.name);
-  }
-  return names.sort();
-}
+/*
+ * ⚠️ `hasUnsupportedCards` and `unsupportedCardNames` used to live here, each
+ * asking the import store directly whether a deck was playable. They were the
+ * second and third answers to a question `decklist/deckHealth.ts` already owned,
+ * and they were the WEAKER answers: they knew only about imported cards, and
+ * `unsupportedCardNames` told you which card was holding the deck up but never
+ * what it needed. Ask `assessDeckHealth` / `whyUnplayable` / `deckHealthProblems`.
+ */
 
 /**
  * Validate a deck against the curated-pool rules: the per-card 4-of limit
@@ -382,9 +375,10 @@ export function validateDeck(deck: Deck): DeckIssue[] {
       continue;
     }
 
-    const missing = unsupportedReason(entry.cardId);
-    if (missing) {
-      const systems = [...new Set(missing.map((gap) => gap.missingEngineSystem))];
+    // The SAME verdict the play/lab gate uses, so a card cannot be flagged here
+    // and quietly accepted there (or the reverse, which is worse).
+    const systems = whyUnplayable(entry.cardId);
+    if (systems) {
       issues.push({
         message: systems.length
           ? `${card.name} can't be simulated yet — the engine needs ${formatList(systems)}.`
