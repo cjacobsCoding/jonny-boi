@@ -10334,9 +10334,6 @@ as the starting point.
 
 ### 3.161 Jace, Architect of Thought's −8 — a cast permission that belongs to the other seat — ✅ done
 
-> ⚠️ **Section number claimed off a contended range.** §3.160 was the highest on `origin/main` at
-> fork (`15c54c0`). **Renumber it freely at merge** — nothing in the code refers to it.
-
 > "why aren't the mechanics for Tamiyo and Jace Surge deck finished yet? I asked you to prioritize
 > those a while ago."
 
