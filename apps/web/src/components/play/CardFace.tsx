@@ -90,7 +90,7 @@ import './card-face.css';
 /* -------------------------------------------------------------------------- */
 
 /** The sizes a card face is drawn at. CLOSED — adding one is a ROW below. */
-export const CARD_FACE_SIZES = ['tile', 'full'] as const;
+export const CARD_FACE_SIZES = ['tile', 'compact', 'full'] as const;
 export type CardFaceSize = (typeof CARD_FACE_SIZES)[number];
 
 /** How much of the model a size preset can actually show. CLOSED. */
@@ -121,6 +121,12 @@ const SIZE_PRESETS: { readonly [S in CardFaceSize]: SizePreset } = Object.freeze
     rules: 'aftermarketOnly',
     chips: false,
     why: 'A battlefield tile is ~96px wide (board-fit.css `--play-tile-w-max`) and its top strip is all the room there is. A full text box there is unreadable at any font size that fits, so the tile carries the CONDENSED form — the words that are visible nowhere else — and the MERGED line Caleb asked for ("vigilance, first strike, flying") is one hover away on the full-size face, which `CardHover` now raises from this very tile. The change chips are off for the same reason and lose nothing: a copy already wears the copied card’s art here, and the altered seal says there is more to read.',
+  }),
+  compact: Object.freeze({
+    image: 'normal',
+    rules: 'aftermarketOnly',
+    chips: false,
+    why: 'A hand card or a stack item is a whole printed scan at 96–148px (board-fit.css `--play-card-w`). Bug report 20260917_220137: the full live text box at that size is a font nobody can read, taller than the printed box and climbing over the art. The scan already prints the rules, so this size overlays only what the scan does NOT print — the aftermarket words, in the tile’s top strip — and the readable, hoverable text is one hover away exactly as it is for a battlefield tile.',
   }),
   full: Object.freeze({
     image: 'large',

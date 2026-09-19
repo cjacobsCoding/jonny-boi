@@ -327,7 +327,8 @@ export function OnlineBoard({
    */
   const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
   /** The viewer's graveyard panel (the flashback affordance's entry point). */
-  const [graveyardOpen, setGraveyardOpen] = useState(false);
+  // Which seat's graveyard is open, or none (bug report 20260907_190210).
+  const [graveyardOpen, setGraveyardOpen] = useState<PlayerId | null>(null);
   /**
    * WHOSE exile is open, or null — the same seat-valued state the hotseat board
    * keeps, because a jailed or suspended card sits in its OWNER's exile and
@@ -690,24 +691,46 @@ export function OnlineBoard({
    * pure `zonePanelView` — the hotseat board calls the same function with the same
    * zone row, so the two graveyards cannot drift.
    */
+  const graveyardSeat =
+    graveyardOpen === null ? null : graveyardOpen === view.self.id ? view.self : view.opponent;
   const graveyardPanelCards = useMemo(
     () =>
-      zonePanelView(
-        'graveyard',
-        {
-          cards: ownGraveyard.map((c) => ({
-            instanceId: c.instanceId,
-            cardId: c.def.id,
-            name: c.def.name,
-            castableEver: c.def.flashback !== undefined,
-          })),
-          // CR 404.2 — a graveyard hides nothing from anybody.
-          hiddenCount: 0,
-        },
-        new Set([...graveyardCasts.keys(), ...graveyardTapCastable]),
-        { yours: true, yourTurn, waitingOn: names[masked.priorityPlayer], step },
-      ),
-    [ownGraveyard, graveyardCasts, graveyardTapCastable, yourTurn, names, masked.priorityPlayer, step],
+      graveyardSeat === null
+        ? null
+        : zonePanelView(
+            'graveyard',
+            {
+              cards:
+                graveyardSeat.id === masked.viewer
+                  ? ownGraveyard.map((c) => ({
+                      instanceId: c.instanceId,
+                      cardId: c.def.id,
+                      name: c.def.name,
+                      castableEver: c.def.flashback !== undefined,
+                    }))
+                  : // The opponent's graveyard: a public zone, read as the adapted
+                    // view carries it (bug report 20260907_190210); a reading
+                    // surface, never a cast one, so nothing is castable from here.
+                    graveyardSeat.graveyard.map((c) => ({
+                      instanceId: c.instanceId,
+                      cardId: c.cardId,
+                      name: c.name,
+                      castableEver: false,
+                    })),
+              // CR 404.2 — a graveyard hides nothing from anybody.
+              hiddenCount: 0,
+            },
+            graveyardSeat.id === masked.viewer
+              ? new Set([...graveyardCasts.keys(), ...graveyardTapCastable])
+              : new Set(),
+            {
+              yours: graveyardSeat.id === masked.viewer,
+              yourTurn,
+              waitingOn: names[masked.priorityPlayer],
+              step,
+            },
+          ),
+    [graveyardSeat, masked.viewer, ownGraveyard, graveyardCasts, graveyardTapCastable, yourTurn, names, masked.priorityPlayer, step],
   );
 
   // --- the exile panel -------------------------------------------------------------
@@ -1135,7 +1158,7 @@ export function OnlineBoard({
            a different and false claim. So the absence is named, not rendered as
            a zero. */
         provenanceUnavailableReason={PROVENANCE_UNAVAILABLE_ONLINE}
-        onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+        onGraveyardClick={(seat) => setGraveyardOpen((open) => (open === seat ? null : seat))}
         onExileClick={(seat) => setExileOpen((open) => (open === seat ? null : seat))}
         drag={drag}
         dropRef={dropRef}
@@ -1148,13 +1171,13 @@ export function OnlineBoard({
             {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
                 hand was the only clickable zone, so they were unreachable online —
                 this is that affordance, routed through the same `activateCard`. */}
-            {graveyardOpen && (
+            {graveyardSeat !== null && graveyardPanelCards !== null && (
               <ZonePanel
                 zone="graveyard"
-                ownerName={view.self.name}
+                ownerName={graveyardSeat.name}
                 view={graveyardPanelCards}
                 onActivate={(id) => activateCard(id, 'graveyard')}
-                onClose={() => setGraveyardOpen(false)}
+                onClose={() => setGraveyardOpen(null)}
               />
             )}
             {/* The opened EXILE — the same panel, the same funnel, mounted on BOTH
@@ -1321,8 +1344,8 @@ export function OnlineBoard({
             )}
             {/* A castable flashback is invisible while the graveyard is shut, and an
                 affordance nobody can see is the same as not shipping it. */}
-            {flashbackCount > 0 && !graveyardOpen && (
-              <button type="button" className="btn btn--ghost" onClick={() => setGraveyardOpen(true)}>
+            {flashbackCount > 0 && graveyardOpen !== view.self.id && (
+              <button type="button" className="btn btn--ghost" onClick={() => setGraveyardOpen(view.self.id)}>
                 {`Flashback available (${flashbackCount})`}
               </button>
             )}

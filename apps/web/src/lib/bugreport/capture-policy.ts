@@ -115,6 +115,26 @@ export function prunableChildIndices(
   return prunable;
 }
 
+/**
+ * The parents whose children are NEVER pruned, whatever the fold: the parts of
+ * a table. The rasteriser copies each node's COMPUTED style onto its clone —
+ * including a table's and a body's pixel height — so dropping the rows below
+ * the fold leaves a full-height table holding one row, and table layout then
+ * hands that row every pixel the missing rows had. Bug report 20260918_215728:
+ * the Lab's suggestion table came back as one row "taking up all the room in
+ * the list", the other rows gone. A table's rows are one box in the layout's
+ * eyes and are kept together; the (much larger) grids of `<div>`s the prune
+ * exists for are unaffected.
+ *
+ * Upper-case tag names, as `Element.tagName` reports them for HTML.
+ */
+export const PRUNE_EXEMPT_PARENTS: ReadonlySet<string> = new Set(['TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR']);
+
+/** Whether the trailing run of `parentTagName`'s children may be pruned at all. */
+export function pruningAllowedIn(parentTagName: string): boolean {
+  return !PRUNE_EXEMPT_PARENTS.has(parentTagName.toUpperCase());
+}
+
 /** The index of the last child that anchors the run; -1 when none does. */
 export function lastAnchoringChild(
   tops: readonly (number | null)[],

@@ -248,8 +248,12 @@ export interface BoardSceneProps {
    * false claim. So the absence is named rather than rendered as a zero.
    */
   readonly provenanceUnavailableReason?: string;
-  /** Open/close the viewer's graveyard panel (the flashback affordance's door). */
-  readonly onGraveyardClick: () => void;
+  /**
+   * Open/close a seat's graveyard panel — EITHER seat's (bug report
+   * 20260907_190210): a graveyard is public (CR 404.2), and the viewer's is
+   * also the flashback affordance's door.
+   */
+  readonly onGraveyardClick: (seat: PlayerId) => void;
   /** Open/close a seat's exile panel — either seat's, since exile is public. */
   readonly onExileClick: (seat: PlayerId) => void;
   /** The live drag-to-play gesture, so the viewer's seat lights up as a drop target. */
@@ -447,6 +451,7 @@ export function BoardScene({
                   isActive={view.activePlayer === view.opponent.id}
                   hasPriority={view.priorityPlayer === view.opponent.id}
                   {...(opponentInteraction !== undefined ? { interaction: opponentInteraction } : {})}
+                  onGraveyardClick={() => onGraveyardClick(view.opponent.id)}
                   onExileClick={() => onExileClick(view.opponent.id)}
                   {...(jails !== undefined ? { jails } : {})}
                   onInspectCard={onInspectCard}
@@ -476,7 +481,7 @@ export function BoardScene({
                     isActive={view.activePlayer === view.self.id}
                     hasPriority={view.priorityPlayer === view.self.id}
                     {...(selfInteraction !== undefined ? { interaction: selfInteraction } : {})}
-                    onGraveyardClick={onGraveyardClick}
+                    onGraveyardClick={() => onGraveyardClick(view.self.id)}
                     onExileClick={() => onExileClick(view.self.id)}
                     {...(jails !== undefined ? { jails } : {})}
                     onInspectCard={onInspectCard}

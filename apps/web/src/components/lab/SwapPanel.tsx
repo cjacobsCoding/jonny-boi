@@ -1,6 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { WinRateBar } from '../WinRateBar.js';
 import { FidelityNote } from '../FidelityNote.js';
+import { CardHover } from '../CardHover.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
 import { VERDICT_ALPHA } from '../../lib/lab-config.js';
@@ -207,8 +208,15 @@ export function SwapPanel({
           <div className={`verdict-banner verdict-banner--${verdict.tone}`}>
             <span className="verdict-banner__label">{verdict.label}</span>
             <span className="verdict-banner__detail">
-              −{e.copiesSwapped}× {e.outName} +{e.copiesSwapped}× {e.inName} ·{' '}
-              {signedPct(e.delta)} win rate
+              −{e.copiesSwapped}×{' '}
+              <CardHover cardId={e.swap.out} className="lab-card-name">
+                {e.outName}
+              </CardHover>{' '}
+              +{e.copiesSwapped}×{' '}
+              <CardHover cardId={e.swap.in} className="lab-card-name">
+                {e.inName}
+              </CardHover>{' '}
+              · {signedPct(e.delta)} win rate
             </span>
             {onApplySwap &&
               (() => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { FidelityNote } from '../FidelityNote.js';
+import { CardHover } from '../CardHover.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, pct, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
 import {
@@ -306,7 +307,15 @@ export function SuggestPanel({
                     <tr key={`${ev.swap.out}>${ev.swap.in}`}>
                       <td className="lab-table__num">{s.rank}</td>
                       <td>
-                        {s.outName} → {s.inName}
+                        {/* Bug report 20260918_215728 — the card names are the ONE hover
+                            funnel's anchors, so the real card is a hover away here too. */}
+                        <CardHover cardId={ev.swap.out} className="lab-card-name">
+                          {s.outName}
+                        </CardHover>{' '}
+                        →{' '}
+                        <CardHover cardId={ev.swap.in} className="lab-card-name">
+                          {s.inName}
+                        </CardHover>
                       </td>
                       <td className="lab-table__num">{pct(ev.baseWinRate.p)}</td>
                       <td className="lab-table__num">{pct(ev.variantWinRate.p)}</td>
