@@ -36,6 +36,7 @@ import {
   type EffectRef,
   type EffectRegistry,
   type GameEvent,
+  type GameState,
   type PlayerId,
 } from '@jonny-boi/core';
 import type { CardPool } from '@jonny-boi/cards';
@@ -43,7 +44,7 @@ import type { Deck, LoadedDeck } from './deck.js';
 import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
-import { runMatch, type MatchSeats } from './match.js';
+import { runMatch, type MatchResult, type MatchSeats } from './match.js';
 import type { CardSwap, SwapEvaluation } from './swap.js';
 import { applySwap, copiesSwappedBy, summarizePairedSwap } from './swap.js';
 import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules } from './config.js';
@@ -97,6 +98,40 @@ export interface PairedBaseRecord {
   readonly leftLibrary: readonly number[] | null;
   /** True when the hero's library was read or rewritten — nothing may be reused. */
   readonly libraryDisturbed: boolean;
+  /**
+   * What the run's game watch (`PairedArmsOptions.watchGames`) reported for this
+   * game. Absent when the run watches nothing — every record before §3.175 —
+   * and carried on the wire because a variant game the skip answers from this
+   * record IS this game, observation included.
+   */
+  readonly observed?: PairedGameObservation;
+}
+
+/**
+ * Anything a per-game watch reports about ONE game: plain JSON (numbers,
+ * booleans, `null`), so it survives `postMessage` beside the rest of the record
+ * and a host can aggregate it without knowing which watch produced it.
+ */
+export type PairedGameObservation = Readonly<Record<string, number | boolean | null>>;
+
+/**
+ * A per-game WATCH — the optional seam that lets a run measure something about
+ * every game it plays (base and variant alike) without the runner knowing what.
+ *
+ * Built fresh for every game by `PairedArmsOptions.watchGames`, fed the game's
+ * settled states and events as it is played, and asked to `finish` once when the
+ * game ends; whatever it returns rides the game's record. §3.175's reliability
+ * metrics (missed land drops, colour screw, lands by turn four) are one such
+ * watch. A variant game the identical-game skip answers from the base record
+ * inherits the base game's observation, because it IS that game.
+ */
+export interface PairedGameWatch {
+  /** Every settled decision state, in order — see `MatchOptions.onState`. */
+  readonly onState?: (state: GameState) => void;
+  /** Every event, in order — see `MatchOptions.onEvent`. */
+  readonly onEvent?: (event: GameEvent) => void;
+  /** Called once when the game ends; the result is kept beside the outcome. */
+  readonly finish: (result: MatchResult) => PairedGameObservation;
 }
 
 /** What one base game tells us, beyond who won. */
@@ -115,6 +150,8 @@ interface BaseGameRecord {
    * set, no game may be claimed identical.
    */
   readonly libraryDisturbed: boolean;
+  /** The game watch's report, when the run has one. */
+  readonly observed?: PairedGameObservation;
 }
 
 /** A candidate swap being evaluated incrementally. */
@@ -136,7 +173,37 @@ export interface SwapArm {
    * against EACH OTHER free rather than a second experiment.
    */
   readonly variantWonBySlot: readonly boolean[];
+  /**
+   * The game watch's report for each variant game, indexed by slot — present
+   * only when the run has a watch. `null` for a slot whose game was answered
+   * from a base record that carried no observation.
+   */
+  readonly observedBySlot?: readonly (PairedGameObservation | null)[];
 }
+
+/**
+ * An arm built from a CALLER-SUPPLIED variant deck rather than a single-card
+ * swap (§3.175). The deck must be the base deck rewritten IN PLACE — the same
+ * length, differing in some slots — for the paired statistics and the
+ * identical-game skip to hold; `applyManabase` builds exactly that.
+ */
+export interface VariantArmSpec {
+  /** Stable identity for the arm (a manabase variant's key). */
+  readonly key: string;
+  /** What to call the variant in reports and evaluations (`inName`). */
+  readonly label: string;
+  readonly variantDeck: Deck;
+  /** How many library slots differ from the base — reported as `copiesSwapped`. */
+  readonly slotsChanged: number;
+}
+
+/**
+ * The `out` side of a variant arm's `CardSwap`: there is no single card cut, so
+ * the swap names the base deck on its out side and the variant's key on its in
+ * side. A `SwapEvaluation` built for such an arm therefore reads
+ * `swap: { out: 'base', in: <variant key> }`.
+ */
+export const VARIANT_ARM_BASE_REF = 'base';
 
 /** Internal, mutable arm state. */
 interface ArmState {
@@ -145,6 +212,8 @@ interface ArmState {
   readonly inName: string;
   readonly variantDeck: Deck;
   readonly variantLoaded: LoadedDeck;
+  /** What `summarize` reports as `copiesSwapped` — fixed when the arm is built. */
+  readonly copiesMoved: number;
   readonly seatsByOpponent: (MatchSeats | undefined)[];
   /**
    * The instance ids the variant replaces, in the BASE game — one for a single-copy
@@ -167,6 +236,8 @@ interface ArmState {
    * slot away — which is exactly why §3.96 had to decline the saving it wanted.
    */
   readonly variantWonBySlot: boolean[];
+  /** The watch's report per variant slot, kept only when the run has a watch. */
+  readonly observedBySlot: (PairedGameObservation | null)[];
 }
 
 /** Everything the runner needs to play games. */
@@ -198,6 +269,14 @@ export interface PairedArmsOptions {
   readonly baseRecords?: (slot: number) => PairedBaseRecord | undefined;
   /** Ticked with games actually played, so a long slice can report progress. */
   readonly onGame?: (games: number) => void;
+  /**
+   * OPTIONAL — build a fresh {@link PairedGameWatch} for every game the runner
+   * plays. Absent by default, and then nothing about a run changes: no state
+   * observer is attached, no observation is recorded. When present, every base
+   * record and every variant slot carries the watch's report, and a variant
+   * game the identical-game skip answers inherits the base game's.
+   */
+  readonly watchGames?: () => PairedGameWatch;
 }
 
 /** One arm's results over a contiguous slice of slots — the pool's unit of work. */
@@ -211,6 +290,11 @@ export interface PairedSlice {
    * see `pairedBetweenArms`.
    */
   readonly variantWonBySlot: readonly boolean[];
+  /**
+   * The watch's report per slot of THIS SLICE, in slot order — present only
+   * when the run has a watch (`PairedArmsOptions.watchGames`).
+   */
+  readonly observedBySlot?: readonly (PairedGameObservation | null)[];
   /** Paired games the slice covered (played or provably skipped). */
   readonly gamesPlayed: number;
   /** Variant games actually run. */
@@ -275,6 +359,15 @@ export interface PairedArmRunner {
     fromSlot: number,
     toSlot: number,
   ) => PairedSlice;
+  /**
+   * Open an arm for a caller-built variant deck (§3.175 manabases) — the same
+   * arm as `openArm` gives a swap, with the same shared base games, the same
+   * identical-game skip over however many slots differ, and the same verdict.
+   * Throws if the deck is illegal or not the base deck's length.
+   */
+  readonly openVariantArm: (spec: VariantArmSpec) => ArmHandle;
+  /** `playSlice` for a caller-built variant deck. */
+  readonly playVariantSlice: (spec: VariantArmSpec, fromSlot: number, toSlot: number) => PairedSlice;
 }
 
 
@@ -500,9 +593,21 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
         }
       : undefined;
 
+    // The run's game watch, if any, sees the same events the library observer
+    // does — composed here so neither seam knows about the other.
+    const watch = options.watchGames?.();
+    const watchEvents = watch?.onEvent;
+    const onEvent =
+      observer && watchEvents
+        ? (event: GameEvent): void => {
+            observer(event);
+            watchEvents(event);
+          }
+        : (observer ?? watchEvents);
     const result = runMatch(baseSeats(slot.opponentIndex), seedForSlot(slot), {
       ...matchOptionsFor(slot),
-      ...(observer ? { onEvent: observer } : {}),
+      ...(onEvent ? { onEvent } : {}),
+      ...(watch?.onState ? { onState: watch.onState } : {}),
     });
     baseGamesPlayed++;
     options.onGame?.(1);
@@ -511,6 +616,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       heroWon: result.outcome.kind === 'win' && result.outcome.winner === HERO_SEAT,
       ...(leftLibrary ? { leftLibrary } : {}),
       libraryDisturbed,
+      ...(watch ? { observed: watch.finish(result) } : {}),
     };
     baseRecords.set(slotIndex, record);
     return record;
@@ -523,6 +629,34 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
   /** Build the per-arm state (variant deck, seats, swapped slots) for a swap. */
   function newArmState(swap: CardSwap, outName: string, inName: string): ArmState {
     const variantDeck = applySwap(baseDeck, swap, options.pool, swapScope);
+    return armStateFor(variantDeck, swap, outName, inName, copiesSwappedBy(baseDeck, swap, options.pool, swapScope));
+  }
+
+  /**
+   * The per-arm state for a caller-built variant deck (§3.175). A deck of another
+   * length is refused outright: the seed-shares-the-permutation argument every
+   * paired number rests on needs equal lengths, and a silently unpaired arm would
+   * report a verdict with none of the variance reduction the verdict assumes.
+   */
+  function variantArmState(spec: VariantArmSpec): ArmState {
+    const size = spec.variantDeck.cards.reduce((sum, entry) => sum + entry.count, 0);
+    if (size !== baseLoaded.size) {
+      throw new Error(
+        `variant "${spec.label}" has ${size} cards but the base deck has ${baseLoaded.size} — ` +
+          'a paired arm must be the base deck rewritten in place',
+      );
+    }
+    return armStateFor(
+      spec.variantDeck,
+      { out: VARIANT_ARM_BASE_REF, in: spec.key },
+      baseDeck.name,
+      spec.label,
+      spec.slotsChanged,
+    );
+  }
+
+  /** The ONE constructor behind both arm kinds, so they can never differ in shape. */
+  function armStateFor(variantDeck: Deck, swap: CardSwap, outName: string, inName: string, copiesMoved: number): ArmState {
     const variantLoaded = loadDeck(variantDeck, options.pool, rules);
     return {
       swap,
@@ -530,6 +664,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       inName,
       variantDeck,
       variantLoaded,
+      copiesMoved,
       seatsByOpponent: new Array(opponentCount).fill(undefined),
       swappedInstanceIds: trackLibrary
         ? swappedInstanceIdsFor(baseLoaded.library, variantLoaded.library)
@@ -537,6 +672,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       gamesPlayed: 0,
       variantGamesSkipped: 0,
       variantWonBySlot: [],
+      observedBySlot: [],
       tally: { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 },
     };
   }
@@ -558,6 +694,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       paired: { ...state.tally },
       // A copy: the caller may hold the arm across further advances.
       variantWonBySlot: [...state.variantWonBySlot],
+      ...(options.watchGames ? { observedBySlot: [...state.observedBySlot] } : {}),
     };
   }
 
@@ -567,6 +704,12 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     openArm(swap, outName, inName) {
       const handle = {} as ArmHandle;
       arms.set(handle, newArmState(swap, outName, inName));
+      return handle;
+    },
+
+    openVariantArm(spec) {
+      const handle = {} as ArmHandle;
+      arms.set(handle, variantArmState(spec));
       return handle;
     },
 
@@ -592,7 +735,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
         paired: { ...state.tally },
         ...(options.runOptions?.stats ? { stats: options.runOptions.stats } : {}),
         scope: swapScope,
-        copiesSwapped: copiesSwappedBy(baseDeck, state.swap, options.pool, swapScope),
+        copiesSwapped: state.copiesMoved,
       });
     },
 
@@ -607,23 +750,18 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
         state = newArmState(swap, outName, inName);
         sliceArms.set(key, state);
       }
-      const tally: PairedTally = { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 };
-      const basedBefore = baseGamesPlayed;
-      const playedBefore = variantGamesPlayed;
-      const skippedBefore = variantGamesSkipped;
-      for (let slotIndex = Math.max(0, fromSlot); slotIndex < toSlot; slotIndex++) {
-        tallySlot(tally, state, slotIndex);
+      return playSliceOf(state, fromSlot, toSlot);
+    },
+
+    playVariantSlice(spec, fromSlot, toSlot) {
+      // Its own key space, so a variant can never collide with a swap's `out>in`.
+      const key = `variant:${spec.key}`;
+      let state = sliceArms.get(key);
+      if (!state) {
+        state = variantArmState(spec);
+        sliceArms.set(key, state);
       }
-      const from = Math.max(0, fromSlot);
-      return {
-        paired: tally,
-        // Slot order from `from`, so the host can splice it straight in.
-        variantWonBySlot: state.variantWonBySlot.slice(from, toSlot),
-        gamesPlayed: Math.max(0, toSlot - from),
-        variantGamesPlayed: variantGamesPlayed - playedBefore,
-        variantGamesSkipped: variantGamesSkipped - skippedBefore,
-        baseGamesPlayed: baseGamesPlayed - basedBefore,
-      };
+      return playSliceOf(state, fromSlot, toSlot);
     },
 
     usage: () => ({
@@ -636,6 +774,28 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     }),
   };
 
+  /** Slots `[fromSlot, toSlot)` for one arm state — the body both slice kinds share. */
+  function playSliceOf(state: ArmState, fromSlot: number, toSlot: number): PairedSlice {
+    const tally: PairedTally = { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 };
+    const basedBefore = baseGamesPlayed;
+    const playedBefore = variantGamesPlayed;
+    const skippedBefore = variantGamesSkipped;
+    for (let slotIndex = Math.max(0, fromSlot); slotIndex < toSlot; slotIndex++) {
+      tallySlot(tally, state, slotIndex);
+    }
+    const from = Math.max(0, fromSlot);
+    return {
+      paired: tally,
+      // Slot order from `from`, so the host can splice it straight in.
+      variantWonBySlot: state.variantWonBySlot.slice(from, toSlot),
+      ...(options.watchGames ? { observedBySlot: state.observedBySlot.slice(from, toSlot) } : {}),
+      gamesPlayed: Math.max(0, toSlot - from),
+      variantGamesPlayed: variantGamesPlayed - playedBefore,
+      variantGamesSkipped: variantGamesSkipped - skippedBefore,
+      baseGamesPlayed: baseGamesPlayed - basedBefore,
+    };
+  }
+
   /**
    * Play one slot for an arm and fold the paired outcome into `tally`. The one
    * place a (base, variant) pair becomes a 2×2 cell, shared by the handle-based
@@ -644,30 +804,47 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
   function tallySlot(tally: PairedTally, state: ArmState, slotIndex: number): void {
     const slot = pairedSlotAt(slotIndex, opponentCount);
     const base = baseRecordFor(slotIndex);
-    const variantWon = playVariantGame(state, slot, base);
-    state.variantWonBySlot[slotIndex] = variantWon;
-    if (base.heroWon && variantWon) tally.bothWon++;
+    const variant = playVariantGame(state, slot, base);
+    state.variantWonBySlot[slotIndex] = variant.heroWon;
+    if (options.watchGames) state.observedBySlot[slotIndex] = variant.observed ?? null;
+    if (base.heroWon && variant.heroWon) tally.bothWon++;
     else if (base.heroWon) tally.baseOnly++;
-    else if (variantWon) tally.variantOnly++;
+    else if (variant.heroWon) tally.variantOnly++;
     else tally.neither++;
   }
 
-  /** Play (or provably skip) one variant game; returns whether the hero won it. */
-  function playVariantGame(state: ArmState, slot: PairedSlot, base: BaseGameRecord): boolean {
+  /**
+   * Play (or provably skip) one variant game; returns whether the hero won it
+   * and what the watch saw. A skipped game IS the base game, so it inherits the
+   * base record's observation.
+   */
+  function playVariantGame(
+    state: ArmState,
+    slot: PairedSlot,
+    base: BaseGameRecord,
+  ): { readonly heroWon: boolean; readonly observed?: PairedGameObservation } {
     if (canReuseBaseGame(state, base)) {
       state.variantGamesSkipped++;
       variantGamesSkipped++;
-      return base.heroWon;
+      return { heroWon: base.heroWon, ...(base.observed ? { observed: base.observed } : {}) };
     }
     let seats = state.seatsByOpponent[slot.opponentIndex];
     if (!seats) {
       seats = makeSeats(state.variantLoaded, opponents[slot.opponentIndex] as LoadedDeck, options.pilots, options.registry);
       state.seatsByOpponent[slot.opponentIndex] = seats;
     }
-    const result = runMatch(seats, seedForSlot(slot), matchOptionsFor(slot));
+    const watch = options.watchGames?.();
+    const result = runMatch(seats, seedForSlot(slot), {
+      ...matchOptionsFor(slot),
+      ...(watch?.onEvent ? { onEvent: watch.onEvent } : {}),
+      ...(watch?.onState ? { onState: watch.onState } : {}),
+    });
     variantGamesPlayed++;
     options.onGame?.(1);
-    return result.outcome.kind === 'win' && result.outcome.winner === HERO_SEAT;
+    return {
+      heroWon: result.outcome.kind === 'win' && result.outcome.winner === HERO_SEAT,
+      ...(watch ? { observed: watch.finish(result) } : {}),
+    };
   }
 }
 
@@ -677,6 +854,7 @@ function toWireRecord(record: BaseGameRecord): PairedBaseRecord {
     heroWon: record.heroWon,
     leftLibrary: record.leftLibrary ? [...record.leftLibrary] : null,
     libraryDisturbed: record.libraryDisturbed,
+    ...(record.observed ? { observed: record.observed } : {}),
   };
 }
 
@@ -686,6 +864,7 @@ function fromWireRecord(record: PairedBaseRecord): BaseGameRecord {
     heroWon: record.heroWon,
     ...(record.leftLibrary ? { leftLibrary: new Set(record.leftLibrary) } : {}),
     libraryDisturbed: record.libraryDisturbed,
+    ...(record.observed ? { observed: record.observed } : {}),
   };
 }
 

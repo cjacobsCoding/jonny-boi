@@ -30,6 +30,7 @@ import type {
   SuggestionRunPlan,
   SwapScope,
 } from '@jonny-boi/sim';
+import type { DualLandFamilyId, ManabaseRunPlan, ManabaseVariant, PairedGameObservation } from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import type { MatchTrace } from '../replay-types.js';
 
@@ -270,6 +271,85 @@ export interface MatchJobResult {
   readonly trace: MatchTrace;
 }
 
+// --- §3.175 manabase experiments: the same three phases, with a game watch ------------
+
+/**
+ * PHASE 1 of a manabase run: enumerate the family from the request's settings
+ * and plan its ladder — the sim's `planManabaseRun`, on a worker because it
+ * needs the card pool. Its own kind rather than a flag on `suggest-plan`: the
+ * two plans carry different payloads, and a worker must never guess which.
+ */
+export interface ManabasePlanJob {
+  readonly kind: 'manabase-plan';
+  readonly context: ShardContext;
+  readonly gamesPerVariant: number;
+  readonly sweeps: { readonly count: boolean; readonly mix: boolean; readonly type: boolean };
+  readonly radius: number;
+  readonly families?: readonly DualLandFamilyId[];
+}
+
+export interface ManabasePlanResult {
+  readonly kind: 'manabase-plan';
+  readonly plan: ManabaseRunPlan;
+  readonly identicalGameSkipEnabled: boolean;
+  readonly identicalGameSkipDisabledReason?: string;
+}
+
+/**
+ * PHASE 2a: the shared base games for a slot range, played WITH the reliability
+ * watch, so each record comes back carrying the game's reading. A separate kind
+ * from `base-slot-shard` because the worker's cached runner is built with or
+ * without the watch, and a base record without a reading would leave every
+ * skipped variant game unmeasured.
+ */
+export interface ManabaseBaseSlotShardJob {
+  readonly kind: 'manabase-base-slot-shard';
+  readonly context: ShardContext;
+  readonly runSeed: number;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+}
+
+export interface ManabaseBaseSlotShardResult {
+  readonly kind: 'manabase-base-slot-shard';
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  /** One record per slot, in slot order, each with its `observed` reading. */
+  readonly records: readonly PairedBaseRecord[];
+}
+
+/**
+ * PHASE 2b: ONE variant's games over a slot range. The variant travels as its
+ * definition (`ManabaseVariant.steps`), and the worker builds the deck through
+ * `applyManabase` — the same function the Lab's Apply mirrors, so what is
+ * played and what gets applied cannot drift.
+ */
+export interface ManabaseVariantSliceShardJob {
+  readonly kind: 'manabase-variant-slice-shard';
+  readonly context: ShardContext;
+  readonly runSeed: number;
+  /** The ladder's candidate key — how results are folded back. */
+  readonly candidateKey: string;
+  readonly variant: ManabaseVariant;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  /** Base records for exactly `[slotStart, slotEnd)`, in slot order, readings included. */
+  readonly baseRecords: readonly PairedBaseRecord[];
+}
+
+export interface ManabaseVariantSliceShardResult {
+  readonly kind: 'manabase-variant-slice-shard';
+  readonly candidateKey: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  readonly paired: PairedTable;
+  readonly variantGamesPlayed: number;
+  readonly variantGamesSkipped: number;
+  readonly variantWonBySlot: readonly boolean[];
+  /** The watch's reading per slot of this slice, in slot order (`null` = none). */
+  readonly observedBySlot: readonly (PairedGameObservation | null)[];
+}
+
 /** Anything the pool can hand to a worker. */
 export type ShardJob =
   | GauntletShardJob
@@ -277,7 +357,10 @@ export type ShardJob =
   | SuggestPlanJob
   | BaseSlotShardJob
   | VariantSliceShardJob
-  | MatchJob;
+  | MatchJob
+  | ManabasePlanJob
+  | ManabaseBaseSlotShardJob
+  | ManabaseVariantSliceShardJob;
 
 /** Anything a worker can hand back on success. */
 export type ShardResult =
@@ -286,7 +369,10 @@ export type ShardResult =
   | SuggestPlanResult
   | BaseSlotShardResult
   | VariantSliceShardResult
-  | MatchJobResult;
+  | MatchJobResult
+  | ManabasePlanResult
+  | ManabaseBaseSlotShardResult
+  | ManabaseVariantSliceShardResult;
 
 /**
  * Main thread → worker, once per worker, before any job.
