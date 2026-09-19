@@ -173,7 +173,7 @@ export interface TrimRequest extends PilotedRequest {
 }
 
 /** Anything the UI can ask the worker to run. */
-export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | TrimRequest;
+/**
  * §3.175 — try other MANABASES: land-only variants of the hero (a land-count
  * sweep, a colour-mix sweep, dual-land playsets from the pool), each evaluated
  * with the same paired machinery as a swap and reported by win rate AND by the
@@ -196,7 +196,13 @@ export interface ManabaseRequest extends PilotedRequest {
 }
 
 /** Anything the UI can ask the worker to run. */
-export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | ManabaseRequest;
+export type SimRequest =
+  | GauntletRequest
+  | SwapRequest
+  | SuggestRequest
+  | MatchRequest
+  | TrimRequest
+  | ManabaseRequest;
 
 /**
  * Live progress for the whole run, aggregated across every worker.

@@ -131,6 +131,9 @@ export function LabView({
         if (result.copiesRemoved > 0) decks.updateDeck(result.deck);
         setApplyNote(describeCutApplied(result, hero.name));
         return result;
+      }
+    : undefined;
+
   // §3.175 — applying a tested MANABASE: the variant's steps folded over the
   // saved deck in ONE update (several `onApplySwap` calls would each start from
   // the same stale hero and keep only the last), through the same apply path.
@@ -254,6 +257,8 @@ export function LabView({
             targetConfig={TRIM_TARGET_SIZE}
             defaultSettings={TRIM_DEFAULT_SETTINGS}
             {...(onApplyCut ? { onApplyCut } : {})}
+          />
+        )}
         {tab === 'manabase' && (
           <ManabasePanel
             {...sharedProps}

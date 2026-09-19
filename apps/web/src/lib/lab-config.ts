@@ -81,6 +81,7 @@ export const TRIM_DEFAULT_SETTINGS: TrimSettings = Object.freeze({
   onNoImprovement: 'pause',
 });
 
+/**
  * §3.175 — the manabase experiments: paired games per opponent a FINALIST
  * variant reaches (the ladder is adaptive, like Suggestions, so the default is
  * the same finalist depth), and how far the count/mix sweeps step each way.
