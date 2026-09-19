@@ -70,6 +70,16 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.170',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: 'Equipment that enters attached',
+    summary:
+      '"When this Equipment enters, attach it to target creature you control" — Maul of the Skyclaves, Bramble Armor, Scavenged Blade and their family now arrive already on a creature, through the same attach path Equip uses.',
+    cards: ['Maul of the Skyclaves', 'Bramble Armor', 'Scavenged Blade'],
+    witness: { kind: 'rule', id: 'attach-self-to-target-creature-you-control' },
+  },
+  {
     section: '3.169',
     date: '2026-09-19',
     kind: 'mechanic',

@@ -718,6 +718,11 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
      */
     enabledBy: (card) =>
       card.types.includes('creature') && /"on":\s*"etb"/.test(JSON.stringify(card.triggers ?? [])),
+    // §3.170 — a SEQUENCED witness (an enters trigger must be on the stack when
+    // the copier is activated), and the pool churn that took the pool past
+    // 7,300 was enough to make the anchored grid miss it, exactly as it missed
+    // transform-dfc in §3.162. The overtime lane, paid only on a miss.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
   },
   {
     id: 'spell-copy',

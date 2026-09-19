@@ -104,13 +104,20 @@ describe('the pool actually contains the cards the attachment seam needs', () =>
       // activated ability. Lead Pipe prints "{2}, Sacrifice this Equipment:
       // Draw a card." above its "Equip {2}", so index 0 is the sacrifice — and
       // the test failed on a card that was entirely correct.
-      const equip = (card.activated ?? []).filter((ability) =>
+      const attaches = (card.activated ?? []).filter((ability) =>
         ability.effects.some((effect) => effect.primitive === 'attachToTarget'),
       );
+      // The EQUIP abilities are the ones the keyword line compiled — labelled
+      // "Equip {N}" / "Equip—…" by `equip-cost`. Horned Helm also prints
+      // "{G}{G}: Attach this Equipment to target creature you control", an
+      // ordinary activated ability at INSTANT speed (§3.170 compiles it), and
+      // CR 301.5c's "only as a sorcery" binds Equip alone — so the timing check
+      // is on the Equip abilities, not on every attach.
+      const equip = attaches.filter((ability) => /^equip\b/i.test(ability.label));
       expect(equip.length, `${card.name} has no Equip ability`).toBeGreaterThan(0);
-      // Equip is sorcery-speed (CR 301.5c); an instant-speed Equipment would be a
-      // combat trick the printed card is not. EVERY equip ability is checked,
-      // not just one, so a second attach ability cannot slip in at instant speed.
+      // Equip is sorcery-speed (CR 301.5c); an instant-speed Equip would be a
+      // combat trick the printed card is not. EVERY Equip ability is checked,
+      // not just one, so a second Equip cannot slip in at instant speed.
       for (const ability of equip) {
         expect(ability.timing, `${card.name}'s Equip is not sorcery-speed`).toBe('sorcery');
       }

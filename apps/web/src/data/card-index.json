@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T13:36:53.667Z",
+  "generatedAt": "2026-09-19T14:16:58.285Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7322,
+  "requested": 7338,
   "unresolved": [],
   "cards": [
     {
@@ -36217,6 +36217,53 @@
       "faces": []
     },
     {
+      "id": "f3017ae1-9744-493b-a1a2-fb2a60f7e7e4",
+      "name": "Bramble Armor",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+1.\nEquip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "vow",
+      "collectorNumber": "188",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "74148e2e-ac21-414a-9b6c-410988d7fdd0",
       "name": "Bramble Creeper",
       "manaCost": {
@@ -51146,6 +51193,49 @@
       ],
       "set": "zen",
       "collectorNumber": "7",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "eebf8f67-49d0-42de-a5cc-ad13d19d2c55",
+      "name": "Cliffhaven Kitesail",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature has flying.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "znr",
+      "collectorNumber": "243",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -82656,6 +82746,54 @@
       "faces": []
     },
     {
+      "id": "c304118a-c83b-490a-b0e2-721734a996ee",
+      "name": "Dueling Rapier",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Flash\nWhen this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+0.\nEquip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Equip",
+        "Flash"
+      ],
+      "set": "afr",
+      "collectorNumber": "140",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "923cb904-c725-4d57-bc17-7aa87a7cd8e0",
       "name": "Dune Beetle",
       "manaCost": {
@@ -95780,6 +95918,53 @@
       "faces": []
     },
     {
+      "id": "20e93f86-9e20-4e08-9bf7-ae6ebebf6876",
+      "name": "Falcon's Wing Harness",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1 and has flying and ward {1}. (Whenever equipped creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)\nEquip {2}{U} ({2}{U}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "msh",
+      "collectorNumber": "53",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b9c09887-6d2b-48b4-a483-16b8a45babd0",
       "name": "Falkenrath Marauders",
       "manaCost": {
@@ -106814,6 +106999,49 @@
       "set": "cmr",
       "collectorNumber": "69",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2570fb88-358f-4f36-87e3-d8375824d126",
+      "name": "Forebear's Blade",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +3/+0 and has vigilance and trample.\nWhenever equipped creature dies, attach this Equipment to target creature you control.\nEquip {3}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "cmm",
+      "collectorNumber": "384",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -140885,6 +141113,51 @@
       ],
       "set": "rvr",
       "collectorNumber": "147",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "749c408a-0a19-44a3-a436-295380573f91",
+      "name": "Horned Helm",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+1 and has trample.\n{G}{G}: Attach this Equipment to target creature you control.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "5dn",
+      "collectorNumber": "132",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -176507,6 +176780,54 @@
       "faces": []
     },
     {
+      "id": "df6776a4-cc01-46a3-90df-04e1e3ba513c",
+      "name": "Malamet Scythe",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Flash\nWhen this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+2.\nEquip {4} ({4}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Equip",
+        "Flash"
+      ],
+      "set": "lci",
+      "collectorNumber": "200",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b92a6ba0-cea0-4084-92f1-2bd60ea25fb0",
       "name": "Malamet War Scribe",
       "manaCost": {
@@ -180009,6 +180330,53 @@
       "faces": []
     },
     {
+      "id": "3213c1f9-bff5-4629-a0b6-0c81ccf6c80d",
+      "name": "Maul of the Skyclaves",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+2 and has flying and first strike.(It deals combat damage before creatures without first strike.)\nEquip {2}{W}{W}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "moc",
+      "collectorNumber": "195",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "5e4cd13a-66b6-4c65-a5a0-82f93145d16a",
       "name": "Maulfist Squad",
       "manaCost": {
@@ -180605,6 +180973,49 @@
       "faces": []
     },
     {
+      "id": "9deda16b-ce26-4228-9bc2-28b7358d3f7c",
+      "name": "Mechanical Glider",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature has flying. (It can't be blocked except by creatures with flying or reach.)\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "tle",
+      "collectorNumber": "256",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2cb65388-dc6c-4e2a-93ac-49ea484849e9",
       "name": "Mechanized Ninja Cavalry",
       "manaCost": {
@@ -181019,6 +181430,53 @@
       "set": "mir",
       "collectorNumber": "27",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d75629cb-91e2-46fa-9c80-6feb29e1ceb8",
+      "name": "Meltstrider's Gear",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+1 and has reach.\nEquip {5} ({5}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "eoe",
+      "collectorNumber": "198",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -186018,6 +186476,54 @@
       "set": "hob",
       "collectorNumber": "129",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "ee4d00b8-1373-47b2-9be5-2199e0b12540",
+      "name": "Mirran Banesplitter",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Flash\nWhen this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+0.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Equip",
+        "Flash"
+      ],
+      "set": "mom",
+      "collectorNumber": "154",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -196899,6 +197405,51 @@
       "faces": []
     },
     {
+      "id": "d5e58c74-0ba6-452a-94a6-8256c4f6aba8",
+      "name": "Neurok Stealthsuit",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature has shroud. (It can't be the target of spells or abilities.)\n{U}{U}: Attach this Equipment to target creature you control.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "td2",
+      "collectorNumber": "25",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "0430da3c-9460-4b62-ae28-2e7e6f4d06a4",
       "name": "Neutralize",
       "manaCost": {
@@ -207695,6 +208246,54 @@
       "keywords": [],
       "set": "xln",
       "collectorNumber": "25",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2e13b103-202f-41d7-a855-a6807e5fb4b7",
+      "name": "Paladin's Shield",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Flash\nWhen this Equipment enters, attach it to target creature you control.\nEquipped creature gets +0/+2.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Equip",
+        "Flash"
+      ],
+      "set": "afr",
+      "collectorNumber": "30",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -246603,6 +247202,53 @@
       "faces": []
     },
     {
+      "id": "3280f0d0-de0d-4f87-a6ef-c941cb7c9784",
+      "name": "Scavenged Blade",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+0.\nEquip {2}{R} ({2}{R}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "znr",
+      "collectorNumber": "157",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "4e8072a9-2699-4c6c-9556-67d91bd67a4b",
       "name": "Scavenged Weaponry",
       "manaCost": {
@@ -273877,6 +274523,51 @@
       "keywords": [],
       "set": "ddn",
       "collectorNumber": "48",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "5fc31145-19b4-4dbe-8756-f49791aa147e",
+      "name": "Sparring Collar",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature has first strike.\n{R}{R}: Attach this Equipment to target creature you control.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "5dn",
+      "collectorNumber": "154",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -318652,6 +319343,49 @@
       "set": "tsb",
       "collectorNumber": "71",
       "rarity": "special",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1e5c781d-cd89-4671-8fbe-fae82c33357b",
+      "name": "Utility Knife",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "znr",
+      "collectorNumber": "256",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",

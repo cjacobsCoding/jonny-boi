@@ -10886,6 +10886,37 @@ conditions outside the table leave the whole line reporting. Pool at regeneratio
 smaller number is still the one reported: the 596-card family is 327 shapes and the table reads its
 head); index 7,291/7,291, `--check` clean. Three ability words rode in with the cards and the glossary
 (a closed table the index builder enforces) gained *Threshold*, *Delirium* and *Fateful hour*.
+### 3.170 "When this Equipment enters, attach it to target creature you control" — one row, the Equip path — ✅ done
+
+> "start adding all the rest of the missing mechanics"
+
+The one-clause measurement's next cheap row: 44 cards on the corpus print exactly *"When this
+Equipment enters, attach it to target creature you control."* (Maul of the Skyclaves, Bramble Armor,
+Scavenged Blade, Squire's Lightblade, Meltstrider's Gear …), 28 of them with that sentence as their
+only blocking clause; the rest add a subtype or a bound to the target (*"target Knight you control"*,
+*"target non-Human creature you control"*) and keep reporting until the target-bound vocabulary
+reaches them.
+
+**One effect-rule row, no new mechanism.** The trigger body *"attach it to target creature you
+control"* compiles to the SAME primitive with the SAME target the Equip ability already compiles
+to — `attachToTarget` aimed at `creatureYouControl` — so an Equipment that enters attached and one
+that is equipped by hand go through one attach path with one legality check, and what the host then
+wears is the card's own `attachment.modifies`, untouched. The row refuses on anything that is not an
+Equipment: a card with no `attachment` seam would compile an attach that core refuses at resolution,
+and it should report instead.
+
+**Verification.** `cards/enters-attached.test.ts`, on Maul of the Skyclaves's real text: the trigger
+compiles whole and aims where the Equip ability aims; played, the Maul enters, asks for one of YOUR
+two creatures (the opponent's is not offered; one legal target would have been taken without a
+question, which is why the board has two), and resolves attached — the host is a 4/4 flier and only
+the spell's own {2}{W} left the pool, never the Equip cost; with no creature of yours it enters
+unattached and stays on the battlefield (CR 704.5n never fires, because it was never attached to
+anything illegal). Pool at regeneration: **7,290 → 7,306** (+16 — the
+smaller number, again: 12 of the 28 one-clause cards print a second sentence the compiler refuses);
+index 7,338/7,338, `--check` clean. The observation soak's `trigger-copy` witness went INERT on the
+larger pool — the same pool-churn brittleness §3.162 met on `transform-dfc` — and got the same
+sequenced overtime lane, red before it and green after.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
