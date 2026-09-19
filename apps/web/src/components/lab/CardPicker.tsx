@@ -18,7 +18,15 @@
  * pool for "add"); this component never decides which cards are pickable. A
  * card the caller lists but the pool cannot describe is still offered, by name.
  */
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactElement,
+} from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { getCard } from '../../lib/cards.js';
 import { COLOR_FILTERS, TYPE_FILTERS } from '../../lib/config.js';
@@ -74,7 +82,14 @@ function describedCard(option: PickableCard): NormalizedCard {
   );
 }
 
-export function CardPicker({ label, options, value, onChange, disabled, placeholder }: CardPickerProps): ReactElement {
+export function CardPicker({
+  label,
+  options,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: CardPickerProps): ReactElement {
   const id = useId();
   const listId = `${id}-list`;
   const [open, setOpen] = useState(false);
@@ -173,12 +188,23 @@ export function CardPicker({ label, options, value, onChange, disabled, placehol
           Filters{advanced ? ' •' : ''}
         </button>
       </div>
-      {picked && !open && (
-        <div className="card-picker__picked" aria-live="polite">
-          <span className="card-picker__picked-name">{picked.name}</span>
-          {picked.count !== undefined && <span className="card-picker__count">×{picked.count}</span>}
-        </div>
-      )}
+      {/* Always rendered, so both pickers in a row stay the same height and their
+          inputs line up whatever is picked (the popover opens below it). */}
+      <div className="card-picker__picked" aria-live="polite">
+        {picked ? (
+          <>
+            <span className="card-picker__picked-name">{picked.name}</span>
+            {picked.count !== undefined && (
+              <span className="card-picker__count">×{picked.count}</span>
+            )}
+          </>
+        ) : (
+          <span className="card-picker__count">
+            Nothing picked yet — {options.length.toLocaleString()} card
+            {options.length === 1 ? '' : 's'} to choose from
+          </span>
+        )}
+      </div>
 
       {open && (
         <div className="card-picker__popover">
@@ -228,7 +254,10 @@ export function CardPicker({ label, options, value, onChange, disabled, placehol
                   placeholder="min"
                   value={manaValue.min ?? ''}
                   onChange={(event) =>
-                    setManaValue({ ...manaValue, min: event.target.value === '' ? undefined : Number(event.target.value) })
+                    setManaValue({
+                      ...manaValue,
+                      min: event.target.value === '' ? undefined : Number(event.target.value),
+                    })
                   }
                 />
                 <span aria-hidden="true">–</span>
@@ -241,7 +270,10 @@ export function CardPicker({ label, options, value, onChange, disabled, placehol
                   placeholder="max"
                   value={manaValue.max ?? ''}
                   onChange={(event) =>
-                    setManaValue({ ...manaValue, max: event.target.value === '' ? undefined : Number(event.target.value) })
+                    setManaValue({
+                      ...manaValue,
+                      max: event.target.value === '' ? undefined : Number(event.target.value),
+                    })
                   }
                 />
                 {advanced && (
