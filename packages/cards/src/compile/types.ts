@@ -200,6 +200,8 @@ export interface ClauseContribution {
   readonly asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
   /** "~ is the chosen type in addition to its other types". */
   readonly isChosenSubtype?: boolean;
+  /** §3.163 — "as long as your devotion to … is less than N, ~ isn't a creature". */
+  readonly creatureUnlessDevotion?: import('@jonny-boi/core').CreatureUnlessDevotion;
   /**
    * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
    * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N

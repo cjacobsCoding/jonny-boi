@@ -46,6 +46,7 @@ import {
   markBattlefieldEntry,
   pruneCardGrantsFor,
   resetInstanceForNewZone,
+  settleDevotionForms,
   discardDestination,
   spellCanBeCountered,
   spellLeaveDestination,
@@ -894,6 +895,9 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   // replayed, and an "as ~ enters, choose a type" lord still lorded over the type
   // it named last time. Two funnels, one answer.
   resetInstanceForNewZone(perm);
+  // §3.163 — a leave lowers its controller's devotion; the gods left behind
+  // re-settle here, as they do in core's funnel. Two funnels, one answer.
+  settleDevotionForms(ctx.state);
   // A permanent always goes to its OWNER's zone, not its controller's. Its
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's

@@ -35,6 +35,7 @@ import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 import { detachFromHost, isLegallyAttached } from '../attachments.js';
 import { hasLethalPoison, POISON_LOSS_REASON } from '../poison.js';
+import { settleDevotionForms } from '../devotion.js';
 
 /** Run all pending SBAs until a fixpoint. Mutates the draft; emits events. */
 export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) => void): void {
@@ -46,6 +47,11 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
   // (the overwhelmingly common case, and the one the sim spends its life in) gets
   // `null` back and every pass below costs it nothing at all.
   const attachments = collectAttachments(state);
+  // §3.163 — settle the gods' forms first: whether Heliod is a creature decides
+  // whether the toughness check below applies to it at all, and a copy or a
+  // transform elsewhere in the action may have moved a devotion count with no
+  // zone change to notice it.
+  settleDevotionForms(state);
   let changed = true;
   while (changed && !state.gameOver) {
     changed = false;
@@ -534,6 +540,10 @@ function sbaGateFactsOf(def: CardInstance['def']): SbaGateFacts {
     alwaysLook:
       def.attachment !== undefined ||
       def.characteristicPT !== undefined ||
+      // §3.163 — a devotion-conditional god's TYPE can change with no event the
+      // gate could otherwise notice, so a board with one always gets the check.
+      def.creatureUnlessDevotion !== undefined ||
+      def.creatureForm !== undefined ||
       (def.statics !== undefined && staticsCanShrink(def.statics)),
     legendary: def.legendary === true,
     creature,

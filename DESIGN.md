@@ -10478,6 +10478,71 @@ moving the trajectory. The decks are what the row is about, so the decks stay an
 600 shuffles of the same two lists replayed under the fixture pilot, first hit 113390585/A — 662
 copies, no other violation, clean under the shipped pilot — pinned in all three tables.
 
+### 3.163 Devotion, and the gods' "isn't a creature" — a TYPE LAYER as a definition swap — ✅ done
+
+> "Also add Heliod, Sun-Crowned and all required mechanics"
+
+Heliod compiled to exactly one reported clause after §3.162 — *"As long as your devotion to white is
+less than five, Heliod isn't a creature"* — and the measurement said it was a family, not a card:
+62 cards print "devotion" on the 32,341-card corpus; **23 print this exact shape** (11 in one
+colour, 12 in a colour pair — every Theros god), 16 print "where X is your devotion to <colour>"
+(Gray Merchant of Asphodel, Thassa's Oracle), 20 "equal to your devotion to <colour>" (Master of
+Waves, Karametra's Acolyte's mana), and the rest are one-offs.
+
+**The count (`core/devotion.ts`).** `devotionTo(state, player, colors)` — CR 700.5 over the mana
+costs of the permanents you control, read off each permanent's CURRENT definition like every other
+derived count; a hybrid symbol counts for either of its colours and ONCE for the pair, a Phyrexian
+symbol counts for its colour, generic never does. Five named derived-count rows (`devotionToWhite`
+… `devotionToGreen`) reach the "where X is …" pre-pass through a new bare-phrase arithmetic row, so
+*"each opponent loses X life, where X is your devotion to black"* binds. "Equal to your devotion"
+is deliberately NOT read yet — its consumers are token counts and mana amounts, each with its own
+rule, and the next section's derived-mana family is where the mana half belongs.
+
+**The layer.** `isCreature(def)` is asked at fifty-seven sites — combat, targeting, state-based
+actions, triggers, the derived counts — and every one reads the permanent's `def`. The engine
+already answers "what is this permanent right now" at two layers by swapping that field: a
+transformed face (`printedDef`) and a copy (`uncopiedDef`). This is the third. A god whose devotion
+is short carries its **non-creature form** — the same definition minus the creature type, memoised
+per base so its identity is stable for the SBA gate and the restriction memos, with `creatureForm`
+pointing back at the base (the base never points forward; the data stays acyclic). One write, and
+all fifty-seven readers are right with no second code path: a sleeping Heliod cannot attack, is
+not a creature target, is not counted by "creatures you control", is not seen by Soul Warden's
+"another creature enters", and does not die to toughness — and is a 5/5 indestructible creature
+the moment the fifth pip lands.
+
+**When it is settled — the one entry helper, both leave funnels, the control-change site, the head
+of every state-based check.** Entry matters most: Heliod's own {W} counts, so `markBattlefieldEntry`
+settles every god on that side before any "enters" trigger reads the board. Both leave funnels
+(core's `moveToZone`, the cards package's `movePermanentTo`) re-settle the gods left behind before
+the leave event. `checkStateBasedActions` settles first — a copy or a transform moves a devotion
+count with no zone change — and the gate's `alwaysLook` includes a devotion-conditional definition
+so a board with a god always gets the check. The zone reset restores the base form FIRST, ahead of
+the face and copy restores: a god that dies is a creature card in the graveyard (CR 700.5 is about
+permanents), which every reanimation and "creature card" count needs.
+
+**Compiler.** `god-creature-unless-devotion` reads one or two colour words and the count into
+`CardDefinition.creatureUnlessDevotion { colors, min }`, on a creature card only. Heliod,
+Sun-Crowned, Heliod God of the Sun, Thassa, Nylea, Purphoros and Karametra compile whole; Erebos
+("your opponents can't gain life"), Xenagos ("where X is that creature's power") and Athreos
+("unless target opponent pays 3 life") each report their OTHER line by name.
+
+**Verification.** `core/devotion.test.ts`: the count (pips, hybrid once per pair, a Phyrexian face,
+the other seat's board not counted); the layer in both directions on the same object; the two-colour
+god; the zone reset; through the engine — a god cast onto an empty board enters as an enchantment
+and wakes on the fifth pip, an enchantment is offered no attack, a bounced god is a creature card in
+hand and the one left behind loses its creature-hood. `cards/heliod-play.test.ts` compiles the
+printed card and drives it: Soul Warden does not see it enter, its lifegain trigger grows Heliod
+ITSELF while it is an enchantment ("creature or enchantment you control"), the lifelink grant never
+offers Heliod to itself, and at devotion five it is on the attack menu. Pool at regeneration:
+**7,103 → 7,115** (+12 — the gods whose other lines already compiled, and the cards the devotion
+count rows freed); index 7,147/7,147, `--check` clean.
+
+**A counter is a counter (CR 122.1).** Found by the play test, not by the compile: `addCounters`
+gated its +1/+1 branch on the target being a creature — "a +1/+1 counter on a non-creature
+changes nothing" — and dropped Heliod's lifegain counters on the floor while it was an
+enchantment. They are exactly what make it a 6/6 the turn devotion arrives. The gate is gone; the
+self form goes through the any-permanent reader the named kinds already used.
+
 ### 3.165 The Lab's A/B pickers — type to find one card, a copies menu that follows the line, an Apply that says it applied — ✅ done
 
 > "the dropdowns in Lab -> A/B Test are awful to use. Anytime we have a card selector dropdown like

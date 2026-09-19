@@ -351,13 +351,27 @@ describe('the "where X is …" binding', () => {
   });
 
   it('REFUSES a "where X is" phrase outside the count vocabulary', () => {
-    // Gray Merchant's devotion, Radiant Flames's "colors of mana spent". Reading
-    // either as a count would be a number the card does not print.
+    // Radiant Flames's "colors of mana spent to cast this spell" — reading it as
+    // a count would be a number the card does not print. (Gray Merchant's
+    // devotion was this test's sample until §3.163 made devotion a count; it is
+    // pinned as BINDING below so the vocabulary cannot silently lose it again.)
+    const spent = card({
+      name: 'Radiant Flames',
+      typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      power: null,
+      toughness: null,
+      oracleText:
+        'Radiant Flames deals X damage to each creature, where X is the number of colors of mana spent to cast this spell.',
+    });
+    expect(blockers(spent)).toHaveLength(1);
+  });
+
+  it('binds "where X is your devotion to <colour>" (§3.163)', () => {
     const devotion = card({
       name: 'Gray Merchant of Asphodel',
       oracleText: 'When ~ enters, each opponent loses X life, where X is your devotion to black.',
     });
-    expect(blockers(devotion)).toHaveLength(1);
+    expect(blockers(devotion)).toEqual([]);
   });
 });
 

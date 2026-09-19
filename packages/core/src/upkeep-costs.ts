@@ -42,6 +42,7 @@ import type { CardDefinition } from './card.js';
 import type { GameEvent } from './events.js';
 import type { CardInstance, GameState } from './state.js';
 import { indexReplacements, replaceCounters } from './internal/replacement.js';
+import { settleDevotionForms } from './devotion.js';
 
 /** The counter kinds this family reads and writes, spelled once. */
 export const TIME_COUNTER = 'time';
@@ -93,6 +94,10 @@ export function definitionTracksControlSince(def: CardDefinition): boolean {
 export function markBattlefieldEntry(state: GameState, inst: CardInstance, emit: (e: GameEvent) => void): void {
   if (definitionTracksControlSince(inst.def)) inst.controlledSinceTurn = state.turnNumber;
   applyEnteringCounters(state, inst, emit);
+  // §3.163 — an entering permanent raises its controller's devotion (its own
+  // pips count, CR 700.5), so every god on that side — this one included — is
+  // settled before any "enters" trigger asks whether it is a creature.
+  settleDevotionForms(state);
 }
 
 /**
@@ -104,6 +109,8 @@ export function markBattlefieldEntry(state: GameState, inst: CardInstance, emit:
  */
 export function markControlChange(state: GameState, inst: CardInstance): void {
   if (definitionTracksControlSince(inst.def)) inst.controlledSinceTurn = state.turnNumber;
+  // §3.163 — devotion moved from one seat to the other with the permanent.
+  settleDevotionForms(state);
 }
 
 /**
