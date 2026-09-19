@@ -53,12 +53,24 @@ import {
   type PairedBaseRecord,
   type SwapScope,
 } from '@jonny-boi/sim';
+import {
+  applyManabase,
+  createReliabilityWatch,
+  planManabaseRun,
+  type PairedGameWatch,
+} from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import type {
   BaseSlotShardJob,
   BaseSlotShardResult,
   GauntletShardJob,
   GauntletShardResult,
+  ManabaseBaseSlotShardJob,
+  ManabaseBaseSlotShardResult,
+  ManabasePlanJob,
+  ManabasePlanResult,
+  ManabaseVariantSliceShardJob,
+  ManabaseVariantSliceShardResult,
   MatchJob,
   MatchJobResult,
   PairedShardJob,
@@ -407,10 +419,28 @@ export interface SuggestionRunner {
  * matters for honesty as much as for correctness — a second identical run served
  * from a warm cache would report a throughput no fresh run could reproduce.
  */
+/**
+ * A per-game watch a runner is built with, NAMED so it can be part of the
+ * runner-cache key: two shards of one run must agree on whether their games
+ * were watched, or a base record without a reading would be handed to a variant
+ * slice that expects one. `undefined` (every run before §3.175) watches nothing.
+ */
+export interface NamedGameWatch {
+  readonly id: string;
+  readonly create: () => PairedGameWatch;
+}
+
+/** §3.175 — the reliability watch every manabase shard plays under. */
+export const RELIABILITY_WATCH: NamedGameWatch = {
+  id: 'reliability',
+  create: () => createReliabilityWatch(),
+};
+
 function suggestionRunner(
   context: SimContext,
   shardContext: ShardContext,
   runSeed: number,
+  watch?: NamedGameWatch,
 ): SuggestionRunner {
   // The pilot is part of the key: base games played by one pilot are not the base
   // games of a run piloted by another, and adopting them would silently compare a
@@ -419,12 +449,14 @@ function suggestionRunner(
   // run's candidates, but a runner built at one scope constructs different
   // variants than one built at another, so reusing it across scopes would
   // compare arms from two different experiments.
+  // §3.175 — and the WATCH: a runner built without one records no readings.
   const key = JSON.stringify([
     shardContext.hero,
     shardContext.opponentNames,
     runSeed,
     shardContext.pilotId,
     shardContext.swapScope ?? null,
+    watch?.id ?? null,
   ]);
   const cached = context.runnerCache;
   if (cached?.key === key) return cached.runner;
@@ -441,6 +473,7 @@ function suggestionRunner(
     onGame: (games) => holder.tick?.(games),
     // §3.136 — build variants at the scope the plan was made with.
     ...(shardContext.swapScope ? { runOptions: { swapScope: shardContext.swapScope } } : {}),
+    ...(watch ? { watchGames: watch.create } : {}),
   });
   const entry: SuggestionRunner = {
     runner,
@@ -526,6 +559,99 @@ export function runVariantSliceShard(
   }
 }
 
+// --- §3.175 manabase experiments ---------------------------------------------------
+
+/**
+ * Enumerate the manabase family and plan its ladder — the sim's own
+ * `planManabaseRun`. The identical-game-skip question is settled here once, as
+ * it is for suggestions, and the runner it settles on is the WATCHED one every
+ * later shard of this run will be served from.
+ */
+export function runManabasePlan(job: ManabasePlanJob, context: SimContext): ManabasePlanResult {
+  const base = heroDeck(job.context.hero);
+  const plan = planManabaseRun(base, {
+    pool: context.pool,
+    opponentCount: job.context.opponentNames.length,
+    baseSeed: job.context.seed,
+    gamesPerVariant: job.gamesPerVariant,
+    sweep: {
+      sweeps: job.sweeps,
+      countRadius: job.radius,
+      mixRadius: job.radius,
+      ...(job.families ? { families: job.families } : {}),
+    },
+  });
+  const skip = suggestionRunner(context, job.context, plan.runSeed, RELIABILITY_WATCH).runner.identicalGameSkip;
+  return {
+    kind: 'manabase-plan',
+    plan,
+    identicalGameSkipEnabled: skip.enabled,
+    ...(skip.reason ? { identicalGameSkipDisabledReason: skip.reason } : {}),
+  };
+}
+
+/** The shared base games for a slot range, played under the reliability watch. */
+export function runManabaseBaseSlotShard(
+  job: ManabaseBaseSlotShardJob,
+  context: SimContext,
+  onGame?: OnGamePlayed,
+): ManabaseBaseSlotShardResult {
+  const entry = suggestionRunner(context, job.context, job.runSeed, RELIABILITY_WATCH);
+  entry.tick = onGame;
+  try {
+    const records: PairedBaseRecord[] = [];
+    for (let slot = job.slotStart; slot < job.slotEnd; slot++) {
+      records.push(entry.runner.baseRecordAt(slot));
+    }
+    return { kind: 'manabase-base-slot-shard', slotStart: job.slotStart, slotEnd: job.slotEnd, records };
+  } finally {
+    entry.tick = undefined;
+  }
+}
+
+/**
+ * ONE manabase variant's games over a slot range. The variant deck is built
+ * here from its steps, by the same `applyManabase` the sweep's planner
+ * legality-checked it with; an unbuildable variant throws, which the pool
+ * reports as a permanent failure of that ARM, never of the run.
+ */
+export function runManabaseVariantSliceShard(
+  job: ManabaseVariantSliceShardJob,
+  context: SimContext,
+  onGame?: OnGamePlayed,
+): ManabaseVariantSliceShardResult {
+  const entry = suggestionRunner(context, job.context, job.runSeed, RELIABILITY_WATCH);
+  for (let i = 0; i < job.baseRecords.length; i++) {
+    entry.supply(job.slotStart + i, job.baseRecords[i] as PairedBaseRecord);
+  }
+  entry.tick = onGame;
+  try {
+    const slice = entry.runner.playVariantSlice(
+      {
+        key: job.variant.key,
+        label: job.variant.label,
+        variantDeck: applyManabase(heroDeck(job.context.hero), job.variant, context.pool),
+        slotsChanged: job.variant.slotsChanged,
+      },
+      job.slotStart,
+      job.slotEnd,
+    );
+    return {
+      kind: 'manabase-variant-slice-shard',
+      candidateKey: job.candidateKey,
+      slotStart: job.slotStart,
+      slotEnd: job.slotEnd,
+      paired: slice.paired,
+      variantGamesPlayed: slice.variantGamesPlayed,
+      variantGamesSkipped: slice.variantGamesSkipped,
+      variantWonBySlot: slice.variantWonBySlot,
+      observedBySlot: slice.observedBySlot ?? [],
+    };
+  } finally {
+    entry.tick = undefined;
+  }
+}
+
 // --- single-game replay trace --------------------------------------------------
 
 /** Play ONE game and record its trace for the replay viewer. Never sharded. */
@@ -589,5 +715,11 @@ export function executeShard(
       return runMatchJob(job, context);
     case 'trim-plan':
       return runTrimPlan(job, context);
+    case 'manabase-plan':
+      return runManabasePlan(job, context);
+    case 'manabase-base-slot-shard':
+      return runManabaseBaseSlotShard(job, context, onGame);
+    case 'manabase-variant-slice-shard':
+      return runManabaseVariantSliceShard(job, context, onGame);
   }
 }

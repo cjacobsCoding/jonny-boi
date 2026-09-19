@@ -189,7 +189,9 @@ export function mergePairedEvaluation(shards: readonly PairedShardResult[]): Swa
  */
 export function mergeVariantSlices(
   previous: ReadonlyMap<string, PairedTable>,
-  slices: readonly VariantSliceShardResult[],
+  // Structural on purpose (§3.175): a manabase variant slice carries the same
+  // key and table, and folds through the same integer addition.
+  slices: readonly Pick<VariantSliceShardResult, 'candidateKey' | 'paired'>[],
 ): Map<string, PairedTable> {
   const totals = new Map<string, PairedTable>(previous);
   for (const slice of slices) {

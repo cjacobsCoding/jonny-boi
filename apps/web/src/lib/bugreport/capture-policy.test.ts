@@ -21,6 +21,7 @@ import {
   lastAnchoringChild,
   optionIsPrunable,
   prunableChildIndices,
+  pruningAllowedIn,
   withTimeout,
 } from './capture-policy.js';
 
@@ -165,6 +166,18 @@ describe('pruning the below-fold tail', () => {
   it('treats the fold as inclusive, so a child starting exactly at it stays', () => {
     expect(prunableChildIndices([0, FOLD], FOLD)).toEqual([]);
     expect(prunableChildIndices([0, FOLD + 1], FOLD)).toEqual([1]);
+  });
+
+  it('never prunes the rows of a table — the one-row-fills-the-list regression (20260918_215728)', () => {
+    // The rasteriser copies computed heights onto the clone, so a table with
+    // its below-fold rows dropped keeps its full height and the surviving row
+    // is stretched across it. Table parts keep every child; a div grid does not.
+    for (const part of ['TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'tbody']) {
+      expect(pruningAllowedIn(part), part).toBe(false);
+    }
+    for (const block of ['DIV', 'UL', 'SECTION', 'MAIN', 'BODY']) {
+      expect(pruningAllowedIn(block), block).toBe(true);
+    }
   });
 
   it('never drops a child it could not measure — the <option> regression', () => {

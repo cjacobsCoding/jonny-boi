@@ -184,7 +184,10 @@ describe('every fixed overlay is a SIBLING of the scene, not a descendant', () =
       '<VfxLayer',
       '<SpellHoldCard',
       '<CombatHoldBanner',
-      '<OpponentActionFeed',
+      // `<OpponentActionFeed` was in this list while it was a pinned overlay. Bug
+      // report 20260917_220347 moved it INTO the log rail as a static block —
+      // and the rail is a sibling of the scene (see the rail's own comment in
+      // BoardScene), so handing the feed to `rail` is exactly where it belongs.
       '<StackPanel',
     ],
     'OnlineBoard.tsx': [

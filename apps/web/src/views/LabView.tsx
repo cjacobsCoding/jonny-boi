@@ -14,6 +14,8 @@ import type { SimWorkerApi } from '../lib/useSimWorker.js';
 import type { LabSelection } from '../lib/useLabSelection.js';
 import {
   GAUNTLET_GAMES,
+  MANABASE_GAMES,
+  MANABASE_SWEEP_RADIUS,
   SWAP_GAMES,
   SUGGEST_GAMES,
   SUGGEST_MAX_CANDIDATES,
@@ -27,6 +29,9 @@ import { PilotPicker } from '../components/lab/PilotControls.js';
 import { SwapPanel } from '../components/lab/SwapPanel.js';
 import { SuggestPanel } from '../components/lab/SuggestPanel.js';
 import { TrimPanel } from '../components/lab/TrimPanel.js';
+import { ManabasePanel } from '../components/lab/ManabasePanel.js';
+import { applyManabaseToDeck } from '../lib/lab/manabaseApply.js';
+import type { ManabaseVariant } from '@jonny-boi/sim';
 import type { CardOption } from '../components/lab/panel-types.js';
 
 /** The Lab's sub-tabs — the things you can run against the gauntlet. */
@@ -35,6 +40,7 @@ const LAB_TABS = [
   { id: 'swap', label: 'A/B Swap Test' },
   { id: 'suggest', label: 'Suggestions' },
   { id: 'trim', label: 'Trim' },
+  { id: 'manabase', label: 'Manabase' },
 ] as const;
 
 /**
@@ -125,6 +131,14 @@ export function LabView({
         if (result.copiesRemoved > 0) decks.updateDeck(result.deck);
         setApplyNote(describeCutApplied(result, hero.name));
         return result;
+  // §3.175 — applying a tested MANABASE: the variant's steps folded over the
+  // saved deck in ONE update (several `onApplySwap` calls would each start from
+  // the same stale hero and keep only the last), through the same apply path.
+  const onApplyManabase = canEditHero
+    ? (variant: ManabaseVariant): void => {
+        const result = applyManabaseToDeck(hero, variant);
+        if (result.applied) decks.updateDeck(result.deck);
+        setApplyNote(result.note);
       }
     : undefined;
 
@@ -240,6 +254,12 @@ export function LabView({
             targetConfig={TRIM_TARGET_SIZE}
             defaultSettings={TRIM_DEFAULT_SETTINGS}
             {...(onApplyCut ? { onApplyCut } : {})}
+        {tab === 'manabase' && (
+          <ManabasePanel
+            {...sharedProps}
+            gamesConfig={MANABASE_GAMES}
+            radiusConfig={MANABASE_SWEEP_RADIUS}
+            onApplyManabase={onApplyManabase}
           />
         )}
       </div>

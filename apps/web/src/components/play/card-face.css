@@ -69,6 +69,12 @@
    * frame generation would break every old-border and full-art card. */
   --card-face-text-inset: 6%;
   --card-face-text-bottom: 9%;
+  /* The printed text box's own height, as a share of the card (measured on
+   * the modern frame: ~60% → ~91%). The FULL face's live box is at least this
+   * tall so that it REPLACES the printed box — bug report 20260918_215432 was
+   * a short live box sitting over the flavour line with the printed rules
+   * still readable above it: two sets of rules text on one card. */
+  --card-face-text-box-height: 31%;
   --card-face-pt-right: 4.5%;
   --card-face-pt-bottom: 3%;
 
@@ -224,11 +230,25 @@
 }
 
 /*
- * The tile variant holds ONLY aftermarket words, so it sits at the TOP of the
- * crop: the bottom of a battlefield tile is already spoken for by the name and
- * P/T footer `BoardPermanentTile` draws.
+ * The FULL face is the READING surface: its live box covers the whole printed
+ * text box (see `--card-face-text-box-height`) and reads from the top, so the
+ * printed rules underneath are never visible beside the live ones. Longer text
+ * grows the box upward over the art — the least bad outcome for the few cards
+ * whose text outruns their printed box at this size.
  */
-.card-face--tile .card-face__textbox {
+.card-face--full .card-face__textbox {
+  min-height: var(--card-face-text-box-height);
+  justify-content: flex-start;
+}
+
+/*
+ * The tile and compact variants hold ONLY aftermarket words, so they sit at the
+ * TOP of the card: the bottom of a battlefield tile is already spoken for by
+ * the name and P/T footer `BoardPermanentTile` draws, and on a compact scan
+ * the bottom is the printed text box, which these words must not hide.
+ */
+.card-face--tile .card-face__textbox,
+.card-face--compact .card-face__textbox {
   top: 0;
   right: 0;
   bottom: auto;

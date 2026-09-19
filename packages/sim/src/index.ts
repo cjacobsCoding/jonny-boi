@@ -250,8 +250,97 @@ export type {
   PairedSlot,
   SwapArm,
   ArmHandle,
+  PairedGameObservation,
+  PairedGameWatch,
+  VariantArmSpec,
 } from './paired-arms.js';
-export { createPairedArmRunner, pairedBetweenArms, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
+export {
+  createPairedArmRunner,
+  pairedBetweenArms,
+  pairedSlotAt,
+  swappedInstanceIdsFor,
+  VARIANT_ARM_BASE_REF,
+} from './paired-arms.js';
+export type { MatchStateObserver, MatchEventObserver } from './match.js';
+
+/**
+ * THE MANABASE EXPERIMENTS (DESIGN §3.175) — land-only variants of a deck,
+ * evaluated with the paired runner above, ranked by win rate AND measured
+ * reliability. The generator and the watch are pure; `runManabaseSweep` plays a
+ * sweep inline and the web Lab plays the same plan over its worker pool.
+ */
+export type {
+  ManabaseVariant,
+  ManabaseVariantKind,
+  ManabaseStep,
+  ManabaseSummary,
+  ManabaseSweep,
+  ManabaseSweepOptions,
+  SkippedVariant,
+} from './manabase.js';
+export {
+  applyManabase,
+  colorMixVariants,
+  DEFAULT_MANABASE_SWEEPS,
+  dualLandFamilyOf,
+  dualSignatureOf,
+  generateManabaseVariants,
+  landCountVariants,
+  landTypeVariants,
+  MANABASE_BASE_REF,
+  manabaseCandidateOf,
+  summarizeManabase,
+  variantForCandidateKey,
+} from './manabase.js';
+export type {
+  DualLandFamilyId,
+  ReliabilityDirection,
+  ReliabilityMetricId,
+  ReliabilityMetricKind,
+} from './manabase-config.js';
+export {
+  BASIC_LAND_FOR_COLOR,
+  COLOR_MIX_SWEEP_RADIUS,
+  COLOUR_SCREW_FROM_TURN,
+  DUAL_LAND_FAMILIES,
+  LAND_COUNT_SWEEP_RADIUS,
+  LAND_DROP_TURNS,
+  LAND_TYPE_VARIANT_COPIES,
+  LANDS_ON_BATTLEFIELD_TURN,
+  RELIABILITY_METRICS,
+  RELIABILITY_NOT_MEASURED,
+} from './manabase-config.js';
+export type {
+  MeanCI,
+  ReliabilityComparison,
+  ReliabilityMetricComparison,
+  ReliabilityObservation,
+  ReliabilitySummary,
+} from './manabase-reliability.js';
+export {
+  compareReliability,
+  createReliabilityWatch,
+  meanInterval,
+  pairedMeanPValue,
+  reliabilityOf,
+  summarizeReliability,
+  uncastableOnlyForColour,
+} from './manabase-reliability.js';
+export type {
+  ManabaseReport,
+  ManabaseRunInput,
+  ManabaseRunPlan,
+  ManabaseSweepRunOptions,
+  ManabaseVariantResult,
+  PlanManabaseRunOptions,
+} from './manabase-run.js';
+export {
+  finishManabaseRun,
+  MANABASE_MAX_VARIANTS,
+  MANABASE_RECOMMENDATION_RULE,
+  planManabaseRun,
+  runManabaseSweep,
+} from './manabase-run.js';
 export {
   HERO_SEAT,
   LIBRARY_READING_PRIMITIVES,

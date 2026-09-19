@@ -1,0 +1,178 @@
+/*
+ * THE MANABASE EXPERIMENTS (§3.175) — the Lab's "Manabase" tab.
+ *
+ * Two axes in one table, never one number: the win-rate columns and the
+ * reliability columns sit under their own group headers, and the recommendation
+ * block states the rule that joined them. The sweep controls and the preview
+ * list come BEFORE the run button so the player reads what will be tested
+ * before spending the games.
+ */
+
+.manabase-base {
+  margin: var(--space-2, 8px) 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}
+
+.manabase-sweeps {
+  margin: var(--space-3, 12px) 0;
+  border: 1px solid var(--color-border, #8884);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.manabase-sweeps legend {
+  font-weight: 600;
+  padding: 0 var(--space-1, 4px);
+}
+
+.manabase-sweeps label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2, 8px);
+}
+
+.manabase-families {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding-left: var(--space-4, 16px);
+}
+
+.manabase-families__label {
+  color: var(--color-fg-faint);
+}
+
+.chip-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  border: 1px solid var(--color-border, #8884);
+  border-radius: 999px;
+  padding: 2px var(--space-2, 8px);
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.manabase-preview {
+  margin: var(--space-2, 8px) 0;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.manabase-preview > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.manabase-preview__list {
+  margin: var(--space-2, 8px) 0 0;
+  padding-left: var(--space-4, 16px);
+}
+
+.manabase-preview__list--skipped {
+  color: var(--color-fg-faint);
+}
+
+.manabase-preview__note,
+.manabase-table__note {
+  display: block;
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.manabase-kind {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--color-border, #8884);
+  margin-right: var(--space-1, 4px);
+}
+
+.manabase-recommend {
+  margin: var(--space-3, 12px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-left: 3px solid var(--color-border, #8884);
+  background: var(--color-surface, transparent);
+}
+
+.manabase-recommend--pick {
+  border-left-color: var(--color-success, #2e7d32);
+}
+
+.manabase-recommend__pick {
+  margin: 0 0 var(--space-1, 4px);
+}
+
+.manabase-recommend__why {
+  color: var(--color-fg-muted, inherit);
+}
+
+.manabase-recommend__rule {
+  margin: 0;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-faint);
+}
+
+/* The table is wide — eleven columns — so it scrolls sideways on a phone
+   instead of forcing the page to. */
+.manabase-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.manabase-table th.manabase-table__axis {
+  text-align: center;
+  border-bottom: 1px solid var(--color-border, #8884);
+}
+
+.manabase-table__sub {
+  display: block;
+  font-weight: 400;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-faint);
+}
+
+.manabase-table__reliability {
+  white-space: nowrap;
+}
+
+.manabase-table__pair {
+  display: block;
+}
+
+.manabase-table__tag {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.manabase-table__row--pick td {
+  background: color-mix(in srgb, var(--color-success, #2e7d32) 10%, transparent);
+}
+
+.manabase-table__apply--done {
+  opacity: 0.8;
+}
+
+.manabase-not-measured strong {
+  color: var(--color-fg-muted, inherit);
+}
+
+.manabase-skipped {
+  font-size: var(--text-sm, 0.875rem);
+  margin: var(--space-2, 8px) 0;
+}
+
+.manabase-skipped ul {
+  margin: var(--space-1, 4px) 0 0;
+  padding-left: var(--space-4, 16px);
+  color: var(--color-fg-faint);
+}

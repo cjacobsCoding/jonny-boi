@@ -22,6 +22,12 @@ import { CardFace } from './CardFace.js';
  *
  * ## The FULL face is a live {@link CardFace} (§3.143 / UX-17.4, wave 2)
  *
+ * …drawn at the `compact` size since bug report 20260917_220137: a hand card
+ * is a printed scan at 96–148px, and the full live text box at that size was
+ * unreadable and climbed over the art. The scan prints the rules; the face
+ * overlays only the aftermarket words, and the readable text with its glossary
+ * is the hover preview, which `PlayBoard` wraps around every hand card.
+ *
  * Caleb asked for a glossary tooltip *"on any card"*, and this component draws
  * the hand (both boards), the mulligan grid, the stack faces and the choice
  * prompt's source and candidates — five of the six surfaces a player ever reads
@@ -113,7 +119,7 @@ export function PlayCard({
         pointers never start a native drag. `CardFace` sets the attribute for the
         same documented reason; `no-native-drag.test.ts` pins it for both.
       */}
-      <CardFace size="full" cardId={cardId} name={name} className="play-card__face" />
+      <CardFace size="compact" cardId={cardId} name={name} className="play-card__face" />
       {badge && <span className="play-card__badge">{badge}</span>}
     </>
   ) : (
