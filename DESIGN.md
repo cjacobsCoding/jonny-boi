@@ -10252,6 +10252,34 @@ from the EVENT LOG rather than the battlefield on purpose — a creature dealt l
 gone by the time combat ends, so reading the permanent would report nothing for exactly the case
 under test.
 
+**What running the whole suite on a PR turned up, and what shipped with this.** The `Verify`
+workflow's first full run (this branch) reported **27,182 passed, 4 failed** — and `main` itself
+had never had the suite run in CI, so each failure had to be ruled on rather than assumed:
+
+- `sim/soak.test.ts` ×2 — seed 165826623, turn 13, **`tapped ×538, manaAdded ×523, untapped
+  ×523`** until CR 104.4b drew the game. Deck A held two **Basalt Monolith**; the pilot paid
+  `{3}: Untap ~` by tapping the Monolith for `{C}{C}{C}` and was back where it started. This is
+  §3.141's Bog Initiate exchange one step removed — the ability adds no mana, it buys back the
+  permanent's own tap — and `ai/mana-exchange.ts` now reads that shape too (`untapSelfExchange`),
+  through the same pool-equality test, so a cheaper untap (a real engine) and a colour-fixing
+  untap (allowed once) survive. Seven table rows plus the funded-path case that IS the loop. The
+  same game, action for action, fails on `main` (PR #63 ran the suite there: seed 165826623, turn
+  13, 2313 actions) — the pilot bug was latent, and this branch's combat change did not move it.
+- `sim/parallel-host.test.ts` ×2 — the spawned worker died with `Unknown file extension ".ts"`:
+  `--import tsx` in the worker's `execArgv` never took effect on the Linux runner, on Node 20 or
+  on 22 (where native type-stripping loaded the `.ts` entry and it died one import later on the
+  unmapped `./parallel-slices.js`), while every Windows dev box passes. Under a loader-less
+  process the host now spawns the freshly BUILT worker from `dist/` — the artefact the CLI runs —
+  and keeps the `.ts` route as the fallback; a `dist/` older than its sources is refused. Node 20
+  was past end-of-life regardless; all three workflows now run 22.
+- The `Browser harnesses` job, once past the §3.157 default-seat regression, exposed two rig
+  defects in `verify-mana-choice.mjs`: it owned one seat's deck and inherited the other (now pins
+  both to the Mono-Green mirror, which has no removal), and its `toMyMain` polled for an ENABLED
+  Pass button and clicked it at once — the button enables exactly when the human next receives
+  priority, i.e. at its own Main Phase 1, so the rig passed through the phase it was driving
+  towards whenever the computer's beat outlasted its sleep (the game log read *"Turn 3 — Player
+  1's turn."* with nothing under it). It now waits for priority, reads the phase, then passes.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
