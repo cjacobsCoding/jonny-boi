@@ -68,6 +68,104 @@
   color: var(--color-warning);
 }
 
+/* §3.166 — what came online, newest first. A dated list, not a card grid: it
+   is read top to bottom, once, to catch up. */
+.changelog {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.changelog__entry {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  align-items: start;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-3) var(--space-4);
+}
+
+.changelog__when {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog__date {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.changelog__kind {
+  align-self: flex-start;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-fg-muted);
+}
+
+.changelog__kind--mechanic {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.changelog__kind--fix {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.changelog__body h4 {
+  margin: 0 0 var(--space-1);
+  color: var(--color-fg);
+}
+
+.changelog__body p {
+  margin: 0;
+  color: var(--color-fg-muted);
+  line-height: 1.55;
+}
+
+.changelog__section {
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+  margin-left: var(--space-2);
+  font-weight: normal;
+}
+
+.changelog__cards {
+  margin: var(--space-2) 0 0;
+}
+
+.changelog__earlier {
+  margin-top: var(--space-2);
+}
+
+.changelog__earlier summary {
+  cursor: pointer;
+  color: var(--color-fg-muted);
+}
+
+@media (max-width: 560px) {
+  .changelog__entry {
+    grid-template-columns: 1fr;
+  }
+
+  .changelog__when {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
+
 /* Cards laid out two-up on wide screens, stacking on phones. */
 .about__groups {
   display: grid;

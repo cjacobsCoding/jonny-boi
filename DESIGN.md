@@ -10669,6 +10669,39 @@ waiting to happen: two comboboxes and no native card `<select>`; a 1-of leaves o
 a finished verdict renders a LIVE apply button (no `disabled` attribute — matched as an attribute,
 since a false `aria-disabled` would still contain the word, which is how the first draft of this
 test failed against a button that was live).
+### 3.166 What came online — an in-app changelog of mechanics, held to the roadmap and the pool — ✅ done
+
+> "an in-app changelog of mechanics coming online"
+
+The About page could say what the engine plays (§3.99's supported list, every entry pinned by a
+witness) but not what had CHANGED since he last looked — and the answer to "did you finish the
+Tamiyo deck yet?" was a DESIGN.md section he would never open. Now About opens with **What came
+online recently**: a dated list, newest first, one row per shipped roadmap section, in his words —
+what he can now do and which cards it brought online, as chips — with the newest eight open and the
+rest folded behind "Earlier".
+
+**It is data, and it is guarded three ways (`lib/about/changelog.ts`, `changelog.test.ts`).** Every
+row names the DESIGN.md section it reports, and the test reads DESIGN.md: the `### 3.N` heading must
+exist and carry ✅, so nothing is announced before it shipped; and every ✅ heading from
+`CHANGELOG_FLOOR_SECTION` (§3.155) onward must have a row, so nothing ships without being announced —
+the failure names the section the lane forgot, which is the guard that makes this a changelog rather
+than a page that was current once. Every card a row names becomes a `card` witness against the
+shipped pool, and a `mechanic` row carries a `MechanicWitness` that must still resolve, exactly as a
+"Supported today" claim does — so "Heliod plays now" cannot outlive Heliod. The kinds are a closed
+set (`mechanic`, `fix`, `app`, `data`) with one label table read by the page and the test. No pool
+SIZES appear in a row (`pool-size-claims.test.ts` would refuse them, and rightly): a delta is true
+forever, a total is false after the next regeneration.
+
+**Reachability** (`components/about/MechanicsChangelog.tsx`, `mechanics-changelog.test.ts`): a
+static render of the real component pins the newest row's date, kind, title and cards in the markup,
+newest first, and the fold count — the "built, tested, unreachable" defect this project keeps finding
+in its own UI is the one this test exists for. Sabotaged with a fake `### 3.999 … ✅ done` heading in
+DESIGN.md, the sync guard went red naming it; restored, 36 tests green.
+
+Backfilled from §3.155 (2026-09-16) — the mass pump, iterative effects, one collection, the
+playability gate, the lethal-assignment fix, the pool catch-up, Jace's −8, Thune's six, devotion,
+derived mana, the Lab pickers, and this section.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
