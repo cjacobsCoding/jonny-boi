@@ -11087,6 +11087,112 @@ B 28, C 25, D 28, E 31, F 20, and a handful the rows reached through the pre-pas
 place — Ground Rift's *"target creature WITHOUT FLYING can't block"* through the target-bound
 strip, Fleeting Effigy's end-step *"return this creature to its owner's hand"* as a trigger body.
 
+### 3.174 The Lab trims a deck toward a target — removals through the paired A/B, a mana-aware prior, and an on-the-edge Apply — ✅ done
+
+> "make it so there is a way in the lab to reduce a deck down towards 60 (but this should be tunable so
+> you can set your own custom limit if you want) where it basically tries removing certain cards, sees
+> if the deck does better or worse with the removed cards, then if the removal made it better, it shows
+> you that result and you can click apply. If it made it worse, it should either try again, or pause and
+> tell you - based on what you set it to … a setting for it to auto-make improving removals, and keep
+> looking for more … if every single combination of removals did not result in an improvement … tell
+> them the results and the most likely improving removal in case they want to apply those on-the-edge
+> removals anyways. The removals should take mana into account."
+
+**A removal is a swap whose in-card is nothing.** That one sentence is the whole design: the paired
+A/B machinery — the incremental arm runner, the base arm played once, the successive-halving ladder,
+the Holm correction over the family, `decideVerdict` — is written over `CardSwap`, and every consumer
+treats `in` as an opaque string (candidate keys, arm caches, the slice shards). So instead of widening
+those types, `SWAP_IN_NOTHING` is one NAMED in-card value and `applySwap` — already the one place a
+variant deck is built — is the one place it is interpreted: `isCut(swap)` → `applyCut`, which shortens
+the named line (or lines: a nonland+land PAIR travels as one `out` joined by `CUT_OUT_SEPARATOR`) and
+adds nothing. `copiesSwappedBy` learned the same branch, so a pair reports two copies moved. The arm
+runner, `playSlice`, `driveAdaptiveSearch` and `finishSuggestionRun` were not touched, and the web
+Lab's `variant-slice-shard` plays a cut exactly as it plays a swap. **What a cut cannot have, said
+plainly:** the identical-game skip turns itself off by construction (`swappedInstanceIdsFor` returns
+`undefined` for libraries of different length), and — because the engine shuffles a 62-card library
+into a different permutation than a 63-card one under the same seed, one fewer Fisher–Yates draw with
+the opponent's shuffle shifting behind it — a removal arm keeps the unbiased pairing (same opponent,
+same seed, same player on the play) but not a swap's matched-shuffle variance reduction. McNemar
+remains valid (it tests the marginal win rates); it needs more games. `TRIM_PAIRING_NOTE` is the one
+wording, carried in every report and printed under every round.
+
+**The module (`packages/sim/src/trim.ts`), pure and driver-agnostic.** A ROUND is one adaptive search
+whose roster is the current deck's distinct cards, each cutting ONE copy (`TRIM_SWAP_SCOPE = 'one'`;
+`'playset'` would ask Suggest's question, "does this card belong at all?"). `prepareTrimRound` reads
+the land ratio, enumerates the candidates in prior order and lays `planWaves` over them — a
+`SuggestionRunPlan` with no reserves (offspring selection reasons over in-card traits, and every
+removal shares one in-card) and its own family per round (each round is a new deck). `finishTrimRound`
+hands each arm's cumulative table to `summarizePairedSwap` and the lot to `finishSuggestionRun`, then
+reads the result back as removals: the **winner** is the top row proved better (`verdict:
+'improved'`); with no winner the round is **`exhausted`** and the **`edgeCandidate`** — "the most
+likely improving removal" — is the best-delta INCONCLUSIVE row, offered and never applied by the
+engine. `trimDeck` is the auto loop: round, apply the winner through `applyTrimCut` (the same
+`applySwap` funnel, so the deck you keep is byte-for-byte the deck that was tested), shrink by one,
+round again; under `ask` it returns after the first improving round with the winner unapplied. The
+rules are closed tables: `TRIM_ROUND_KINDS = ['singles', 'pairs']` with `CARDS_PER_CUT`, the two
+settings vocabularies, `DEFAULT_TRIM_CONFIG` (a 64-candidate ceiling that covers any deck of
+singletons, a 24-pair cap, the prior weights), and `nextWideningStep` — what "keep looking" does when
+a round finds nothing: widen from singles to nonland+land pairs while a pair still fits above the
+target, and after pairs there is nothing left, so exhaustion is final. Adding a third step is a row.
+
+**The mana prior is arithmetic, and it is printed.** `landCutDue(baseLands, baseSize, currentLands,
+currentSize)`: the deck the SESSION began with fixes the ratio; at the current size that ratio wants
+`ratioLands` lands; the deck carries `excessLands` more; once the excess reaches
+`LAND_RATIO_TOLERANCE_LANDS` (one whole land) the next cut is due to be a land. From 24/60 three
+nonland cuts leave 24/57 → 22.8 wanted → 1.2 over → due; two leave 0.8 over → not yet. The reading's
+`explanation` is one line the panel prints verbatim — *"lands 24/63 at the start (38.1%) → 24/60 now
+(40.0%) → 22.9 lands would keep that ratio → 1.1 over (a land cut is due at 1 over) → a land cut is
+due"* — never a hidden rule. What it moves: the class the ratio favours is scouted FIRST (a
+`favouredType` bonus that dominates the only other term, copies-in-deck capped at the 4-of limit so a
+24-of basic cannot outrank it), and under "keep looking" the widening step is exactly the pair that
+restores the ratio in one cut. It never decides a verdict; the sim does. There is deliberately NO
+basic-land floor here, unlike Suggest's cut set: cutting the dead basic — three Swamps in a mono-green
+deck — is a trim's whole job, and the ratio prior is what keeps the manabase honest instead.
+
+**The Lab (`Lab → Trim`).** One request kind, `TrimRequest`, carries the hero, the target, the games
+per finalist (the Suggest slider, reused), the round index (offsetting the seed so consecutive rounds
+play different games) and the session's base ratio; one shard kind, `trim-plan`, runs
+`prepareTrimRound` on a worker where the pool lives, and `runTrim` then drives **the same pooled
+ladder Suggest drives** — `runSuggest`'s round loop was extracted verbatim into `drivePooledSearch`
+rather than copied — and finishes with the sim's `finishTrimRound`. The panel is thin and drives the
+pool ONE ROUND AT A TIME: each round is an ordinary sim request, so the progress bar and Cancel are
+the Lab's own. Between rounds `lib/lab/trimSession.ts` decides from the settings (`stepAfterRound`,
+`stepAfterApply` — the closed table, tested branch by branch): `auto` applies the winner through
+`applyCutToDeck` (a fold over the deck module's own `removeCard`, the one place a web deck loses a
+copy) and, once the hero has actually shrunk to the expected size, issues the next round on the
+updated deck; `ask` shows the winner with *Apply and keep trimming / Apply and stop / Stop without
+applying*; an exhausted round under `pause` shows every row and the edge candidate with a DASHED,
+never-primary *Apply on-the-edge*; under `keep-looking` it widens to pairs first. The target input is
+bounded by `TRIM_TARGET_SIZE` (never below `DEFAULT_DECK_RULES.minDeckSize`), the standing line says
+how far the deck is from it and its land ratio, and a stale result (another deck, an older session)
+is ignored by fingerprint rather than applied.
+
+**Verification.** `packages/sim/src/trim.test.ts` — 26 tests: the cut through `applySwap` (in
+place, the last copy drops its line, a pair moves two, an absent card throws, the skip is off by
+construction); `landCutDue` nominates a land after the third nonland cut from 24/60 and not after the
+first two, prints its arithmetic, resets after a land cut, takes its tolerance as a parameter; the
+candidate set (every distinct card once, the Swamp included, nonlands first when no land is due and
+lands first when one is, pairs = nonlands × lands with the cap reported, a sub-minimum cut reported
+illegal); the plan (the ladder, per-round seeds, the three refusals); and **the loop under a rigged
+arm runner** — (1) the 63-card mono-green deck carrying three Swamps is trimmed to 60 by cutting
+exactly those three, in three rounds, under auto mode, every other line untouched; (2) a round in
+which nothing improves is `exhausted`, names the edge candidate, and applies nothing — under
+`keep-looking` it widens to pairs, still applying nothing; `ask` stops with the winner unapplied.
+The rig is honest about being one: the favoured arm wins 40% of slots outright (16 of 40, 0
+against) and nothing else moves, which is what lets the flow be proved without a one-card-in-63
+effect having to clear Holm in forty real games. Then **real games**: a round of 11 removals against
+UW Control at four slots plays 4 base games and 44 variant games, every row on a 62-card variant,
+`variantGamesSkipped` 0, the skip reported off with the trim's reason, every verdict honestly
+inconclusive at n = 4 — and the same seed reproduces the same tables. `apps/web`:
+`lib/lab/trimApply.test.ts` (Apply removes one copy and leaves the rest, a pair, an absent card
+reported), `lib/lab/trimSession.test.ts` (every branch of the step table), `components/lab/
+trim-panel.test.ts` (a static render: the target input, both settings, the standing line, a live
+Start; a target refused in words with Start dead; an improving round's banner, rows and ask buttons;
+an exhausted round's on-the-edge candidate offered dashed and never primary). Red before green, six sabotages in one run (17 of 40 red, every one attributable by test name): the cut removing the WHOLE line (`expected 60 to be 62`, and the acceptance loop `expected 1 to be 3` rounds); the loop applying the edge candidate silently (`expected [ { rank: 1, …(9) } ] to deeply equal []`); `landCutDue` calling any drift due (`expected true to be false` after one nonland cut); the web apply removing two copies (`expected 29 to be 30`); the on-the-edge button styled primary; Start never live. Restored: 40 of 40 green, and the wider gate — `suggest.test.ts`, `swap-scope.test.ts`, `lab-config`, `lab-pools`, the changelog guard and `determinism.test.ts` (20, the proof that `runSuggest` plays the same games through `drivePooledSearch`) — green with it.
+
+
+**Measured, and stated rather than hoped.** The dead Swamp under REAL games at a realistic budget — 30 games per finalist against UW Control and Mono-Red Aggro (60 slots), heuristic pilots, headless: **405 games in 10 s (42 g/s single-threaded), verdict `exhausted`**, every removal inconclusive, the Swamp on the edge at +1.7% with 9-vs-10 discordant games. That is the pairing loss in numbers: about a third of paired games are discordant under independent shuffles (a swap with matched shuffles disagrees only in the games the swapped card touched), so a one-card-in-63 effect does not clear Holm over eleven candidates at sixty slots. A real trim will therefore often end a round on the edge rather than on a proof; the panel says so under every round, the on-the-edge Apply exists for exactly that case, and "keep looking" widens to the nonland+land pair whose effect is twice the size. Raising games per finalist is the honest lever, and the cost note says what it costs before the run.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

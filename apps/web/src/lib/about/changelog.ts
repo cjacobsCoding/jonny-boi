@@ -70,6 +70,14 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.174',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'The Lab trims a deck toward a target size',
+    summary:
+      'Lab → Trim: set a target (60, or your own), and each round tests removing one copy of every card with the same paired A/B test as the other tabs. A removal that proves better is applied — or shown for you to apply — and the next round runs on the smaller deck, until the target. It takes mana into account (after enough nonland cuts a land cut is due, and the arithmetic is printed), and when nothing proves better it shows every row and the most likely improving removal as an on-the-edge Apply.',
+  },
+  {
     section: '3.173',
     date: '2026-09-19',
     kind: 'mechanic',

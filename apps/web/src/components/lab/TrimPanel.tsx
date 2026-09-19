@@ -36,7 +36,7 @@ export interface TargetConfig {
 }
 
 /** Where a session stands. A closed set; the panel renders each state by name. */
-type SessionStatus =
+export type SessionStatus =
   | 'idle'
   /** A round is in flight, or an applied cut is waiting for the deck to catch up. */
   | 'running'
@@ -180,7 +180,12 @@ export function TrimPanel({
         apply(step.row, report.round, false, 'continue');
         break;
       case 'ask':
-        setSession((s) => ({ ...s, status: 'asking' }));
+        // A hero that cannot be edited has nothing to answer: report and stop.
+        setSession((s) =>
+          onApplyCut
+            ? { ...s, status: 'asking' }
+            : { ...s, status: 'stopped', stopNote: 'An improving removal was found — copy this deck to your decks to apply it.' },
+        );
         break;
       case 'widen':
         issueRound(step.round, step.roundKind, base);

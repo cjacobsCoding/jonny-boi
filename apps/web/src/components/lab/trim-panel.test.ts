@@ -16,7 +16,14 @@ import { createElement } from 'react';
 import type { TrimRoundReport, TrimRow } from '@jonny-boi/sim';
 import { RoundCard, TrimPanel } from './TrimPanel.js';
 import { SUGGEST_GAMES, TRIM_DEFAULT_SETTINGS, TRIM_TARGET_SIZE } from '../../lib/lab-config.js';
-import type { PanelProps } from './panel-types.js';
+import { allCards } from '../../lib/cards.js';
+
+/** A real card-index id by name — the standing line reads lands off the index. */
+function idOf(name: string): string {
+  const card = allCards.find((c) => c.name === name);
+  if (!card) throw new Error(`card index has no "${name}"`);
+  return card.id;
+}
 
 /** A 63-card hero: 24 Forest, 3 Swamp, nine 4-of nonlands. */
 const HERO = {
@@ -24,16 +31,20 @@ const HERO = {
   name: 'Rigged Green',
   updatedAt: '',
   cards: [
-    { cardId: 'c:forest', count: 24, name: 'Forest' },
-    { cardId: 'c:swamp', count: 3, name: 'Swamp' },
+    { cardId: idOf('Forest'), count: 24, name: 'Forest' },
+    { cardId: idOf('Swamp'), count: 3, name: 'Swamp' },
     ...['Craw Wurm', 'Llanowar Elves', 'Elvish Mystic', 'Birds of Paradise', 'Wall of Blossoms', 'Deadly Recluse', 'Giant Spider', 'Eternal Witness', 'Pelakka Wurm'].map(
-      (name, i) => ({ cardId: `c:n${i}`, count: 4, name }),
+      (name) => ({ cardId: idOf(name), count: 4, name }),
     ),
   ],
 };
 
+type TrimPanelProps = Parameters<typeof TrimPanel>[0];
+
 function markup(extra: Record<string, unknown> = {}): string {
-  const props = {
+  // The sim handle is a partial double (status/result/run/cancel/workerCount are
+  // all the panel reads), hence the cast through `unknown`.
+  const props: unknown = {
     hero: HERO,
     heroPayload: { name: HERO.name, archetype: HERO.name, cards: HERO.cards },
     heroLegal: true,
@@ -46,8 +57,8 @@ function markup(extra: Record<string, unknown> = {}): string {
     defaultSettings: TRIM_DEFAULT_SETTINGS,
     onApplyCut: () => ({ deck: HERO, copiesRemoved: 1, removed: ['Swamp'] }),
     ...extra,
-  } as unknown as PanelProps & Record<string, unknown>;
-  return renderToStaticMarkup(createElement(TrimPanel, props as Parameters<typeof TrimPanel>[0]));
+  };
+  return renderToStaticMarkup(createElement(TrimPanel, props as TrimPanelProps));
 }
 
 function row(rank: number, label: string, verdict: 'better' | 'inconclusive' | 'worse', delta: number, isLand = false): TrimRow {
@@ -154,7 +165,8 @@ describe('the Trim panel', () => {
   it('without an editable hero the auto option is disabled and the reason is printed', () => {
     const html = markup({ onApplyCut: undefined });
     expect(html).toContain('bundled gauntlet deck');
-    expect(html).toMatch(/value="auto"[^>]*disabled=""/);
+    // React emits `disabled` before `value` on an input; match within the one tag.
+    expect(html).toMatch(/<input[^>]*name="trim-on-improvement"[^>]*disabled=""[^>]*value="auto"/);
   });
 });
 

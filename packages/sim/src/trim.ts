@@ -970,7 +970,8 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
       continue;
     }
 
-    const next = settings.onNoImprovement === 'keep-looking' ? nextWideningStep(kind, deckSizeOf(deck), settings.targetSize) : undefined;
+    const next: TrimRoundKind | undefined =
+      settings.onNoImprovement === 'keep-looking' ? nextWideningStep(kind, deckSizeOf(deck), settings.targetSize) : undefined;
     if (next === undefined) return { deck, rounds, applied, stopped: 'exhausted' };
     kind = next;
   }
