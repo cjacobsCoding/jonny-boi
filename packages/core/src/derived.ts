@@ -26,6 +26,7 @@ import { isCreature, matchesCardFilter } from './card.js';
 import type { CardFilter } from './choices.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
+import { devotionTo } from './devotion.js';
 
 /** The other seat (local copy — this module sits below the zone helpers). */
 function opponent(p: PlayerId): PlayerId {
@@ -155,6 +156,17 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
       return creaturesInGraveyard(state, you);
     case 'cardTypesInAllGraveyards':
       return cardTypesInAllGraveyards(state);
+    // §3.163 — CR 700.5, through the same function the gods' type layer reads.
+    case 'devotionToWhite':
+      return devotionTo(state, you, ['W']);
+    case 'devotionToBlue':
+      return devotionTo(state, you, ['U']);
+    case 'devotionToBlack':
+      return devotionTo(state, you, ['B']);
+    case 'devotionToRed':
+      return devotionTo(state, you, ['R']);
+    case 'devotionToGreen':
+      return devotionTo(state, you, ['G']);
     // `timesThisWasKicked` is deliberately absent: it is a fact about the
     // RESOLUTION, not about the board, so this board-only evaluator genuinely
     // cannot answer it and falls through to zero. The one caller that can —

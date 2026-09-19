@@ -154,6 +154,7 @@ import {
 } from './graveyard-casting.js';
 // §3.106 — upkeep costs and time counters; suspend.
 import { markBattlefieldEntry, TIME_COUNTER } from './upkeep-costs.js';
+import { settleDevotionForms } from './devotion.js';
 import { suspendWindowOpenFor } from './suspend.js';
 // §3.113 — the spell-count family: cast triggers and the library-pile windows.
 import { pushCastTriggers } from './cast-triggers.js';
@@ -1299,6 +1300,11 @@ function finishSpellResolution(
     // entry is announced so an `etb` rider matches this very entry.
     if (kick?.alternative !== undefined) applyAlternativeCostRiders(state, card, kick.alternative, emit);
     state.battlefield.push(card);
+    // §3.163 — settled BEFORE the entry is announced: triggers match on the
+    // event as it is emitted, and "whenever another CREATURE enters" must not
+    // see a god that arrives as an enchantment. (`markBattlefieldEntry` below
+    // settles again, idempotently, for the paths that call it first.)
+    settleDevotionForms(state);
     emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.

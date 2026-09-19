@@ -14,6 +14,7 @@ import { discardDestination } from '../madness.js';
 import { markBattlefieldEntry } from '../upkeep-costs.js';
 import { leaveBattlefieldDestination } from '../graveyard-casting.js';
 import { unattachDependentsOf } from '../attachments.js';
+import { settleDevotionForms } from '../devotion.js';
 
 /**
  * Find a battlefield permanent by id, or undefined.
@@ -143,6 +144,10 @@ export function moveToZone(
       : leaveBattlefieldDestination(inst, to);
   removeFromCurrentZone(state, inst);
   inst.zone = destination;
+  // §3.163 — a permanent LEAVING the battlefield lowers its controller's
+  // devotion; the gods left behind re-settle here, before the leave event any
+  // trigger reads. Entry is settled by `markBattlefieldEntry` below.
+  if (from === 'battlefield') settleDevotionForms(state);
   // CR 400.7: a card that changes zones is a new object, and a grant made on
   // the old object (a granted flashback on a graveyard card) does not follow
   // it. One property read when no grant exists — see card-grants.ts.
@@ -268,6 +273,11 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // one: bounce the frozen creature and replay it and it unfreezes, because the
   // thing Frost Trickster froze is gone. Same shape-guard as `attachedTo`.
   if (inst.untapSkips !== undefined) delete inst.untapSkips;
+  // §3.163 — a god that "isn't a creature" is one only while it is a permanent
+  // (CR 700.5 counts permanents), so its NON-CREATURE FORM comes off FIRST: it
+  // was derived from whatever face or copy was current, and the two restores
+  // below then answer their own questions about that base.
+  if (inst.def.creatureForm !== undefined) inst.def = inst.def.creatureForm;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that

@@ -67,14 +67,14 @@ Checked against the real compiled pool, not assumed. The campaign is closing thi
 
 | deck | distinct names | cards | blocked when transcribed | blocked now |
 | --- | --- | --- | --- | --- |
-| Thune's Life | 22 (+6 revised) | 65 (+12 revised) | 8 | **2** — Heliod, Sun-Crowned and Selvala, Explorer Returned, both from the 2026-09-18 revision (§3.162) |
+| Thune's Life | 22 (+6 revised) | 65 (+12 revised) | 8 | **1** — Selvala, Explorer Returned, from the 2026-09-18 revision (§3.162; her parley is §3.164) |
 | Tamiyo + Jace Surge | 17 | 49 | 9 | **1** — Axebane Guardian (§3.161) |
 
 ✅ **THUNE'S LIFE AS TRANSCRIBED COMPILES END TO END** — every one of its 22 names resolves. The
 **2026-09-18 revision** (the `// revision` block at the foot of `thunes-life.txt`) adds the six cards
-he asked for by name, two of each: four of them compile and are in the deck (Skyclave Apparition,
-Tyvar's Stand, Spike Feeder, Voice of the Blessed — §3.162), and Heliod, Sun-Crowned and Selvala,
-Explorer Returned ride the deck's wish-list until their families land (§3.163, §3.164).
+he asked for by name, two of each: five of them compile and are in the deck (Skyclave Apparition,
+Tyvar's Stand, Spike Feeder, Voice of the Blessed — §3.162; Heliod, Sun-Crowned — §3.163), and
+Selvala, Explorer Returned rides the deck's wish-list until the derived-mana family lands (§3.164).
 
 ## A revision is how a seeded deck is added to
 

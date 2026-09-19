@@ -385,6 +385,15 @@ const NAMED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = O
   // Guardian, Doorkeeper). In the SHARED table for the usual reason: the day a
   // pump or a damage line prints the same phrase it already means this number.
   'creatures you control with defender': 'creaturesYouControlWithDefender',
+  // §3.163 — CR 700.5. Five rows for the five colours the phrase can name; read
+  // by "where X is your devotion to black" (Gray Merchant of Asphodel) through
+  // the bare-phrase arithmetic row, and by the gods' type layer through core's
+  // `devotionTo` directly.
+  'your devotion to white': 'devotionToWhite',
+  'your devotion to blue': 'devotionToBlue',
+  'your devotion to black': 'devotionToBlack',
+  'your devotion to red': 'devotionToRed',
+  'your devotion to green': 'devotionToGreen',
 });
 
 /**
@@ -2345,6 +2354,10 @@ const WHERE_X_ARITHMETIC: readonly {
   },
   // the plain form
   { pattern: /^the number of (.+)$/, countGroup: 1, constantGroup: 0, offset: () => ({}) },
+  // §3.163 — a count the card names WITHOUT "the number of": "where X is your
+  // devotion to black" (Gray Merchant of Asphodel; 16 cards). The phrase is a
+  // row of the same table, so the lookup is the same lookup.
+  { pattern: /^(your devotion to [a-z]+)$/, countGroup: 1, constantGroup: 0, offset: () => ({}) },
 ]);
 
 /**
@@ -10577,6 +10590,29 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
           },
         ],
       };
+    },
+  },
+  {
+    id: 'god-creature-unless-devotion',
+    description:
+      '"As long as your devotion to <colour>[ and <colour>] is less than N, ~ isn’t a creature" (the Theros gods — Heliod, Sun-Crowned, Erebos, Xenagos…)',
+    /*
+     * §3.163 — a TYPE LAYER, not a static modification: core swaps the
+     * permanent's definition for its non-creature form while devotion is short
+     * (`devotion.ts`). 23 cards print the shape on the 32,341-card corpus — 11
+     * in one colour, 12 in a pair — and the pair counts a hybrid symbol once.
+     */
+    pattern: new RegExp(
+      `^as long as your devotion to (${Object.keys(COLOR_WORDS).join('|')})(?: and (${Object.keys(COLOR_WORDS).join('|')}))? is less than ${COUNT_TOKEN}, ~ isn't a creature$`,
+    ),
+    build(match, ctx) {
+      // Only a permanent has a type to lose; the shape is printed on nothing else.
+      if (!ctx.card.typeLine.types.some((type) => /^creature$/i.test(type))) return null;
+      const first = COLOR_WORDS[match[1] ?? ''];
+      const second = match[2] === undefined ? undefined : COLOR_WORDS[match[2]];
+      const min = parseCount(match[3]);
+      if (first === undefined || (match[2] !== undefined && second === undefined) || min === null || min <= 0) return null;
+      return { creatureUnlessDevotion: { colors: second === undefined ? [first] : [first, second], min } };
     },
   },
   {

@@ -1436,9 +1436,7 @@ export const addCounters: EffectPrimitive = (ctx) => {
   //   - the sign is not a kind selector (a named counter is never negative), so
   //     the amount is used as printed;
   //   - the target need not be a CREATURE. Charge counters go on artifacts,
-  //     storage counters on lands, quest counters on enchantments; the
-  //     creature gate below exists only because a +1/+1 counter on a
-  //     non-creature changes nothing, which is not true of these.
+  //     storage counters on lands, quest counters on enchantments.
   const kind = strParam(ctx, 'kind');
   if (kind !== undefined) {
     if (boolParam(ctx, 'each', false)) {
@@ -1462,42 +1460,34 @@ export const addCounters: EffectPrimitive = (ctx) => {
     return;
   }
 
+  // §3.163 — ANY permanent, not only a creature (CR 122.1). A +1/+1 counter
+  // on a non-creature does nothing to its stats TODAY, and stays: Heliod,
+  // Sun-Crowned puts its lifegain counters on itself while it is still an
+  // enchantment, and they are what make it a 6/6 the turn devotion arrives.
+  // The creature gate that stood here dropped every one of them on the floor
+  // while the card compiled 'complete'.
   const target = boolParam(ctx, 'self', false)
-    ? enteringOrResidentSelf(ctx)
-    : (firstPermanentTarget(ctx) ?? enteringOrResidentSelf(ctx));
-  if (!target || !isCreature(target.def)) return;
+    ? enteringOrResidentSelfPermanent(ctx)
+    : (firstPermanentTarget(ctx) ?? enteringOrResidentSelfPermanent(ctx));
+  if (!target) return;
   putCountersOn(ctx, target, amount);
 };
 
 /**
- * The source as a counter target — the permanent on the battlefield if it is
- * already there, otherwise the card CURRENTLY RESOLVING into play.
+ * The source as ANY permanent — the permanent on the battlefield if it is
+ * already there, otherwise the card CURRENTLY RESOLVING into play — for every
+ * counter kind, +1/+1 included since §3.163 (CR 122.1: counters go on
+ * permanents, and a +1/+1 on a non-creature simply waits).
  *
- * The second half is what makes "~ enters with N +1/+1 counters on it" real. It
- * is a replacement effect (CR 614.1c): the counters are put on as the permanent
- * enters, which in this engine means while its own spell is resolving and before
- * `finishSpellResolution` pushes that very instance onto the battlefield. Reading
- * only the battlefield found nothing at that moment, so every "enters with
- * counters" card compiled `'complete'` and then entered with none — a 0/0 body
- * (Stonecoil Serpent, Walking Ballista) died to a state-based action on arrival.
- */
-function enteringOrResidentSelf(ctx: EffectContext): CardInstance | undefined {
-  const resident = selfIfCreature(ctx);
-  if (resident) return resident;
-  const source = ctx.source;
-  return isCreature(source.def) ? source : undefined;
-}
-
-/**
- * {@link enteringOrResidentSelf} without the creature test — the source as ANY
- * permanent, for the named-counter kinds (§3.149).
- *
- * The same two-step for the same reason: "~ enters with three charge counters on
- * it" (Trigon of Corruption, Blast Zone) is CR 614.1c and resolves while the
- * permanent's own spell is still resolving, so the battlefield lookup finds
- * nothing and the resolving instance is the right answer. Written as a sibling
- * rather than a `creatureOnly` flag on the original so neither caller can pass
- * the wrong one by leaving an argument off.
+ * The two-step is what makes "~ enters with N counters on it" real. It is a
+ * replacement effect (CR 614.1c): the counters are put on as the permanent
+ * enters, which in this engine means while its own spell is resolving and
+ * before `finishSpellResolution` pushes that very instance onto the
+ * battlefield. Reading only the battlefield found nothing at that moment, so
+ * every "enters with counters" card compiled `'complete'` and then entered
+ * with none — a 0/0 body (Stonecoil Serpent, Walking Ballista) died to a
+ * state-based action on arrival; Trigon of Corruption and Blast Zone are the
+ * named-kind cases.
  */
 function enteringOrResidentSelfPermanent(ctx: EffectContext): CardInstance | undefined {
   return permanentById(ctx.state, ctx.source.instanceId) ?? ctx.source;
