@@ -361,6 +361,39 @@ export interface SuspendCardAction {
   readonly instanceId: InstanceId;
 }
 
+// --- infinite combos (DESIGN §3.177) ------------------------------------------------
+
+/**
+ * RUN THE LOOP the engine found (`GameState.comboWindow`) `times` more times —
+ * the CR 727 shortcut, taken by the loop's owner. Legal only while their window
+ * is open, for `1 ≤ times ≤ COMBO_REPEAT_CAP` (a whole number). Each iteration
+ * re-applies the recorded cycle through the ordinary action funnel, so every
+ * trigger, state-based action and event happens exactly as if each action had
+ * been clicked; the repeat stops early, and says so in its `comboRepeated`
+ * event, if an iteration is refused or the game ends.
+ *
+ * An ordinary action for the reason `answerChoice` is: the board, a replay and
+ * the online server already enumerate and submit actions, so the shortcut
+ * needs no second transport.
+ */
+export interface RepeatComboAction {
+  readonly kind: 'repeatCombo';
+  /** Must equal `comboWindow.owner`. */
+  readonly player: PlayerId;
+  readonly times: number;
+}
+
+/**
+ * DECLINE the found loop: close the window, put priority back where it was,
+ * and do not offer this cycle again this turn (`GameState.comboDismissed`).
+ * The player may keep stepping through it by hand.
+ */
+export interface DismissComboAction {
+  readonly kind: 'dismissCombo';
+  /** Must equal `comboWindow.owner`. */
+  readonly player: PlayerId;
+}
+
 /** The union of all player actions. */
 export type GameAction =
   | PassPriorityAction
@@ -375,7 +408,9 @@ export type GameAction =
   | ActivateAbilityAction
   | DeclareAttackersAction
   | DeclareBlockersAction
-  | AnswerChoiceAction;
+  | AnswerChoiceAction
+  | RepeatComboAction
+  | DismissComboAction;
 
 /** A discriminator helper for exhaustiveness. */
 export type ActionKind = GameAction['kind'];

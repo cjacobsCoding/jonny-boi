@@ -943,6 +943,11 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   choiceAnswered: null,
   choiceAutoAnswered: null,
   choiceAbandoned: null,
+  // §3.177 — the shortcut is bookkeeping of a loop whose own actions and
+  // resolutions are already witnessed by their mechanics; no sim opens one.
+  comboWindowOpened: null,
+  comboRepeated: null,
+  comboDismissed: null,
   attachmentFailed: null,
   attachmentPutIntoGraveyard: null,
   permanentUnattached: null,

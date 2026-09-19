@@ -946,7 +946,38 @@ export type GameEvent =
       readonly type: 'choiceAbandoned';
       readonly sourceInstanceId: InstanceId;
       readonly reason: string;
-    };
+    }
+  // --- infinite combos (DESIGN §3.177) ------------------------------------------
+  /**
+   * The engine found a LOOP with a net change (`GameState.comboWindow`) and is
+   * asking its owner how many times to run it. `summary` is the per-cycle
+   * change in words ("+1 life, +1 Saproling per cycle" — `summarizeComboLoop`),
+   * carried so a log line needs no lookup; the cycle's cards are in the window
+   * on the state, not here, which is what keeps this event free of instance
+   * ids. Public — a shortcut is proposed at the table (CR 732.2a).
+   */
+  | {
+      readonly type: 'comboWindowOpened';
+      readonly player: PlayerId;
+      /** Actions per cycle, both seats' included. */
+      readonly cycleLength: number;
+      readonly summary: string;
+    }
+  /**
+   * The owner ran the loop (CR 732.4). `completed` is how many full cycles were
+   * actually applied; it is below `requested` only when `stoppedBecause` says
+   * why — an action the engine refused, or the game ending mid-loop. Every
+   * iteration's own events precede this one in the same batch.
+   */
+  | {
+      readonly type: 'comboRepeated';
+      readonly player: PlayerId;
+      readonly requested: number;
+      readonly completed: number;
+      readonly stoppedBecause?: string;
+    }
+  /** The owner declined the shortcut; the loop is not offered again this turn. */
+  | { readonly type: 'comboDismissed'; readonly player: PlayerId };
 
 /** The append-only log. Construct via `createEventLog`; never reorder/mutate. */
 export interface EventLog {
