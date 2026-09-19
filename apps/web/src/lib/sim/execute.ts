@@ -44,6 +44,7 @@ import {
   loadDeck,
   makeSeats,
   prepareSuggestionRun,
+  prepareTrimRound,
   runMatchup,
   type Deck,
   type LoadedDeck,
@@ -67,6 +68,8 @@ import type {
   ShardResult,
   SuggestPlanJob,
   SuggestPlanResult,
+  TrimPlanJob,
+  TrimPlanResult,
   VariantSliceShardJob,
   VariantSliceShardResult,
 } from './shard-protocol.js';
@@ -343,6 +346,31 @@ export function runSuggestPlan(job: SuggestPlanJob, context: SimContext): Sugges
   };
 }
 
+// --- trim: the planning phase (§3.174) ------------------------------------------
+
+/**
+ * Plan one trim round — the sim's own `prepareTrimRound`, verbatim. The plan's
+ * roster is removal candidates (in-card: nothing), and the base-slot and
+ * variant-slice shards then play them exactly as they play swap candidates,
+ * because `applySwap` builds the cut. `swapScope` on the context is the trim's
+ * ONE-copy scope; the runner below reads it, so the arm built here and the arm
+ * played there are the same deck.
+ */
+export function runTrimPlan(job: TrimPlanJob, context: SimContext): TrimPlanResult {
+  const base = heroDeck(job.context.hero);
+  const round = prepareTrimRound(base, {
+    pool: context.pool,
+    opponentCount: job.context.opponentNames.length,
+    baseSeed: job.context.seed,
+    round: job.round,
+    gamesPerCandidate: job.gamesPerCandidate,
+    roundKind: job.roundKind,
+    targetSize: job.targetSize,
+    ...(job.baseLandRatio ? { baseLandRatio: job.baseLandRatio } : {}),
+  });
+  return { kind: 'trim-plan', round };
+}
+
 // --- suggestions: the base arm and the variant arms ----------------------------
 
 /**
@@ -559,5 +587,7 @@ export function executeShard(
       return runVariantSliceShard(job, context, onGame);
     case 'match':
       return runMatchJob(job, context);
+    case 'trim-plan':
+      return runTrimPlan(job, context);
   }
 }

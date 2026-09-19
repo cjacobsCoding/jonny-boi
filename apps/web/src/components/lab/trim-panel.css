@@ -1,0 +1,117 @@
+/*
+ * THE TRIM PANEL (§3.174) — the Lab's "bring this deck down to N".
+ *
+ * Reuses the Lab's shared pieces (verdict banner, table, coverage lines) and
+ * adds only what a multi-round session needs: the standing line, the two
+ * settings groups, a card per round with the latest one emphasised, and the
+ * on-the-edge apply that must never look like the primary action.
+ */
+
+.trim-standing {
+  margin: var(--space-2, 8px) 0 var(--space-3, 12px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted);
+}
+
+.trim-controls {
+  align-items: flex-end;
+}
+
+.trim-target .input {
+  width: 6rem;
+}
+
+.trim-problem {
+  color: var(--color-warning);
+}
+
+.trim-setting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px) var(--space-4, 16px);
+  margin: var(--space-2, 8px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border: 1px solid var(--color-border, #8884);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.trim-setting legend {
+  padding: 0 var(--space-1, 4px);
+  font-weight: 600;
+}
+
+.trim-setting label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  cursor: pointer;
+}
+
+.trim-summary {
+  margin: var(--space-3, 12px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-left: 3px solid var(--color-border-strong);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.trim-summary--target-reached {
+  border-left-color: var(--color-success);
+}
+
+.trim-summary--exhausted,
+.trim-summary--asking {
+  border-left-color: var(--color-warning);
+}
+
+.trim-round {
+  margin-top: var(--space-4, 16px);
+  opacity: 0.8;
+}
+
+.trim-round--latest {
+  opacity: 1;
+}
+
+.trim-round__title {
+  margin: 0 0 var(--space-2, 8px);
+  font-size: var(--text-md, 1rem);
+}
+
+.trim-reading {
+  margin: 0 0 var(--space-3, 12px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trim-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-left: auto;
+}
+
+/* The on-the-edge apply is deliberately NOT the primary style: it did not clear significance. */
+.trim-edge-apply {
+  border-style: dashed;
+}
+
+.trim-row--winner td {
+  background: rgba(76, 175, 114, 0.1);
+}
+
+.trim-row--edge td {
+  background: rgba(214, 185, 78, 0.1);
+}
+
+.trim-land-tag {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trim-pairing-note {
+  max-width: 70ch;
+}

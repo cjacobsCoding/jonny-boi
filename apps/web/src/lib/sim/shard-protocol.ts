@@ -30,6 +30,7 @@ import type {
   SuggestionRunPlan,
   SwapScope,
 } from '@jonny-boi/sim';
+import type { LandRatio, TrimRoundKind, TrimRoundPlan } from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import type { MatchTrace } from '../replay-types.js';
 
@@ -257,6 +258,28 @@ export interface VariantSliceShardResult {
   readonly variantWonBySlot: readonly boolean[];
 }
 
+/**
+ * PHASE 1 of a trim round (§3.174): read the land ratio, enumerate the removal
+ * candidates in prior order, and plan the wave ladder — the sim's own
+ * `prepareTrimRound`, on a worker for the same reason `suggest-plan` is (the
+ * card pool lives there). Phases 2a/2b are the base-slot and variant-slice
+ * shards above, unchanged: a removal is a swap whose in-card is nothing.
+ */
+export interface TrimPlanJob {
+  readonly kind: 'trim-plan';
+  readonly context: ShardContext;
+  readonly gamesPerCandidate: number;
+  readonly round: number;
+  readonly roundKind: TrimRoundKind;
+  readonly targetSize: number;
+  readonly baseLandRatio?: LandRatio;
+}
+
+export interface TrimPlanResult {
+  readonly kind: 'trim-plan';
+  readonly round: TrimRoundPlan;
+}
+
 /** Play ONE game and record its full trace (the match-replay viewer). */
 export interface MatchJob {
   readonly kind: 'match';
@@ -277,7 +300,8 @@ export type ShardJob =
   | SuggestPlanJob
   | BaseSlotShardJob
   | VariantSliceShardJob
-  | MatchJob;
+  | MatchJob
+  | TrimPlanJob;
 
 /** Anything a worker can hand back on success. */
 export type ShardResult =
@@ -286,7 +310,8 @@ export type ShardResult =
   | SuggestPlanResult
   | BaseSlotShardResult
   | VariantSliceShardResult
-  | MatchJobResult;
+  | MatchJobResult
+  | TrimPlanResult;
 
 /**
  * Main thread → worker, once per worker, before any job.

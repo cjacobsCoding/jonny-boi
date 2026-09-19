@@ -19,6 +19,7 @@ import type {
   SwapEvaluation,
   SwapScope,
 } from '@jonny-boi/sim';
+import type { LandRatio, TrimRoundKind, TrimRoundReport } from '@jonny-boi/sim';
 import type { MatchTrace } from './replay-types.js';
 
 /*
@@ -143,8 +144,35 @@ export interface MatchRequest extends PilotedRequest {
   readonly maxEvents: number;
 }
 
+/**
+ * ONE ROUND of the Lab's trim (DESIGN §3.174): evaluate single-card removals of
+ * the hero (or nonland+land pairs, the widening step) with the paired A/B
+ * machinery, and report which — if any — proved better.
+ *
+ * A round, not a session, on purpose: the panel applies a winning removal to
+ * the deck itself and re-issues the next round on the updated hero, so the
+ * deck the Lab re-reads is the deck that was tested, and Cancel is the ordinary
+ * one-run cancel. `round` offsets the seed so consecutive rounds play different
+ * games; `baseLandRatio` is the deck's ratio when the session began, so the mana
+ * prior measures drift from where the user started.
+ */
+export interface TrimRequest extends PilotedRequest {
+  readonly kind: 'trim';
+  readonly hero: SimDeckPayload;
+  readonly opponentNames: readonly string[];
+  /** Depth a FINALIST reaches — the same adaptive ladder Suggest runs. */
+  readonly gamesPerCandidate: number;
+  readonly seed: number;
+  /** 0 for the session's first round. */
+  readonly round: number;
+  readonly roundKind: TrimRoundKind;
+  readonly targetSize: number;
+  /** Omitted on the first round: the hero IS the base. */
+  readonly baseLandRatio?: LandRatio;
+}
+
 /** Anything the UI can ask the worker to run. */
-export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest;
+export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | TrimRequest;
 
 /**
  * Live progress for the whole run, aggregated across every worker.
@@ -199,5 +227,6 @@ export type SimResultPayload =
       readonly sequential?: SequentialOutcome;
     }
   | { readonly kind: 'suggest'; readonly result: SuggestionReport; readonly pilotId: string }
-  | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string };
+  | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string }
+  | { readonly kind: 'trim'; readonly result: TrimRoundReport; readonly pilotId: string };
 
