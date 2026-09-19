@@ -155,7 +155,11 @@ describe('validateHero', () => {
 
     const problems = validateHero(deck);
 
-    expect(problems).toHaveLength(1);
+    // ONE support line — not four bare uuids — plus, because this 24-card fixture
+    // is also short, the size rule in the sim's own words (see deckSizeProblems:
+    // a deck that is short AND unsupported says both at once).
+    expect(problems).toHaveLength(2);
+    expect(problems[1]).toBe('deck size 24 is below the minimum of 60');
     for (const imported of UNPLAYABLE_IMPORTS) {
       expect(problems[0]).toContain(imported.card.name);
     }

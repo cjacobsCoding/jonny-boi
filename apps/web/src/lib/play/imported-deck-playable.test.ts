@@ -77,7 +77,11 @@ describe('a deck holding imported cards', () => {
     // The control. Without this the test below could pass for the wrong reason
     // (e.g. the validator quietly ignoring unknown ids).
     const problems = validateChoice({ source: 'saved', deck: deckWith(4) });
-    expect(problems.join(' ')).toMatch(/unknown card/);
+    // Refused through the ONE support funnel now (deckHealth), not by the sim's
+    // raw 'unknown card <uuid>': the id resolves to nothing, so the deck is not
+    // playable — and it says so in words rather than echoing the uuid.
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.join(' ')).toMatch(/can’t be played or tested/);
   });
 
   it('is PLAYABLE once the card is in the imported store', () => {
@@ -100,7 +104,9 @@ describe('a deck holding imported cards', () => {
     registerImportedCards([{ card: IMPORTED_RECORD, missing: [] }]);
     invalidateHotseatPool();
     expect(hotseatPool().get(IMPORTED_ID)).toBeUndefined();
-    expect(validateChoice({ source: 'saved', deck: deckWith(4) }).join(' ')).toMatch(/unknown card/);
+    const said = validateChoice({ source: 'saved', deck: deckWith(4) }).join(' ');
+    expect(said).toMatch(/can’t be played or tested/);
+    expect(said, 'the failed import is named, not its uuid').toContain('Imported Test Bear');
   });
 
   it('never lets an import shadow a curated card of the same id', () => {

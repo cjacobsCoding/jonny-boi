@@ -85,16 +85,39 @@ export function buildDeckMenu(decks: DecksApi): DeckMenuItem[] {
  * than one that opens on a deck that can, and a harness that trips over it is
  * telling us so.
  *
- * Legality is asked of {@link validateChoice} — the same answer the Start button
- * itself is gated on — never re-derived here. When NOTHING in the menu is legal
- * the seats fall back to the first rows, so the screen still shows a pick and the
- * problem text under it says why it cannot start.
+ * Legality is asked of the SAME function the surface's own button is gated on —
+ * {@link validateChoice} for local play by default, `validateChoiceForOnline` for
+ * the lobby, whose server knows only the curated pool — never re-derived here.
+ * When NOTHING in the menu is legal the seats fall back to the first rows, so
+ * the screen still shows a pick and the problem text under it says why it
+ * cannot start.
  */
-export function defaultSeatKeys(menu: readonly DeckMenuItem[]): { readonly a: string; readonly b: string } {
-  const legal = menu.filter((item) => validateChoice(item.choice).length === 0);
+export function defaultSeatKeys(
+  menu: readonly DeckMenuItem[],
+  isLegal: (choice: DeckChoice) => boolean = locallyLegal,
+): { readonly a: string; readonly b: string } {
+  const legal = menu.filter((item) => isLegal(item.choice));
   const a = legal[0] ?? menu[0];
   const b = legal.find((item) => item !== a) ?? a ?? menu[1] ?? menu[0];
   return { a: a?.key ?? '', b: b?.key ?? '' };
+}
+
+/**
+ * The ONE seat's default, for a picker with a single deck (the online lobby):
+ * the first deck that can start under that surface's rules, else the first row.
+ * The same class as {@link defaultSeatKeys}, in the same place, so a third
+ * picker cannot quietly go back to `menu[0]`.
+ */
+export function firstStartableKey(
+  menu: readonly DeckMenuItem[],
+  isLegal: (choice: DeckChoice) => boolean = locallyLegal,
+): string {
+  return (menu.find((item) => isLegal(item.choice)) ?? menu[0])?.key ?? '';
+}
+
+/** Legal for LOCAL play — the default question, the one Solo and pass-and-play ask. */
+function locallyLegal(choice: DeckChoice): boolean {
+  return validateChoice(choice).length === 0;
 }
 
 /** The items of one origin, in menu order. Used to fill one `<optgroup>`. */
