@@ -132,7 +132,8 @@ export function deckChoiceName(choice: DeckChoice): string {
  * Validate a deck choice for LOCAL play (Solo, pass-and-play): curated cards plus
  * the player's imported ones. Empty array = legal.
  *
- * ⚠️ Support is asked FIRST, and reported ON ITS OWN. The sim's validator does
+ * ⚠️ Support is asked FIRST, and the sim's own findings are then withheld (only
+ * the size rule rides along — see {@link deckSizeProblems}). The sim's validator does
  * refuse an unsupported deck, but only as a side effect of the card not being in
  * the pool, and the words it produces are the wrong ones: a deck holding four
  * copies of a card the engine cannot play reported
@@ -155,7 +156,7 @@ export function validateChoice(choice: DeckChoice): string[] {
  *
  * Only used alongside a health refusal: the sim's own validator cannot be asked
  * then, because it counts only the cards it resolved and would report a
- * 47-card deck holding five unsupported cards as 42. But a deck can be short AND
+ * 49-card deck holding five unsupported cards as 44. But a deck can be short AND
  * unsupported at once (his transcribed one is), and learning the second problem
  * only after fixing the first is a worse afternoon. Same words as the sim's line,
  * so the two never read differently.
