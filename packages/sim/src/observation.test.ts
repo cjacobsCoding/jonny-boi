@@ -187,6 +187,7 @@ const BOUNDARY_MECHANICS: readonly SoakMechanicId[] = [
   'buyback', // a spell that resolves back into its OWNER'S HAND — hole 2
   'madness', // hand → exile, then cast from exile
   'cycling', // hand → graveyard as a cost, plus a draw
+  'discard-cost', // hand → graveyard as an activation cost (§3.172), the card named on the action
   'mill', // library → graveyard
   'scry', // the top of a library LOOKED AT
   'surveil', // the same look, with a graveyard destination

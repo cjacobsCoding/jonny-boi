@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7496 cards.
+ * 7599 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -3084,6 +3084,20 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { flash: true, deathtouch: true },
     subtypes: ['snake'],
   },
+  // {1}, Discard a card at random: Put a +1/+1 counter on target creature.
+  {
+    id: '5c5bdb8c-2a2e-47cf-a502-2d62f9ada3fa',
+    name: 'Amok',
+    types: ['enchantment'],
+    cost: { generic: 1, R: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+        label: '{1}, discard a card at random: put a +1/+1 counter on target creature',
+      },
+    ],
+  },
   {
     id: 'fd169064-9c7b-40bd-8be0-a89fcb28ae2f',
     name: 'Amphin Cutthroat',
@@ -6035,6 +6049,30 @@ const POOL_0: readonly CardDefinition[] = [
       ],
     },
   },
+  // {U}, Discard an artifact card: Search your library for an artifact card with mana value 1 or less, reveal it, put it into your hand, then shuffle.
+  {
+    id: 'abe37c88-afd7-45ac-9f84-f4bd881a1462',
+    name: 'Artificer\'s Intuition',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 1 },
+    activated: [
+      {
+        cost: { mana: { U: 1 }, discard: { count: 1, filter: { anyOfTypes: ['artifact'] } } },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['artifact'], maxManaValue: 1 },
+              destination: 'hand',
+            },
+          },
+        ],
+        label: '{u}, discard an artifact card: search your library for an artifact card with mana value 1 or less, reveal it, put it into your hand, then shuffle',
+      },
+    ],
+  },
   // As an additional cost to cast this spell, sacrifice an artifact or creature.
   // Artillerize deals 5 damage to any target.
   {
@@ -7369,6 +7407,25 @@ const POOL_0: readonly CardDefinition[] = [
     ],
   },
   // Flying
+  // {2}{W}, Discard a card: This creature gets +1/+2 until end of turn.
+  {
+    id: '79c8f774-6d4f-4fd0-85c0-26ef713e6b89',
+    name: 'Aven Trooper',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['bird', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, W: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 2 } }],
+        label: '{2}{w}, discard a card: ~ gets +1/+2 until end of turn',
+      },
+    ],
+  },
+  // Flying
   // Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn.
   {
     id: '28911e7b-0435-4393-a651-dc6eb53c7d98',
@@ -7534,6 +7591,25 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature enters with two oil counters on it.
+  // {T}, Remove an oil counter from this creature, Discard a card: Draw a card.
+  {
+    id: 'c9b3b785-396e-4240-bfa3-58ab53497686',
+    name: 'Axiom Engraver',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['phyrexian', 'wizard'],
+    effects: [{ primitive: 'addCounters', params: { amount: 2, kind: 'oil', self: true } }],
+    activated: [
+      {
+        cost: { tap: true, removeCounters: { kind: 'oil', count: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{t}, remove an oil counter from ~, discard a card: draw a card',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {1}, {T}: Add {W}.
   // {2}, {T}: Add {G} or {U}.
@@ -7566,6 +7642,25 @@ const POOL_0: readonly CardDefinition[] = [
           },
         ],
         label: '{t}: tap target creature with power 2 or less',
+      },
+    ],
+  },
+  // Discard a land card: Create a 2/2 green Bear creature token.
+  {
+    id: '1b9296ca-39a8-4aad-be92-0a56c704e950',
+    name: 'Ayula\'s Influence',
+    types: ['enchantment'],
+    cost: { G: 3 },
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['land'] } } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 2, toughness: 2, name: 'Bear', colors: ['G'], subtypes: ['Bear'] },
+          },
+        ],
+        label: 'Discard a land card: create a 2/2 green bear creature token',
       },
     ],
   },
@@ -8063,6 +8158,28 @@ const POOL_0: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'drawCards', params: { count: 1 } }],
         label: 'Enters: draw a card',
+      },
+    ],
+  },
+  // {U}, {T}, Discard a card: Target creature gains flying until end of turn.
+  {
+    id: 'c34963e6-850e-4ce4-b04f-5e623ce5b73f',
+    name: 'Balloon Peddler',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { U: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { flying: true }, targets: 'creature' },
+          },
+        ],
+        label: '{u}, {t}, discard a card: target creature gains flying until end of turn',
       },
     ],
   },
@@ -9220,6 +9337,9 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { firstStrike: true },
     subtypes: ['giant'],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // Enchant creature
   // Enchanted creature has double strike. (It deals both first-strike and regular combat damage.)
   {
@@ -9337,9 +9457,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {T}: Add {R} or {W}. This land deals 1 damage to you.
   {
@@ -13115,6 +13232,23 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
     subtypes: ['wraith'],
   },
+  // {B}, {T}, Discard a card: Add {B}{B}{B}.
+  {
+    id: '92662394-c31d-4348-9b9c-0fe619949ea3',
+    name: 'Bog Witch',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'addMana', params: { mana: ['B', 'B', 'B'] } }],
+        label: '{b}, {t}, discard a card: add {b}{b}{b}',
+      },
+    ],
+  },
   // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
   {
     id: '5d17210c-be39-4abc-9d4d-4f2eca9573bd',
@@ -15683,6 +15817,25 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // First strike
+  // {1}{R}, Discard a card: This creature gets +2/+0 until end of turn.
+  {
+    id: '52f191fb-eaf6-432f-a668-37ad48ffabaf',
+    name: 'Burning-Fist Minotaur',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { firstStrike: true },
+    subtypes: ['minotaur', 'wizard'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, R: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: '{1}{r}, discard a card: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // When this creature enters, add {R}{G}.
   {
     id: 'ba327a5e-bd57-4e24-b4b4-062202df30e1',
@@ -16010,6 +16163,33 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['human', 'cleric'],
   },
+  // Discard a card: This creature gains lifelink until end of turn.
+  // Threshold — This creature gets +1/+2 as long as there are seven or more cards in your graveyard.
+  {
+    id: 'b279a03f-85ab-43f2-b5ca-1bc10563e5ad',
+    name: 'Cabal Initiate',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'warlock'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { lifelink: true } } }],
+        label: 'Discard a card: ~ gains lifelink until end of turn',
+      },
+    ],
+    statics: [
+      {
+        affects: { onlySource: true },
+        power: 1,
+        toughness: 2,
+        label: '~ gets +1/+2',
+        activeWhile: { kind: 'countAtLeast', count: { countOf: 'cardsInYourGraveyard' }, min: 7 },
+      },
+    ],
+  },
   // Sacrifice this creature: Target creature gets -2/-0 until end of turn.
   {
     id: 'd345d702-b205-4391-985a-6201e707f0ba',
@@ -16100,6 +16280,28 @@ const POOL_1: readonly CardDefinition[] = [
         cost: { tap: true },
         effects: [{ primitive: 'loseLife', params: { amount: 1, targetPlayer: true, targets: 'player' } }],
         label: '{t}: target player loses 1 life',
+      },
+    ],
+  },
+  // {X}{B}, {T}, Discard a card: Target creature gets +X/+0 until end of turn.
+  {
+    id: 'cec755ee-b4c0-47fd-9e61-9a3161766de6',
+    name: 'Cackling Witch',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, xCost: 1, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: { chosenX: true }, toughness: 0, targets: 'creature' },
+          },
+        ],
+        label: '{x}{b}, {t}, discard a card: target creature gets +x/+0 until end of turn',
       },
     ],
   },
@@ -16284,6 +16486,33 @@ const POOL_1: readonly CardDefinition[] = [
       {
         primitive: 'makeToken',
         params: { power: 3, toughness: 3, name: 'Elephant', colors: ['G'], subtypes: ['Elephant'] },
+      },
+    ],
+  },
+  // {1}, Discard a card: Create a 1/1 black Vampire Knight creature token with lifelink. Activate only once each turn.
+  {
+    id: '3ec85cca-ac2c-4b1b-850b-6a762df72bd0',
+    name: 'Call the Bloodline',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Vampire Knight',
+              colors: ['B'],
+              subtypes: ['Vampire', 'Knight'],
+              keywords: { lifelink: true },
+            },
+          },
+        ],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: '{1}, discard a card: create a 1/1 black vampire knight creature token with lifelink. activate only once each turn',
       },
     ],
   },
@@ -16573,6 +16802,25 @@ const POOL_1: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'createPredefinedToken', params: { token: 'food' } }],
         label: 'Enters: create a food token',
+      },
+    ],
+  },
+  // Flying
+  // {1}, Discard a card at random: This creature gets +2/+0 until end of turn.
+  {
+    id: '22f84143-5912-43ca-a274-f26ed0dbadd0',
+    name: 'Canyon Drake',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 1,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['drake'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: '{1}, discard a card at random: ~ gets +2/+0 until end of turn',
       },
     ],
   },
@@ -18113,6 +18361,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // When this creature enters, you gain 3 life.
   {
     id: 'e92b32f0-01bd-4501-b0ad-90d2c296077a',
@@ -18211,6 +18462,25 @@ const POOL_1: readonly CardDefinition[] = [
           },
         ],
         label: 'Dies: you may gain 3 life',
+      },
+    ],
+  },
+  // Trample
+  // {G}, Discard a card: Regenerate this creature.
+  {
+    id: 'a83903c1-40fe-47a5-8bcc-2f0877c58225',
+    name: 'Centaur Veteran',
+    types: ['creature'],
+    cost: { generic: 5, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { trample: true },
+    subtypes: ['centaur'],
+    activated: [
+      {
+        cost: { mana: { G: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{g}, discard a card: regenerate ~',
       },
     ],
   },
@@ -18376,9 +18646,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Chain Reaction deals X damage to each creature, where X is the number of creatures on the battlefield.
   {
     id: '6f34d11e-8452-448f-be4f-838e0ace9904',
@@ -18767,6 +19034,25 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 4,
     keywords: { maxBlockers: 1 },
     subtypes: ['rhino'],
+  },
+  // Haste
+  // {T}, Discard a card: Draw a card.
+  {
+    id: '9940d992-1ba1-40ec-9b93-17d773452c4b',
+    name: 'Charging Strifeknight',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { haste: true },
+    subtypes: ['spirit', 'knight'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{t}, discard a card: draw a card',
+      },
+    ],
   },
   // Vigilance
   // {G}: Regenerate this creature.
@@ -21816,6 +22102,26 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // {1}{U}, Discard a card: Draw a card.
+  // {1}{U}, Sacrifice this enchantment: Draw a card.
+  {
+    id: '2d1f56e8-55cb-4b81-9946-9f0f813e3d4a',
+    name: 'Compulsion',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 1, U: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{1}{u}, discard a card: draw a card',
+      },
+      {
+        cost: { mana: { generic: 1, U: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{1}{u}, sacrifice ~: draw a card',
+      },
+    ],
+  },
   // This land enters tapped unless you control two or fewer other lands.
   // {T}: Add {W} or {B}.
   {
@@ -22689,6 +22995,25 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 1,
     subtypes: ['fish'],
   },
+  // {3}, Discard a card at random: Target creature gets +2/+2 until end of turn.
+  {
+    id: '4ac5a963-d3f3-4700-8c10-6c6974b20c24',
+    name: 'Coral Helm',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    activated: [
+      {
+        cost: { mana: { generic: 3 }, discard: { count: 1, random: true } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: '{3}, discard a card at random: target creature gets +2/+2 until end of turn',
+      },
+    ],
+  },
   {
     id: '4ed27607-21a8-4bc3-997e-6d2242313f6d',
     name: 'Coral Merfolk',
@@ -23464,6 +23789,34 @@ const POOL_2: readonly CardDefinition[] = [
         params: { keywords: { trample: true }, anyOfTypes: ['creature'] },
       },
       { primitive: 'drawCards', params: { count: 1 } },
+    ],
+  },
+  // {G}, Discard a card: This creature gains trample until end of turn.
+  // Threshold — As long as there are seven or more cards in your graveyard, this creature gets +2/+2 and has shroud. (It can't be the target of spells or abilities.)
+  {
+    id: 'e1f3a32a-bfd2-4c31-a349-3e62a84c20e1',
+    name: 'Crashing Centaur',
+    types: ['creature'],
+    cost: { generic: 4, G: 2 },
+    power: 3,
+    toughness: 4,
+    subtypes: ['centaur'],
+    activated: [
+      {
+        cost: { mana: { G: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { trample: true } } }],
+        label: '{g}, discard a card: ~ gains trample until end of turn',
+      },
+    ],
+    statics: [
+      {
+        affects: { onlySource: true },
+        power: 2,
+        toughness: 2,
+        keywords: { shroud: true },
+        label: '~ gets +2/+2 and has shroud',
+        activeWhile: { kind: 'countAtLeast', count: { countOf: 'cardsInYourGraveyard' }, min: 7 },
+      },
     ],
   },
   // Defender
@@ -26269,6 +26622,28 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // {G}, {T}, Discard a card: Prevent all combat damage that would be dealt this turn.
+  {
+    id: '2d193a35-8950-4a77-ace3-c4d4085727f4',
+    name: 'Dawnstrider',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['dryad', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { G: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'preventDamage',
+            params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+          },
+        ],
+        label: '{g}, {t}, discard a card: prevent all combat damage that would be dealt this turn',
+      },
+    ],
+  },
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
@@ -26979,6 +27354,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // {B}{B}: Counter target green spell.
   {
     id: 'fc86164d-24f1-4fad-a358-f61dbfd86bd9',
@@ -27364,9 +27742,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Whenever this creature becomes blocked, it gets +1/+1 until end of turn.
   {
     id: '7c1a1963-ec46-4ed3-9be1-e4cc09687922',
@@ -27381,6 +27756,28 @@ const POOL_3: readonly CardDefinition[] = [
         condition: { on: 'becomesBlocked' },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: 'Becomes blocked: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // {G}, {T}, Discard a card: Target creature gets +2/+2 until end of turn.
+  {
+    id: 'acbed0f5-2ac0-48d8-b5ab-b4cd7176fde2',
+    name: 'Deepwood Drummer',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { G: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: '{g}, {t}, discard a card: target creature gets +2/+2 until end of turn',
       },
     ],
   },
@@ -28758,6 +29155,23 @@ const POOL_3: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'Enters: you gain 1 life',
+      },
+    ],
+  },
+  // {1}{W}, {T}, Discard a card: Destroy target artifact or enchantment.
+  {
+    id: 'fdafbdbd-002d-4a4d-a9f9-f6d365b9cf0b',
+    name: 'Devout Witness',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
+        label: '{1}{w}, {t}, discard a card: destroy target artifact or enchantment',
       },
     ],
   },
@@ -32848,6 +33262,28 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Discard a card at random: This creature gains first strike and haste until end of turn.
+  {
+    id: 'a2bc3d85-5ba1-4f2e-a676-be989bdb04f7',
+    name: 'Dwarven Strike Force',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['dwarf', 'berserker'],
+    activated: [
+      {
+        cost: { discard: { count: 1, random: true } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { firstStrike: true, haste: true } },
+          },
+        ],
+        label: 'Discard a card at random: ~ gains first strike and haste until end of turn',
+      },
+    ],
+  },
   {
     id: '4db9aa47-f42b-41e9-948c-8b012c3809fb',
     name: 'Dwarven Trader',
@@ -33012,6 +33448,31 @@ const POOL_3: readonly CardDefinition[] = [
           },
         ],
         label: 'Enters: creatures you control get +1/+0 and gain first strike until end of turn',
+      },
+    ],
+  },
+  // When this creature enters, each player discards a card.
+  // Discard a card: Regenerate this creature.
+  {
+    id: '5dad63b5-ced3-4150-ad84-1ca05a892840',
+    name: 'Earsplitting Rats',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['rat'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'discardCard', params: { who: 'eachPlayer' } }],
+        label: 'Enters: each player discards a card',
+      },
+    ],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: 'Discard a card: regenerate ~',
       },
     ],
   },
@@ -35458,6 +35919,30 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // Enchanted creature has "{R}, {T}, Discard a card: Draw a card."
+  {
+    id: 'dd3a0128-4499-498d-9721-b1fd70ea84b4',
+    name: 'Epiphany Storm',
+    types: ['enchantment'],
+    cost: { R: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: {
+        activated: [
+          {
+            cost: { mana: { R: 1 }, tap: true, discard: { count: 1 } },
+            effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            label: '{r}, {t}, discard a card: draw a card',
+          },
+        ],
+      },
+    },
+  },
   // Exile target enchantment.
   {
     id: 'd1dd0e10-2ad7-467f-8d4b-c70b95bf2e9c',
@@ -35611,6 +36096,27 @@ const POOL_3: readonly CardDefinition[] = [
           { primitive: 'discardCard', params: { who: 'controller' } },
         ],
         label: '{1}{u}, {t}: draw a card, then discard a card',
+      },
+    ],
+  },
+  // Discard a creature card: This creature gets +2/+2 and gains trample until end of turn. Activate only once each turn.
+  {
+    id: '351ee4ba-882d-48c1-837d-e9eccc5bc50d',
+    name: 'Erstwhile Trooper',
+    types: ['creature'],
+    cost: { generic: 1, B: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['zombie', 'soldier'],
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [
+          { primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } },
+          { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { trample: true } } },
+        ],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Discard a creature card: ~ gets +2/+2 and gains trample until end of turn. activate only once each turn',
       },
     ],
   },
@@ -36045,6 +36551,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // Creatures you control get +2/+1 until end of turn.
   {
     id: 'f47dd220-6193-4e31-a1df-591b6424ad27',
@@ -36567,9 +37076,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // Trample
   // When this creature enters, mill three cards.
   {
@@ -38145,6 +38651,33 @@ const POOL_4: readonly CardDefinition[] = [
         effects: [{ primitive: 'destroyTarget', params: { targets: 'land' } }],
         label: 'Enters: destroy target land',
         targets: 'land',
+      },
+    ],
+  },
+  // {G}, {T}, Discard a creature card: Search your library for a creature card, reveal it, put it into your hand, then shuffle.
+  {
+    id: 'b8b906eb-3223-474c-9b74-eda2c280f9c5',
+    name: 'Fauna Shaman',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'shaman'],
+    activated: [
+      {
+        cost: { mana: { G: 1 }, tap: true, discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['creature'] },
+              destination: 'hand',
+            },
+          },
+        ],
+        label: '{g}, {t}, discard a creature card: search your library for a creature card, reveal it, put it into your hand, then shuffle',
       },
     ],
   },
@@ -40743,6 +41276,23 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // {B}, Discard a card: This creature gains flying until end of turn.
+  {
+    id: 'd11770ee-dcf0-4dd4-ab43-b98f1133cec7',
+    name: 'Fledgling Imp',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['imp'],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { flying: true } } }],
+        label: '{b}, discard a card: ~ gains flying until end of turn',
+      },
+    ],
+  },
   // This creature has flying as long as it's enchanted.
   {
     id: '8cd46bfa-ca09-422f-9891-db9399fa2d3a',
@@ -40877,6 +41427,23 @@ const POOL_4: readonly CardDefinition[] = [
           },
         ],
         label: 'Enters: each player sacrifices a creature of their choice',
+      },
+    ],
+  },
+  // Discard an artifact card: This creature gets +2/+2 until end of turn.
+  {
+    id: '01095217-bc33-4d71-bf10-2ead9f8ebd25',
+    name: 'Fleshgrafter',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'warrior'],
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['artifact'] } } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Discard an artifact card: ~ gets +2/+2 until end of turn',
       },
     ],
   },
@@ -41153,6 +41720,32 @@ const POOL_4: readonly CardDefinition[] = [
       ],
     },
     entwine: { generic: 2, G: 1 },
+  },
+  // {1}{R}, {T}, Discard a card: Target creature gets +1/-1 and gains haste until end of turn.
+  {
+    id: '9f10fa1c-2c7b-49ba-87b6-3b652b65704d',
+    name: 'Flowstone Channeler',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, R: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: -1, targets: 'creature' },
+          },
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { haste: true }, targets: 'creature' },
+          },
+        ],
+        label: '{1}{r}, {t}, discard a card: target creature gets +1/-1 and gains haste until end of turn',
+      },
+    ],
   },
   // Whenever this creature attacks, it gets +3/-3 until end of turn.
   {
@@ -41489,6 +42082,20 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}, Discard a card: This artifact deals 2 damage to target player or planeswalker.
+  {
+    id: 'fd401525-b874-4af2-99a3-c2c83e22547e',
+    name: 'Fodder Tosser',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 2, targets: 'playerOrPlaneswalker' } }],
+        label: '{t}, discard a card: ~ deals 2 damage to target player or planeswalker',
+      },
+    ],
+  },
   // Prevent all combat damage that would be dealt this turn.
   {
     id: '27e9db49-7af7-4bef-ad4c-bf5dfb92030d',
@@ -41582,6 +42189,21 @@ const POOL_4: readonly CardDefinition[] = [
         effects: [{ primitive: 'freezeTarget', params: { targets: 'creatureAnOpponentControls' } }],
         label: 'Enters: target creature an opponent controls doesn\'t untap during its controller\'s next untap step',
         targets: 'creatureAnOpponentControls',
+      },
+    ],
+  },
+  // {T}: Add {R}. This land deals 1 damage to you.
+  // {2}{R}, {T}, Discard a card: Draw a card.
+  {
+    id: 'e63523d5-0f2c-436a-b411-662eb11fd150',
+    name: 'Fogwell\'s Gym',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ R: 1 }], rider: { damageToController: 1 } }],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{2}{r}, {t}, discard a card: draw a card',
       },
     ],
   },
@@ -42769,6 +43391,23 @@ const POOL_4: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, protectionFrom: ['red'] },
     subtypes: ['bird'],
+  },
+  // {R}, Discard a card at random: This creature gets +3/+0 until end of turn.
+  {
+    id: '0dc939cc-826a-4208-ba5b-a11e1cd47aa2',
+    name: 'Frenetic Ogre',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['ogre'],
+    activated: [
+      {
+        cost: { mana: { R: 1 }, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } }],
+        label: '{r}, discard a card at random: ~ gets +3/+0 until end of turn',
+      },
+    ],
   },
   // Riot (This creature enters with your choice of a +1/+1 counter or haste.)
   // Trample
@@ -45179,6 +45818,9 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // When this creature enters, you gain 2 life.
   // Warp {1}{G} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)
   {
@@ -45608,6 +46250,28 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // {W}, {T}, Discard a card: Creatures you control get +1/+0 until end of turn.
+  {
+    id: '56ab366c-085b-4b13-b5ad-918965c34d22',
+    name: 'Ghost Tactician',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 2,
+    toughness: 5,
+    subtypes: ['spirit', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { W: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{w}, {t}, discard a card: creatures you control get +1/+0 until end of turn',
+      },
+    ],
+  },
   // {T}: Target creature gets +1/+1 until end of turn.
   {
     id: '2cd81534-79cb-4fde-bfa5-11c510ac6e11',
@@ -45873,9 +46537,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Target creature gets +X/+0 until end of turn, where X is the number of creature cards in your graveyard.
   {
     id: 'a2909e6e-d196-4654-9193-2c9e0cfd90ee',
@@ -48355,6 +49016,23 @@ const POOL_5: readonly CardDefinition[] = [
           },
         ],
         label: 'Echo {R}',
+      },
+    ],
+  },
+  // {R}, {T}, Discard a card: Draw a card.
+  {
+    id: '6d8f1f06-dde5-41f2-923c-67d1d4d13fab',
+    name: 'Goblin Picker',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['goblin'],
+    activated: [
+      {
+        cost: { mana: { R: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{r}, {t}, discard a card: draw a card',
       },
     ],
   },
@@ -53723,6 +54401,49 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Discard a card: This creature gets +1/+1 until end of turn.
+  // Madness {2}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'f7da32a3-8e33-4603-abd2-8db144062f6a',
+    name: 'Hell Mongrel',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['nightmare', 'dog'],
+    madness: { generic: 2, B: 1 },
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Discard a card: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // First strike, haste
+  // Discard a card at random: This creature gains protection from white until end of turn.
+  {
+    id: '7f41ac1c-2603-4234-8963-cd47bb894024',
+    name: 'Hell-Bent Raider',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, haste: true },
+    subtypes: ['human', 'barbarian'],
+    activated: [
+      {
+        cost: { discard: { count: 1, random: true } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { protectionFrom: ['white'] } },
+          },
+        ],
+        label: 'Discard a card at random: ~ gains protection from white until end of turn',
+      },
+    ],
+  },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
   // {T}: Add {B} or {R}.
@@ -54288,6 +55009,9 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Vigilance
   // Whenever another Human you control enters, put a +1/+1 counter on this creature.
   // {T}: Add X mana of any one color, where X is this creature's power.
@@ -54818,9 +55542,6 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   // {1}, Sacrifice another creature: Put a +1/+1 counter on this creature.
   {
@@ -56422,6 +57143,46 @@ const POOL_6: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
+  // {W}, Discard a card: Prevent the next 3 damage that would be dealt to any target this turn.
+  // {W}, Sacrifice this enchantment: Prevent the next 3 damage that would be dealt to any target this turn.
+  {
+    id: '3467c940-dae4-4667-bec8-524dbce13283',
+    name: 'Hypochondria',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    activated: [
+      {
+        cost: { mana: { W: 1 }, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'preventDamage',
+            params: {
+              amount: 3,
+              targeted: true,
+              targets: 'any',
+              label: 'prevent the next 3 damage that would be dealt to any target this turn',
+            },
+          },
+        ],
+        label: '{w}, discard a card: prevent the next 3 damage that would be dealt to any target this turn',
+      },
+      {
+        cost: { mana: { W: 1 }, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'preventDamage',
+            params: {
+              amount: 3,
+              targeted: true,
+              targets: 'any',
+              label: 'prevent the next 3 damage that would be dealt to any target this turn',
+            },
+          },
+        ],
+        label: '{w}, sacrifice ~: prevent the next 3 damage that would be dealt to any target this turn',
+      },
+    ],
+  },
   // When this creature enters, untap target creature.
   {
     id: 'bb7f2638-d757-4df6-90b0-b616534dd3a0',
@@ -56437,6 +57198,35 @@ const POOL_6: readonly CardDefinition[] = [
         effects: [{ primitive: 'untapTarget', params: { targets: 'creature' } }],
         label: 'Enters: untap target creature',
         targets: 'creature',
+      },
+    ],
+  },
+  // {1}{W}, {T}, Discard a card: Create two 1/1 white Citizen creature tokens.
+  {
+    id: 'c5ba6543-ede7-45a5-8e8d-e17d3f545d3f',
+    name: 'Icatian Crier',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Citizen',
+              colors: ['W'],
+              subtypes: ['Citizen'],
+              count: 2,
+            },
+          },
+        ],
+        label: '{1}{w}, {t}, discard a card: create two 1/1 white citizen creature tokens',
       },
     ],
   },
@@ -56939,6 +57729,34 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'Enters: you may discard a card. if you do, draw a card',
       },
     ],
+  },
+  // Enchant creature
+  // Enchanted creature doesn't untap during its controller's untap step.
+  // Enchanted creature has "{1}, Discard a card: Untap this creature."
+  {
+    id: 'ee6e2d96-dd9e-45f6-b412-78562f2ada40',
+    name: 'Immobilizing Ink',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: {
+        power: 0,
+        toughness: 0,
+        keywords: { doesNotUntap: true },
+        activated: [
+          {
+            cost: { mana: { generic: 1 }, discard: { count: 1 } },
+            effects: [{ primitive: 'untapSelf', params: {} }],
+            label: '{1}, discard a card: untap ~',
+          },
+        ],
+      },
+    },
   },
   // Destroy target attacking creature.
   {
@@ -57922,6 +58740,27 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Discard a card: This creature gets +1/+0 and gains menace until end of turn. Activate only as a sorcery. (It can't be blocked except by two or more creatures.)
+  {
+    id: 'efec73e0-2dfa-42f7-bb95-3c2553821055',
+    name: 'Inner Demons Gangsters',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 4,
+    subtypes: ['human', 'rogue', 'villain'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [
+          { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } },
+          { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { menace: true } } },
+        ],
+        timing: 'sorcery',
+        label: 'Discard a card: ~ gets +1/+0 and gains menace until end of turn. activate only as a sorcery',
+      },
+    ],
+  },
   // Cumulative upkeep—Pay 2 life. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
   // Prevent all damage that would be dealt to creatures you control.
   {
@@ -58115,6 +58954,25 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { flying: true, lifelink: true },
     subtypes: ['harpy'],
+  },
+  // Menace (This creature can't be blocked except by two or more creatures.)
+  // Discard a card, Sacrifice this creature: Draw a card.
+  {
+    id: '813104f6-e6e4-4709-8626-12fe4262a11f',
+    name: 'Insolent Neonate',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { menace: true },
+    subtypes: ['vampire'],
+    activated: [
+      {
+        cost: { discard: { count: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Discard a card, sacrifice ~: draw a card',
+      },
+    ],
   },
   // This land enters tapped.
   // {T}: Add {W} or {B}.
@@ -58638,6 +59496,68 @@ const POOL_6: readonly CardDefinition[] = [
             },
           ],
           label: '{2}{b}: exile target card from a graveyard. if it was a creature card, create a 2/2 black zombie creature token',
+        },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['exile'],
+    backFaceFreeCast: true,
+  },
+  // (As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)
+  // When this Siege enters, you may discard a card. If you do, draw two cards.
+  {
+    id: '407d6723-bf58-403e-b2ac-ba52c51d356f',
+    name: 'Invasion of Mercadia',
+    types: ['battle'],
+    cost: { generic: 1, R: 1 },
+    defense: 4,
+    subtypes: ['siege'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayCostEffects',
+            params: {
+              cost: [{ primitive: 'discardCard', params: { who: 'controller' } }],
+              effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+              prompt: 'You may discard a card. If you do, draw two cards',
+            },
+          },
+        ],
+        label: 'Enters: you may discard a card. if you do, draw two cards',
+      },
+    ],
+    backFace: {
+      id: '407d6723-bf58-403e-b2ac-ba52c51d356f#back',
+      name: 'Kyren Flamewright',
+      types: ['creature'],
+      power: 3,
+      toughness: 3,
+      subtypes: ['goblin', 'spellshaper'],
+      noManaCost: true,
+      activated: [
+        {
+          cost: { mana: { generic: 2, R: 1 }, tap: true, discard: { count: 1 } },
+          effects: [
+            {
+              primitive: 'makeToken',
+              params: {
+                power: 1,
+                toughness: 1,
+                name: 'Elemental',
+                colors: ['U', 'R'],
+                subtypes: ['Elemental'],
+                count: 2,
+              },
+            },
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { keywords: { haste: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+            },
+          ],
+          label: '{2}{r}, {t}, discard a card: create two 1/1 blue and red elemental creature tokens. creatures you control get +1/+0 and gain haste until end of turn',
         },
       ],
       isBackFace: true,
@@ -63369,6 +64289,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
   // When this creature enters, you may tap target creature.
   {
@@ -64242,9 +65165,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // Equipped creature gets +1/+1 and has vigilance.
   // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -64700,6 +65620,23 @@ const POOL_7: readonly CardDefinition[] = [
     },
     subtypes: ['goblin', 'warrior'],
   },
+  // {R}, {T}, Discard a card: This creature deals 1 damage to any target.
+  {
+    id: '4389fbcd-182a-4cac-b14f-aa971948cf8e',
+    name: 'Kris Mage',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { R: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+        label: '{r}, {t}, discard a card: ~ deals 1 damage to any target',
+      },
+    ],
+  },
   // Trample
   // Whenever a creature you control with power 4 or greater enters, put a +1/+1 counter on this creature.
   {
@@ -64720,6 +65657,25 @@ const POOL_7: readonly CardDefinition[] = [
         },
         effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
         label: 'creature (you) enters: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // {G}, Discard a card: This creature gets +0/+2 until end of turn.
+  {
+    id: 'e188562f-8219-4fb0-ac2c-5618cfb00bca',
+    name: 'Krosan Archer',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['centaur', 'archer'],
+    activated: [
+      {
+        cost: { mana: { G: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 2 } }],
+        label: '{g}, discard a card: ~ gets +0/+2 until end of turn',
       },
     ],
   },
@@ -68149,6 +69105,31 @@ const POOL_7: readonly CardDefinition[] = [
     subtypes: ['elf', 'scout'],
     triggers: [{ condition: { on: 'attacks' }, effects: [{ primitive: 'scry' }], label: 'Attacks: scry 1' }],
   },
+  // Trample
+  // Discard a creature card: Put a +1/+1 counter on this creature.
+  // {B}: Regenerate this creature.
+  {
+    id: 'cc138550-a797-4a57-91b3-626aac1b1edd',
+    name: 'Lotleth Troll',
+    types: ['creature'],
+    cost: { B: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { trample: true },
+    subtypes: ['zombie', 'troll'],
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Discard a creature card: put a +1/+1 counter on ~',
+      },
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{b}: regenerate ~',
+      },
+    ],
+  },
   // Flying
   // {T}: Add one mana of any color.
   {
@@ -68943,6 +69924,25 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Haste
+  // {T}, Discard a card: Draw a card.
+  {
+    id: '89a62145-8dad-4385-9c6d-8cf8bfdad681',
+    name: 'Mad Prophet',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['human', 'shaman'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{t}, discard a card: draw a card',
+      },
+    ],
+  },
   // Enchant creature
   // Enchanted creature gets +3/+0 and has menace.
   {
@@ -69053,6 +70053,23 @@ const POOL_7: readonly CardDefinition[] = [
         affects: { anyOfTypes: ['creature'], controller: 'you' },
         keywords: { haste: true },
         label: 'creatures you control have haste',
+      },
+    ],
+  },
+  // {T}, Discard a card at random: This creature deals 1 damage to any target.
+  {
+    id: '672b4f9a-84e4-4a27-8d03-11a63a701fec',
+    name: 'Mage il-Vec',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'wizard'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+        label: '{t}, discard a card at random: ~ deals 1 damage to any target',
       },
     ],
   },
@@ -70532,6 +71549,25 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // {2}{B}, Discard a card: Put two +1/+1 counters on this creature.
+  {
+    id: 'fa3ed9d2-9053-4583-a226-0ab49bbdab6e',
+    name: 'Markov Dreadknight',
+    types: ['creature'],
+    cost: { generic: 3, B: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['vampire', 'knight'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, B: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'addCounters', params: { amount: 2, self: true } }],
+        label: '{2}{b}, discard a card: put two +1/+1 counters on ~',
+      },
+    ],
+  },
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
     id: '29c3d3f7-5e28-4fec-8422-87856fcd1e8e',
@@ -70853,6 +71889,25 @@ const POOL_7: readonly CardDefinition[] = [
         cost: { mana: { generic: 2, B: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: '{2}{b}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // Haste
+  // Discard a card, Sacrifice this creature: Draw a card.
+  {
+    id: '2e918a9c-4d06-489e-9a7c-a56f7ded7c0e',
+    name: 'Masked Meower',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { haste: true },
+    subtypes: ['spider', 'cat', 'hero'],
+    activated: [
+      {
+        cost: { discard: { count: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Discard a card, sacrifice ~: draw a card',
       },
     ],
   },
@@ -71733,6 +72788,20 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 5,
     subtypes: ['human', 'soldier'],
   },
+  // {1}{U}, Discard a card: Draw a card.
+  {
+    id: '5e9ffd83-b5c9-46b4-bc5a-172ca34ddc79',
+    name: 'Mental Discipline',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 2 },
+    activated: [
+      {
+        cost: { mana: { generic: 1, U: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{1}{u}, discard a card: draw a card',
+      },
+    ],
+  },
   // Mill two cards.
   // Draw a card.
   {
@@ -71805,6 +72874,43 @@ const POOL_7: readonly CardDefinition[] = [
         label: 'Enters: draw a card',
       },
     ],
+  },
+  // {2}{R}, Discard a card: Draw a card.
+  {
+    id: '0b4399b6-e67f-40d8-8676-f5db7e04a6c9',
+    name: 'Merchant of the Vale',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['human', 'peasant'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{2}{r}, discard a card: draw a card',
+      },
+    ],
+    backFace: {
+      id: '0b4399b6-e67f-40d8-8676-f5db7e04a6c9#back',
+      name: 'Haggle',
+      types: ['instant'],
+      cost: { R: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'mayCostEffects',
+          params: {
+            cost: [{ primitive: 'discardCard', params: { who: 'controller' } }],
+            effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            prompt: 'You may discard a card. If you do, draw a card',
+          },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // Search your library for a blue instant card, reveal that card, put it into your hand, then shuffle.
   {
@@ -72199,6 +73305,28 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { lifelink: true },
     subtypes: ['unicorn'],
   },
+  // Cumulative upkeep {1} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  // {U}, Discard a card: Draw a card.
+  {
+    id: '91129aeb-eed5-4b98-896f-fb3bab48b25d',
+    name: 'Mesmeric Trance',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 2 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { generic: 1 } } }],
+        label: 'Cumulative upkeep {1}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { U: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{u}, discard a card: draw a card',
+      },
+    ],
+  },
   // Flying
   // When this creature dies, draw a card.
   {
@@ -72444,6 +73572,9 @@ const POOL_7: readonly CardDefinition[] = [
       modifies: { power: 4, toughness: 0, keywords: { trample: true } },
     },
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // When this artifact enters, it deals 2 damage to any target.
   // {T}: Add one mana of any color.
   {
@@ -73142,6 +74273,31 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature enters with two +1/+1 counters on it.
+  // {1}, Discard a card: Put a +1/+1 counter on this creature.
+  // Remove two +1/+1 counters from this creature: Draw a card.
+  {
+    id: 'ccce91e9-58f4-4358-a696-5c439ea19fc9',
+    name: 'Mindless Automaton',
+    types: ['artifact', 'creature'],
+    cost: { generic: 4 },
+    power: 0,
+    toughness: 0,
+    subtypes: ['construct'],
+    effects: [{ primitive: 'addCounters', params: { amount: 2, self: true } }],
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: '{1}, discard a card: put a +1/+1 counter on ~',
+      },
+      {
+        cost: { removeCounters: { kind: '+1/+1', count: 2 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Remove two +1/+1 counters from ~: draw a card',
+      },
+    ],
+  },
   // Target player discards three cards.
   // Suspend 4—{B} (Rather than cast this card from your hand, you may pay {B} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
   {
@@ -73393,9 +74549,6 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['minotaur', 'warrior'],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // When this creature dies, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
   {
     id: 'd902f154-6fe8-4b97-aa67-4d4696abf887',
@@ -74517,6 +75670,20 @@ const POOL_8: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ U: 1 }, { R: 1 }],
   },
+  // {R}, Discard a land card: This enchantment deals 2 damage to any target.
+  {
+    id: 'd99fd073-c249-4cd2-9d71-be417c88c493',
+    name: 'Molten Vortex',
+    types: ['enchantment'],
+    cost: { R: 1 },
+    activated: [
+      {
+        cost: { mana: { R: 1 }, discard: { count: 1, filter: { anyOfTypes: ['land'] } } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+        label: '{r}, discard a land card: ~ deals 2 damage to any target',
+      },
+    ],
+  },
   // Flying
   // At the beginning of your upkeep, sacrifice this creature unless you pay {2}.
   {
@@ -75323,6 +76490,26 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 1, W: 1, B: 1 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'creatureOrEnchantment' } }],
+  },
+  // {1}{B}, Discard a card: Exile target card from a graveyard.
+  // {1}{B}, Sacrifice this enchantment: Exile target card from a graveyard.
+  {
+    id: 'c7b93caa-0f43-43ac-84e9-99f6bcbf9e81',
+    name: 'Mortiphobia',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 2 },
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'exileTargetCardFromGraveyard', params: { targets: 'cardInAnyGraveyard' } }],
+        label: '{1}{b}, discard a card: exile target card from a graveyard',
+      },
+      {
+        cost: { mana: { generic: 1, B: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'exileTargetCardFromGraveyard', params: { targets: 'cardInAnyGraveyard' } }],
+        label: '{1}{b}, sacrifice ~: exile target card from a graveyard',
+      },
+    ],
   },
   // This land enters tapped.
   // When this land enters, you may put target creature card from your graveyard on top of your library.
@@ -76887,6 +78074,36 @@ const POOL_8: readonly CardDefinition[] = [
         cost: { mana: { B: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: '{b}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // {G}, Discard a card: Target creature gets +2/+2 until end of turn.
+  // {G}, Sacrifice this enchantment: Target creature gets +2/+2 until end of turn.
+  {
+    id: 'eea658dd-7567-4b93-88a4-08b4ffb3dad7',
+    name: 'Narcissism',
+    types: ['enchantment'],
+    cost: { generic: 2, G: 1 },
+    activated: [
+      {
+        cost: { mana: { G: 1 }, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: '{g}, discard a card: target creature gets +2/+2 until end of turn',
+      },
+      {
+        cost: { mana: { G: 1 }, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: '{g}, sacrifice ~: target creature gets +2/+2 until end of turn',
       },
     ],
   },
@@ -78880,6 +80097,25 @@ const POOL_8: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ R: 1 }, { W: 1 }, { B: 1 }],
   },
+  // Reach
+  // Discard a card: This creature gets +1/+1 until end of turn.
+  {
+    id: 'b432cccb-4291-46f3-a171-919adf8b95eb',
+    name: 'Noose Constrictor',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { reach: true },
+    subtypes: ['snake'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Discard a card: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Whenever a creature you control dies, scry 1 and put an oil counter on this artifact.
   // {1}, {T}, Remove two oil counters from this artifact: Draw a card.
   {
@@ -78999,6 +80235,23 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 1, W: 1 },
     effects: [{ primitive: 'exileTarget', params: { targets: 'attackingCreature' } }],
+  },
+  // {2}{B}, {T}, Discard a card: Destroy target nonblack creature. It can't be regenerated.
+  {
+    id: '239e48d8-e2ba-4e25-88ef-301420c796b4',
+    name: 'Notorious Assassin',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'spellshaper', 'assassin'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, B: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', notColor: 'B' } }],
+        label: '{2}{b}, {t}, discard a card: destroy target nonblack creature',
+      },
+    ],
   },
   // You gain 6 life.
   {
@@ -79716,6 +80969,32 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flash (You may cast this spell any time you could cast an instant.)
+  // Enchant creature
+  // Enchanted creature has "Discard a card: This creature gets +1/+1 until end of turn."
+  {
+    id: '0cd5486b-c6f4-4cfc-9590-8ffc78b48b0a',
+    name: 'Oblivion Crown',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 1 },
+    keywords: { flash: true },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: {
+        activated: [
+          {
+            cost: { discard: { count: 1 } },
+            effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+            label: 'Discard a card: ~ gets +1/+1 until end of turn',
+          },
+        ],
+      },
+    },
+  },
   // When this enchantment enters, exile another target nonland permanent.
   // When this enchantment leaves the battlefield, return the exiled card to the battlefield under its owner's control.
   {
@@ -80144,6 +81423,23 @@ const POOL_8: readonly CardDefinition[] = [
     keywords: { defender: true },
     subtypes: ['ogre', 'warrior'],
   },
+  // {2}, Discard a card at random: This creature deals 2 damage to any target.
+  {
+    id: 'e5e11a62-7885-4494-b128-938485dea8a5',
+    name: 'Ogre Shaman',
+    types: ['creature'],
+    cost: { generic: 3, R: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['ogre', 'shaman'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+        label: '{2}, discard a card at random: ~ deals 2 damage to any target',
+      },
+    ],
+  },
   // This creature can't block.
   {
     id: '60b6b204-f3a2-4d58-94a7-1d132ccfc819',
@@ -80241,6 +81537,23 @@ const POOL_8: readonly CardDefinition[] = [
     power: 3,
     toughness: 6,
     subtypes: ['treefolk', 'warrior'],
+  },
+  // Discard a card: This creature gains flying until end of turn.
+  {
+    id: '571a9e92-6f34-4bf4-b7f4-15d12560efb6',
+    name: 'Olivia\'s Dragoon',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['vampire', 'berserker'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { flying: true } } }],
+        label: 'Discard a card: ~ gains flying until end of turn',
+      },
+    ],
   },
   // When this creature enters, choose one —
   // • Return target artifact card from your graveyard to your hand.
@@ -81342,6 +82655,23 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // {2}{R}, Discard a card: Draw a card.
+  {
+    id: '0f9bb73a-5b4e-4c9b-b0a6-8e531dc27394',
+    name: 'Oread of Mountain\'s Blaze',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['nymph'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{2}{r}, discard a card: draw a card',
+      },
+    ],
+  },
   {
     id: '0ea1dfb4-1983-41f7-956c-f2a1d1489b54',
     name: 'Oreskos Swiftclaw',
@@ -81579,6 +82909,9 @@ const POOL_8: readonly CardDefinition[] = [
     cost: { generic: 2 },
     manaAbilities: [{ produces: [{ W: 1, B: 1 }], cost: { mana: { generic: 1 } } }],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {3}{W}{B}, {T}: Target player loses 1 life and you gain 1 life.
   {
@@ -81752,6 +83085,23 @@ const POOL_8: readonly CardDefinition[] = [
       {
         primitive: 'grantKeywordToYoursUntilEndOfTurn',
         params: { keywords: { trample: true }, power: 2, toughness: 2, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
+  // Discard a card, Sacrifice this creature: Add {B}{B}{B}.
+  {
+    id: '8227e2fc-259d-4470-8522-d550746dbc4a',
+    name: 'Overeager Apprentice',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['human', 'minion'],
+    activated: [
+      {
+        cost: { discard: { count: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'addMana', params: { mana: ['B', 'B', 'B'] } }],
+        label: 'Discard a card, sacrifice ~: add {b}{b}{b}',
       },
     ],
   },
@@ -82565,6 +83915,43 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Discard a card at random: This creature gets +1/+0 and gains first strike until end of turn.
+  {
+    id: 'f487a6a7-066a-49bb-ab76-d79fc4300c29',
+    name: 'Pardic Lancer',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['human', 'barbarian'],
+    activated: [
+      {
+        cost: { discard: { count: 1, random: true } },
+        effects: [
+          { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } },
+          { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { firstStrike: true } } },
+        ],
+        label: 'Discard a card at random: ~ gets +1/+0 and gains first strike until end of turn',
+      },
+    ],
+  },
+  // {R}, Discard a card at random: This creature gets +2/+0 until end of turn.
+  {
+    id: '44ac622c-db04-41bf-817e-4698843e6346',
+    name: 'Pardic Swordsmith',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['dwarf'],
+    activated: [
+      {
+        cost: { mana: { R: 1 }, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: '{r}, discard a card at random: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // Trample
   {
     id: '2fffe967-3a99-4f00-af46-f4e5567598df',
@@ -82634,9 +84021,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // As this artifact enters, choose a creature type.
   // Creatures you control of the chosen type get +1/+1.
   // {T}: Add one mana of any color.
@@ -82654,6 +84038,23 @@ const POOL_9: readonly CardDefinition[] = [
         power: 1,
         toughness: 1,
         label: 'creatures you control of the chosen type get +1/+1',
+      },
+    ],
+  },
+  // Discard a card: Regenerate this creature. (The next time this creature would be destroyed this turn, instead tap it, remove it from combat, and heal all damage on it.)
+  {
+    id: '3002ccef-5322-4f99-9fce-3b4303347240',
+    name: 'Patchwork Gnomes',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['gnome'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: 'Discard a card: regenerate ~',
       },
     ],
   },
@@ -82755,6 +84156,23 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Discard a card: This creature gains first strike until end of turn.
+  {
+    id: 'e216a539-152b-4a83-98ef-1996182a5714',
+    name: 'Patrol Hound',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['dog'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { firstStrike: true } } }],
+        label: 'Discard a card: ~ gains first strike until end of turn',
+      },
+    ],
+  },
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Prevent all combat damage that would be dealt this turn.
   {
@@ -82828,6 +84246,20 @@ const POOL_9: readonly CardDefinition[] = [
         },
       ],
     },
+  },
+  // {W}, Discard a card: You gain 3 life.
+  {
+    id: '36e37aa2-d898-47f5-9679-5717bfa25688',
+    name: 'Peace of Mind',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    activated: [
+      {
+        cost: { mana: { W: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'gainLife', params: { amount: 3 } }],
+        label: '{w}, discard a card: you gain 3 life',
+      },
+    ],
   },
   // When this creature enters, you gain 3 life.
   {
@@ -82930,6 +84362,32 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, firstStrike: true },
     subtypes: ['pegasus'],
+  },
+  // {2}, Discard a card: Create a 1/1 white Pegasus creature token with flying.
+  {
+    id: 'a2bce334-0ae6-4a7d-85db-99ee205ce546',
+    name: 'Pegasus Refuge',
+    types: ['enchantment'],
+    cost: { generic: 3, W: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Pegasus',
+              colors: ['W'],
+              subtypes: ['Pegasus'],
+              keywords: { flying: true },
+            },
+          },
+        ],
+        label: '{2}, discard a card: create a 1/1 white pegasus creature token with flying',
+      },
+    ],
   },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   // When this creature enters, you gain 7 life.
@@ -84888,6 +86346,28 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, infect: true },
     subtypes: ['phyrexian', 'insect', 'horror'],
+  },
+  // {B}, {T}, Discard a card: Target creature gets -1/-1 until end of turn.
+  {
+    id: '7a1e3438-dbee-473a-8556-d4e28b939266',
+    name: 'Plague Witch',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elf', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, targets: 'creature' },
+          },
+        ],
+        label: '{b}, {t}, discard a card: target creature gets -1/-1 until end of turn',
+      },
+    ],
   },
   // {B}, Sacrifice a creature: Target creature gets -1/-1 until end of turn.
   {
@@ -87341,6 +88821,26 @@ const POOL_9: readonly CardDefinition[] = [
     cost: { generic: 5, B: 1 },
     subtypes: ['arcane'],
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -5, toughness: -5, targets: 'creature' } }],
+  },
+  // Flying
+  // Discard a card: This creature gets +4/+4 until end of turn. Activate only once each turn.
+  {
+    id: 'd3297f28-a15d-43dd-a96e-09701d5f9aed',
+    name: 'Pulsating Illusion',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 0,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['illusion'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 4, toughness: 4 } }],
+        activateOnly: { kind: 'onceEachTurn' },
+        label: 'Discard a card: ~ gets +4/+4 until end of turn. activate only once each turn',
+      },
+    ],
   },
   // Whenever this creature attacks, each opponent loses 1 life.
   {
@@ -89894,6 +91394,23 @@ const POOL_9: readonly CardDefinition[] = [
     ],
     effects: [{ primitive: 'discardCard', params: { count: 1, who: 'targetPlayer', targets: 'player' } }],
   },
+  // Discard a card: This creature gets +2/-2 until end of turn.
+  {
+    id: 'cc4d04bc-6263-43b0-9b01-894a532cd3ed',
+    name: 'Ravenous Bloodseeker',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['vampire', 'berserker'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: -2 } }],
+        label: 'Discard a card: ~ gets +2/-2 until end of turn',
+      },
+    ],
+  },
   // When this creature enters, destroy target creature an opponent controls.
   {
     id: 'a4dfbac0-1849-41c5-853a-1fee108d0b01',
@@ -90419,6 +91936,9 @@ const POOL_9: readonly CardDefinition[] = [
     },
     entwine: { generic: 1, G: 1 },
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // Create a 2/2 black Zombie creature token.
   // Flashback {4}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -91679,9 +93199,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Choose one —
   // • Exile target creature with power 4 or greater.
   // • Exile target enchantment.
@@ -92844,6 +94361,32 @@ const POOL_10: readonly CardDefinition[] = [
         cost: { generic: 2 },
         effects: [{ primitive: 'drawCards', params: { count: 1 } }],
         label: 'Cycling {2}',
+      },
+    ],
+  },
+  // {1}{B}, {T}, Discard a card: Target creature gets +1/+0 and gains first strike until end of turn.
+  {
+    id: 'a51ea7d3-a9d7-4b1d-bf3b-3fcfb6a49624',
+    name: 'Ridged Kusite',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['horror', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 0, targets: 'creature' },
+          },
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { firstStrike: true }, targets: 'creature' },
+          },
+        ],
+        label: '{1}{b}, {t}, discard a card: target creature gets +1/+0 and gains first strike until end of turn',
       },
     ],
   },
@@ -95139,6 +96682,23 @@ const POOL_10: readonly CardDefinition[] = [
     toughness: 6,
     subtypes: ['giant'],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // {T}, Discard a card: Draw a card.
+  {
+    id: '254391a3-c12a-4944-9da5-ae166094480f',
+    name: 'Rummaging Goblin',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['goblin', 'rogue'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{t}, discard a card: draw a card',
+      },
+    ],
   },
   // {2}{U}: Surveil 1. (Look at the top card of your library. You may put that card into your graveyard.)
   {
@@ -99499,6 +101059,9 @@ const POOL_10: readonly CardDefinition[] = [
       ],
     },
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // {T}: Add {U}.
   {
     id: '39451b4d-cd7a-40da-b457-cb51b609173f',
@@ -99756,6 +101319,23 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // {U}, {T}, Discard a card: Target player mills three cards.
+  {
+    id: '7e897f14-8775-4bc3-a3b2-b149f79ec702',
+    name: 'Seer of the Last Tomorrow',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 1,
+    toughness: 4,
+    subtypes: ['snake', 'cleric'],
+    activated: [
+      {
+        cost: { mana: { U: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'mill', params: { amount: 3, targets: 'player' } }],
+        label: '{u}, {t}, discard a card: target player mills three cards',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {2}, {T}: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
   {
@@ -99846,6 +101426,37 @@ const POOL_10: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
     subtypes: ['leviathan'],
+  },
+  // Discard a land card: This enchantment deals 2 damage to any target.
+  {
+    id: '6b2eb4e6-4ce1-4f72-9b3d-b6a44b22bd2e',
+    name: 'Seismic Assault',
+    types: ['enchantment'],
+    cost: { R: 3 },
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['land'] } } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+        label: 'Discard a land card: ~ deals 2 damage to any target',
+      },
+    ],
+  },
+  // {2}{R}, {T}, Discard a card: Destroy target land.
+  {
+    id: '9524432a-3186-4c7b-a780-28bdbe36053f',
+    name: 'Seismic Mage',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'land' } }],
+        label: '{2}{r}, {t}, discard a card: destroy target land',
+      },
+    ],
   },
   // Trample
   // {2}{R}, Sacrifice a land: Draw a card.
@@ -100250,6 +101861,23 @@ const POOL_10: readonly CardDefinition[] = [
           },
         ],
         label: 'Sacrifice ~: creatures you control gain indestructible until end of turn',
+      },
+    ],
+  },
+  // {T}, Discard a creature card: Draw a card.
+  {
+    id: 'f8805db2-5a26-43cf-9b74-f882c283e5e4',
+    name: 'Selhoff Entomber',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['zombie'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{t}, discard a creature card: draw a card',
       },
     ],
   },
@@ -100888,9 +102516,6 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // Enchant creature
   // Enchanted creature gets +2/+2 and has flying and vigilance. (Attacking doesn't cause it to tap.)
   {
@@ -104323,6 +105948,35 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+  // {1}{G}, {T}, Discard a card: Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+  {
+    id: '9bc99b33-ce06-4a44-8b23-300b41b2b2fe',
+    name: 'Silverglade Pathfinder',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['dryad', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['land'] },
+              nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: '{1}{g}, {t}, discard a card: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {W} or {B}.
   // {4}, {T}: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
@@ -104428,6 +106082,23 @@ const POOL_11: readonly CardDefinition[] = [
         cost: { mana: { G: 1 } },
         effects: [{ primitive: 'regenerate' }],
         label: '{g}: regenerate ~',
+      },
+    ],
+  },
+  // Discard a land card: This creature gets +1/+1 until end of turn.
+  {
+    id: 'df2ed9f3-50b1-493b-9c14-0f8ddb4d8c57',
+    name: 'Simian Brawler',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['ape', 'warrior'],
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['land'] } } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Discard a land card: ~ gets +1/+1 until end of turn',
       },
     ],
   },
@@ -105114,6 +106785,25 @@ const POOL_11: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 2, keywords: { flying: true } },
     },
   },
+  // Flying
+  // Discard a card: Add {B}.
+  {
+    id: '2d92fcf1-2ccd-47d2-9a24-f44b766a0b68',
+    name: 'Skirge Familiar',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['phyrexian', 'imp'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'addMana', params: { mana: ['B'] } }],
+        label: 'Discard a card: add {b}',
+      },
+    ],
+  },
   // Sacrifice a Goblin: Add {R}.
   {
     id: '7bc508b3-8b38-4cf0-89a7-a2cb247ed083',
@@ -105350,6 +107040,26 @@ const POOL_11: readonly CardDefinition[] = [
       label: 'Equip {1}',
       modifies: { power: 1, toughness: -1, keywords: {} },
     },
+  },
+  // {T}: You gain 1 life.
+  // {T}, Discard a card: You gain 3 life.
+  {
+    id: '1d8567c5-d068-42bb-a593-3849e65e29c0',
+    name: 'Skullmead Cauldron',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: '{t}: you gain 1 life',
+      },
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'gainLife', params: { amount: 3 } }],
+        label: '{t}, discard a card: you gain 3 life',
+      },
+    ],
   },
   // As an additional cost to cast this spell, sacrifice a creature.
   // Draw two cards.
@@ -105991,6 +107701,25 @@ const POOL_11: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['elf', 'druid', 'warrior'],
     produces: ['G'],
+  },
+  // Flying
+  // Discard a creature card: This creature gets +2/+2 until end of turn.
+  {
+    id: 'de545a92-a489-4695-8a03-c02a8e92f1b6',
+    name: 'Skyshroud Vampire',
+    types: ['creature'],
+    cost: { generic: 3, B: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['vampire'],
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Discard a creature card: ~ gets +2/+2 until end of turn',
+      },
+    ],
   },
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // Reach (This creature can block creatures with flying.)
@@ -108139,6 +109868,26 @@ const POOL_11: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // Discard a card: Songbird gains flying until end of turn. (She can't be blocked except by creatures with flying or reach.)
+  {
+    id: '2b327925-8a50-4fd7-9010-673f9a3e97ce',
+    name: 'Songbird, Sonic Screamer',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    legendary: true,
+    keywords: { lifelink: true },
+    subtypes: ['human', 'villain'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { flying: true } } }],
+        label: 'Discard a card: ~ gains flying until end of turn',
+      },
+    ],
+  },
   // {1}{U}, {T}: Draw a card, then discard a card.
   {
     id: 'eb93c9d2-88eb-403d-bb67-8e8b0462ac27',
@@ -108548,6 +110297,9 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   {
     id: '4554e25f-12e7-4b06-bd17-29fb340f2bb3',
     name: 'Southern Elephant',
@@ -110173,9 +111925,6 @@ const POOL_11: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 1, keywords: { protectionFrom: ['creatures'] } },
     },
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // When this creature dies, each opponent loses 1 life and you gain 1 life.
   {
     id: 'cf3765b7-11e2-4837-b5e5-ca24adc0e33c',
@@ -111321,6 +113070,25 @@ const POOL_12: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }, { kind: 'subtype', subtype: 'forest' }] },
     subtypes: ['hag'],
   },
+  // Flying
+  // {1}{B}, Discard a card: This creature gets +2/+2 until end of turn.
+  {
+    id: '16705695-1ba8-4169-974f-d8c683ab2652',
+    name: 'Stalking Bloodsucker',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['vampire'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: '{1}{b}, discard a card: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
   // Devoid (This card has no color.)
   // {C}: This creature gets +1/+2 until end of turn. Activate only once each turn. ({C} represents colorless mana.)
   {
@@ -111368,6 +113136,28 @@ const POOL_12: readonly CardDefinition[] = [
         condition: { on: 'combatDamageToPlayer', intervening: { kind: 'sourceNotRenowned' } },
         effects: [{ primitive: 'becomeRenowned', params: { amount: 1 } }],
         label: 'Renown 1',
+      },
+    ],
+  },
+  // {1}{G}, {T}, Discard a card: Creatures you control get +1/+1 and gain trample until end of turn.
+  {
+    id: '35390394-013f-4996-9d1a-e4c53de941ba',
+    name: 'Stampede Driver',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { trample: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{1}{g}, {t}, discard a card: creatures you control get +1/+1 and gain trample until end of turn',
       },
     ],
   },
@@ -112240,6 +114030,23 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}, Discard a card: Tap target creature.
+  {
+    id: '4f0f87d4-5fed-415c-918a-c3546697a3da',
+    name: 'Stern Constable',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'soldier'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
+        label: '{t}, discard a card: tap target creature',
+      },
+    ],
+  },
   // When this creature enters, return target artifact or enchantment to its owner's hand.
   {
     id: '7042fdc8-e2dd-4f9a-97b9-00d95c9eae74',
@@ -113047,6 +114854,20 @@ const POOL_12: readonly CardDefinition[] = [
         params: { keywords: { firstStrike: true }, targets: 'creature' },
       },
       { primitive: 'scry' },
+    ],
+  },
+  // {2}, Discard a card at random: This enchantment deals 2 damage to any target.
+  {
+    id: '45f03556-cef5-438d-a1d8-66c297502622',
+    name: 'Stormbind',
+    types: ['enchantment'],
+    cost: { generic: 1, R: 1, G: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, discard: { count: 1, random: true } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+        label: '{2}, discard a card at random: ~ deals 2 damage to any target',
+      },
     ],
   },
   // Bloodthirst 2 (If an opponent was dealt damage this turn, this creature enters with two +1/+1 counters on it.)
@@ -113882,6 +115703,23 @@ const POOL_12: readonly CardDefinition[] = [
       {
         primitive: 'ifKicked',
         params: { effects: [{ primitive: 'addCounters', params: { amount: 2, self: true } }] },
+      },
+    ],
+  },
+  // {U}{U}, {T}, Discard a card: Counter target noncreature spell.
+  {
+    id: 'd3567b4e-6e31-40b0-83ea-4a2a58bd637c',
+    name: 'Stronghold Machinist',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { U: 2 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'counterSpell', params: { targets: 'noncreatureSpell' } }],
+        label: '{u}{u}, {t}, discard a card: counter target noncreature spell',
       },
     ],
   },
@@ -115569,6 +117407,30 @@ const POOL_12: readonly CardDefinition[] = [
       {
         primitive: 'makeToken',
         params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'] },
+      },
+    ],
+  },
+  // {G}, Discard a creature card: Search your library for a creature card, reveal that card, put it into your hand, then shuffle.
+  {
+    id: '4ef0d7f9-ddb9-4e83-a9bf-09bec22fc80d',
+    name: 'Survival of the Fittest',
+    types: ['enchantment'],
+    cost: { generic: 1, G: 1 },
+    activated: [
+      {
+        cost: { mana: { G: 1 }, discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['creature'] },
+              destination: 'hand',
+            },
+          },
+        ],
+        label: '{g}, discard a creature card: search your library for a creature card, reveal that card, put it into your hand, then shuffle',
       },
     ],
   },
@@ -117616,6 +119478,9 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // {1}, {T}: Target creature gains haste until end of turn.
   {
     id: 'e3b28135-5c48-4525-8bc6-4833a904ade4',
@@ -118812,6 +120677,23 @@ const POOL_12: readonly CardDefinition[] = [
     cost: { generic: 3, hybrid: [['U', { life: 2 }]] },
     effects: [{ primitive: 'drawCards', params: { count: 2 } }, { primitive: 'proliferate' }],
   },
+  // Discard a card: This creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)
+  {
+    id: 'ac7bb326-a07a-448c-a962-b9d3acc9d5b8',
+    name: 'Thalakos Drifters',
+    types: ['creature'],
+    cost: { generic: 2, U: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['thalakos'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { shadow: true } } }],
+        label: 'Discard a card: ~ gains shadow until end of turn',
+      },
+    ],
+  },
   // Shadow (This creature can block or be blocked by only creatures with shadow.)
   // When this creature leaves the battlefield, draw a card.
   {
@@ -119144,9 +121026,6 @@ const POOL_12: readonly CardDefinition[] = [
     legendary: true,
     subtypes: ['giant'],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // This land enters tapped.
   // {T}: Add {U}.
   // {1}{U}, {T}, Sacrifice this land: Draw a card.
@@ -119176,6 +121055,32 @@ const POOL_13: readonly CardDefinition[] = [
     legendary: true,
     keywords: { hexproof: true },
     subtypes: ['serpent'],
+  },
+  // {T}, Discard a card: Create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
+  // {4}, {T}, Sacrifice this artifact: Return target creature card from your graveyard to your hand.
+  {
+    id: '039d62b0-3309-4424-a2ea-5a0d88d4bd72',
+    name: 'The Underworld Cookbook',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['book'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'createPredefinedToken', params: { token: 'food' } }],
+        label: '{t}, discard a card: create a food token',
+      },
+      {
+        cost: { mana: { generic: 4 }, tap: true, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+        label: '{4}, {t}, sacrifice ~: return target creature card from your graveyard to your hand',
+      },
+    ],
   },
   // Defender
   // Other permanents you control have indestructible.
@@ -120008,6 +121913,34 @@ const POOL_13: readonly CardDefinition[] = [
     power: 3,
     toughness: 5,
     subtypes: ['dog'],
+  },
+  // {1}{W}, {T}, Discard a card: Create a 1/1 white Human Soldier creature token.
+  {
+    id: '15b7cd60-e3b9-4dd8-ad3c-a687f642147f',
+    name: 'Thraben Standard Bearer',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Human Soldier',
+              colors: ['W'],
+              subtypes: ['Human', 'Soldier'],
+            },
+          },
+        ],
+        label: '{1}{w}, {t}, discard a card: create a 1/1 white human soldier creature token',
+      },
+    ],
   },
   // Vigilance
   {
@@ -121126,6 +123059,23 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+  // Discard a card: This creature gets +0/+4 until end of turn.
+  {
+    id: '1d23e47a-21d5-4d7e-8aa0-3b3064da5967',
+    name: 'Tireless Tribe',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'nomad'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 4 } }],
+        label: 'Discard a card: ~ gets +0/+4 until end of turn',
+      },
+    ],
+  },
   // Tishana's power and toughness are each equal to the number of cards in your hand.
   // You have no maximum hand size.
   // When Tishana enters, draw a card for each creature you control.
@@ -121516,6 +123466,25 @@ const POOL_13: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { ward: 2 },
     subtypes: ['human', 'soldier'],
+  },
+  // Menace
+  // {1}, Discard a card: This creature explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on this creature, then put the card back or put it into your graveyard.)
+  {
+    id: '68132a28-b33b-48cb-acf8-42245312934e',
+    name: 'Tomb Robber',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { menace: true },
+    subtypes: ['human', 'pirate'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'explore' }],
+        label: '{1}, discard a card: ~ explores',
+      },
+    ],
   },
   // Flying
   // Delve (Each card you exile from your graveyard while casting this spell pays for {1}.)
@@ -121991,6 +123960,25 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+  // {B}, Discard a creature card: Return target creature card from your graveyard to your hand.
+  {
+    id: '1754b92b-d6f9-4503-af01-dee03f72a048',
+    name: 'Tortured Existence',
+    types: ['enchantment'],
+    cost: { B: 1 },
+    activated: [
+      {
+        cost: { mana: { B: 1 }, discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+        label: '{b}, discard a creature card: return target creature card from your graveyard to your hand',
+      },
+    ],
+  },
   // This spell can't be countered.
   // Indestructible
   // Toski attacks each combat if able.
@@ -122395,6 +124383,48 @@ const POOL_13: readonly CardDefinition[] = [
     effects: [
       { primitive: 'scry', params: { count: 3 } },
       { primitive: 'revealTopDrawIf', params: { filter: { anyOfTypes: ['creature', 'land'] } } },
+    ],
+  },
+  // {1}, {T}, Discard a card: You gain 4 life.
+  // {1}, {T}, Pay 1 life: Create a 0/1 white Goat creature token.
+  // {1}, {T}, Sacrifice a creature: Return target artifact card from your graveyard to your hand.
+  // {1}, {T}, Sacrifice an artifact: Draw a card.
+  {
+    id: '03499a72-e865-46ff-bcb2-75e53e4b600e',
+    name: 'Trading Post',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'gainLife', params: { amount: 4 } }],
+        label: '{1}, {t}, discard a card: you gain 4 life',
+      },
+      {
+        cost: { mana: { generic: 1 }, tap: true, life: 1 },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 0, toughness: 1, name: 'Goat', colors: ['W'], subtypes: ['Goat'] },
+          },
+        ],
+        label: '{1}, {t}, pay 1 life: create a 0/1 white goat creature token',
+      },
+      {
+        cost: { mana: { generic: 1 }, tap: true, sacrificeAnother: { anyOfTypes: ['creature'] } },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, filter: { anyOfTypes: ['artifact'] } },
+          },
+        ],
+        label: '{1}, {t}, sacrifice a creature: return target artifact card from your graveyard to your hand',
+      },
+      {
+        cost: { mana: { generic: 1 }, tap: true, sacrificeAnother: { anyOfTypes: ['artifact'] } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{1}, {t}, sacrifice an artifact: draw a card',
+      },
     ],
   },
   // {T}, Sacrifice this creature: Return target enchantment card from your graveyard to your hand.
@@ -123169,6 +125199,23 @@ const POOL_13: readonly CardDefinition[] = [
     subtypes: ['town'],
     entersTapped: true,
     producesOptions: [{ U: 1 }, { B: 1 }],
+  },
+  // Discard a card: This creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)
+  {
+    id: '278421ff-5324-44e5-b24f-dfbf9aa9b604',
+    name: 'Trespasser il-Vec',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 3,
+    toughness: 1,
+    subtypes: ['human', 'rogue'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { shadow: true } } }],
+        label: 'Discard a card: ~ gains shadow until end of turn',
+      },
+    ],
   },
   // This land enters tapped.
   // {T}: Add {B} or {R}.
@@ -124117,6 +126164,23 @@ const POOL_13: readonly CardDefinition[] = [
           },
         ],
         label: 'Enters: create a 1/1 white glimmer enchantment creature token',
+      },
+    ],
+  },
+  // Discard a card: Regenerate this creature.
+  {
+    id: 'c8e246c8-3b3f-47c4-8a1b-b5f2d36f0ca4',
+    name: 'Tunneler Wurm',
+    types: ['creature'],
+    cost: { generic: 6, G: 2 },
+    power: 6,
+    toughness: 6,
+    subtypes: ['wurm'],
+    activated: [
+      {
+        cost: { discard: { count: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: 'Discard a card: regenerate ~',
       },
     ],
   },
@@ -125400,6 +127464,28 @@ const POOL_13: readonly CardDefinition[] = [
     subtypes: ['giant', 'rogue'],
     entersTapped: true,
   },
+  // {B}, {T}, Discard a card: Return target creature card from your graveyard to your hand.
+  {
+    id: 'e99bb258-7b05-4c70-8a67-d7a5709a60ff',
+    name: 'Undertaker',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+        label: '{b}, {t}, discard a card: return target creature card from your graveyard to your hand',
+      },
+    ],
+  },
   // Whenever an opponent draws a card, this enchantment deals 1 damage to that player.
   {
     id: '967cf377-ae26-464d-85ac-8448b5a911f7',
@@ -126574,6 +128660,9 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // Protection from black
   {
     id: '7e73cd46-0dec-441b-bb91-ec6defb3355e',
@@ -126797,6 +128886,23 @@ const POOL_13: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { blockRestriction: { blockerPowerAtMostMine: true }, lifelink: true },
     subtypes: ['vampire', 'rogue'],
+  },
+  // Discard a creature card: This creature gets +2/+2 until end of turn.
+  {
+    id: '59339026-3ec6-4bd9-a1c4-c80951f8c68d',
+    name: 'Vampire Hounds',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['vampire', 'dog'],
+    activated: [
+      {
+        cost: { discard: { count: 1, filter: { anyOfTypes: ['creature'] } } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Discard a creature card: ~ gets +2/+2 until end of turn',
+      },
+    ],
   },
   // Flying
   // This creature can't block.
@@ -128319,6 +130425,28 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}, Discard a card: Creatures you control gain haste until end of turn.
+  {
+    id: '3457e346-a5de-4624-b577-f59d4c186537',
+    name: 'Viashino Lashclaw',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['lizard', 'warrior'],
+    activated: [
+      {
+        cost: { tap: true, discard: { count: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { haste: true }, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{t}, discard a card: creatures you control gain haste until end of turn',
+      },
+    ],
+  },
   // Echo {2}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
   {
     id: '26ba659c-7e0f-4d8b-b91c-3c0725102ba2',
@@ -128363,9 +130491,6 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // When this creature enters, you may discard a card. If you do, draw a card.
   {
     id: 'bf4c2d22-9c36-42cc-854d-f96410bb5cf1',
@@ -128429,6 +130554,23 @@ const POOL_14: readonly CardDefinition[] = [
         ],
         label: 'Bloodrush — {2}{R}',
         kind: 'bloodrush',
+      },
+    ],
+  },
+  // {1}{B}, Discard a card: Regenerate this creature.
+  {
+    id: 'b9451a62-31a4-4aaf-beef-2bf149f25ae3',
+    name: 'Viashino Skeleton',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['lizard', 'skeleton'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 }, discard: { count: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{b}, discard a card: regenerate ~',
       },
     ],
   },
@@ -131902,6 +134044,23 @@ const POOL_14: readonly CardDefinition[] = [
     keywords: { flying: true, ward: 2 },
     subtypes: ['djinn', 'wizard'],
   },
+  // {U}, {T}, Discard a card: Return target creature to its owner's hand.
+  {
+    id: 'd4dab9a1-19e6-4d90-a79c-275b47d7073c',
+    name: 'Waterfront Bouncer',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['merfolk', 'spellshaper'],
+    activated: [
+      {
+        cost: { mana: { U: 1 }, tap: true, discard: { count: 1 } },
+        effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+        label: '{u}, {t}, discard a card: return target creature to its owner\'s hand',
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {U} or {B}.
   // {2}{U}{B}, {T}, Sacrifice this land: Draw a card.
@@ -135135,6 +137294,9 @@ const POOL_14: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_15: readonly CardDefinition[] = [
   // Flying
   // When this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)
   {
@@ -136777,4 +138939,4 @@ const POOL_14: readonly CardDefinition[] = [
   },
 ];
 
-export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([...POOL_0, ...POOL_1, ...POOL_2, ...POOL_3, ...POOL_4, ...POOL_5, ...POOL_6, ...POOL_7, ...POOL_8, ...POOL_9, ...POOL_10, ...POOL_11, ...POOL_12, ...POOL_13, ...POOL_14]);
+export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([...POOL_0, ...POOL_1, ...POOL_2, ...POOL_3, ...POOL_4, ...POOL_5, ...POOL_6, ...POOL_7, ...POOL_8, ...POOL_9, ...POOL_10, ...POOL_11, ...POOL_12, ...POOL_13, ...POOL_14, ...POOL_15]);

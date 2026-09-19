@@ -246,6 +246,7 @@ export type SoakMechanicId =
   | 'x-cost'
   | 'kicker'
   | 'cycling'
+  | 'discard-cost'
   | 'buyback'
   | 'madness'
   | 'scry'
@@ -555,6 +556,15 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
+  // §3.172 — "Discard a card: …" paid as an activation cost (CR 602.2b). The
+  // ACTION is the witness: it names the card that left the hand, which no event
+  // does (a discard is a plain hand → graveyard zoneChange).
+  {
+    id: 'discard-cost',
+    label: '"Discard a card" paid as an activation cost',
+    witnessKind: 'action',
+    printedBy: (card) => (card.activated ?? []).some((ability) => ability.cost.discard !== undefined),
+  },
   // §3.106
   { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
   // §3.112

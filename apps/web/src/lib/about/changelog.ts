@@ -70,6 +70,16 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.172',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: '"Discard a card:" as a cost',
+    summary:
+      'Patrol Hound, Vampire Hounds, Frenetic Ogre, Tireless Tribe and the rest of the "Discard a card: …" family play as printed: you pick the card as you activate, it hits the graveyard before the ability resolves, a madness card discarded this way still gets its window — and the AI pitches its worst card, not its first.',
+    cards: ['Patrol Hound', 'Vampire Hounds', 'Frenetic Ogre', 'Tireless Tribe'],
+    witness: { kind: 'card', name: 'Patrol Hound' },
+  },
+  {
     section: '3.171',
     date: '2026-09-19',
     kind: 'mechanic',

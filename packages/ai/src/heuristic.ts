@@ -1364,7 +1364,13 @@ function bestOfferedActivation(
         weights,
         cards,
         index,
-      }) + activationCostValue(ability.cost, source!, { state: view as GameState, player: me, weights, index });
+      }) +
+      activationCostValue(
+        ability.cost,
+        source!,
+        { state: view as GameState, player: me, weights, index, cards },
+        action.costInstanceIds,
+      );
     if (score <= weights.passScore) continue;
     if (best !== undefined && score <= best.score) continue;
     best = { action, score, label: ctx.trace ? `activate ${ability.label}` : NO_REASON };
@@ -1527,7 +1533,7 @@ function bestFundedActivation(
           weights,
           cards,
           index,
-        }) + activationCostValue(ability.cost, perm, { state: view as GameState, player: me, weights, index });
+        }) + activationCostValue(ability.cost, perm, { state: view as GameState, player: me, weights, index, cards });
       // Not worth the mana — and this is the line that keeps the change honest:
       // an ability the ruler cannot price scores 0 and is still never used.
       if (score <= weights.passScore) continue;
