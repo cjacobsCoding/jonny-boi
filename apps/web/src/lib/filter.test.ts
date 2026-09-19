@@ -69,6 +69,29 @@ describe('queryCards', () => {
  * check: it hid in the pool's fifty multi-face cards, and only ever affected the
  * chip matching a card's SECOND face.
  */
+describe('the playable filter (§3.167)', () => {
+  const isPlayable = (c: { name: string }) => c.name.startsWith('A');
+
+  it('"playable" keeps only what the predicate admits; "all" keeps everything', () => {
+    const all = queryCards(allCards, { ...EMPTY_QUERY, playable: 'all' }, { isPlayable });
+    expect(all).toHaveLength(allCards.length);
+    const playable = queryCards(allCards, { ...EMPTY_QUERY, playable: 'playable' }, { isPlayable });
+    expect(playable.length).toBeGreaterThan(0);
+    expect(playable.length).toBeLessThan(allCards.length);
+    expect(playable.every((c) => c.name.startsWith('A'))).toBe(true);
+  });
+
+  it('with no predicate, "playable" cannot narrow — every card counts as playable', () => {
+    expect(queryCards(allCards, { ...EMPTY_QUERY, playable: 'playable' })).toHaveLength(
+      allCards.length,
+    );
+  });
+
+  it('the empty query asks for ALL cards, marked, not only the playable ones', () => {
+    expect(EMPTY_QUERY.playable).toBe('all');
+  });
+});
+
 describe('the type filter chips', () => {
   const pool = allAvailableCards();
 
@@ -78,7 +101,10 @@ describe('the type filter chips', () => {
       expect(result.length, `${type} matched nothing`).toBeGreaterThan(0);
       expect(result.length, `${type} did not narrow the pool`).toBeLessThan(pool.length);
       const leaked = result.filter((card) => !filterableTypes(card).has(type));
-      expect(leaked.map((c) => c.name), `${type} let non-${type} cards through`).toEqual([]);
+      expect(
+        leaked.map((c) => c.name),
+        `${type} let non-${type} cards through`,
+      ).toEqual([]);
     }
   });
 

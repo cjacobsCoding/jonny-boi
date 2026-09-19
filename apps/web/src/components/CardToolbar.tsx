@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { CardQuery } from '../lib/filter.js';
+import type { CardQuery, PlayableFilter } from '../lib/filter.js';
 import { COLOR_FILTERS, TYPE_FILTERS, SORT_OPTIONS, type SortId } from '../lib/config.js';
 
 interface CardToolbarProps {
@@ -7,7 +7,27 @@ interface CardToolbarProps {
   onChange: (query: CardQuery) => void;
   /** Number of cards currently matching, for the result counter. */
   resultCount: number;
+  /**
+   * §3.167 — how many of the matches the engine plays today. When given, the
+   * counter reads "1,204 cards · 310 playable" and the playable toggle shows;
+   * a caller whose list is playable by construction leaves it out.
+   */
+  playableCount?: number;
 }
+
+/** The two answers to "which cards?", in display order — one table, read by the toggle. */
+export const PLAYABLE_FILTER_OPTIONS: readonly {
+  readonly id: PlayableFilter;
+  readonly label: string;
+  readonly title: string;
+}[] = [
+  {
+    id: 'all',
+    label: 'All cards',
+    title: 'Every card Scryfall knows — the ones the engine cannot play yet are marked',
+  },
+  { id: 'playable', label: 'Playable', title: 'Only the cards the engine plays as printed today' },
+];
 
 /** Toggle a value in a readonly set, returning a new set (immutable). */
 function toggle(set: ReadonlySet<string>, value: string): Set<string> {
@@ -21,7 +41,12 @@ function toggle(set: ReadonlySet<string>, value: string): Set<string> {
  * Search + color/type filters + mana-value sort. Drives the {@link CardQuery}
  * for both the Cards browser and the Deck Builder's pool (DRY — one toolbar).
  */
-export function CardToolbar({ query, onChange, resultCount }: CardToolbarProps): ReactElement {
+export function CardToolbar({
+  query,
+  onChange,
+  resultCount,
+  playableCount,
+}: CardToolbarProps): ReactElement {
   return (
     <div className="toolbar">
       <input
@@ -81,8 +106,31 @@ export function CardToolbar({ query, onChange, resultCount }: CardToolbarProps):
         ))}
       </select>
 
+      {playableCount !== undefined && (
+        <div className="filter-group" role="group" aria-label="Playable or all cards">
+          {PLAYABLE_FILTER_OPTIONS.map(({ id, label, title }) => {
+            const active = query.playable === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`chip${active ? ' chip--active' : ''}`}
+                aria-pressed={active}
+                title={title}
+                onClick={() => onChange({ ...query, playable: id })}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <span className="result-count" aria-live="polite">
-        {resultCount} card{resultCount === 1 ? '' : 's'}
+        {resultCount.toLocaleString()} card{resultCount === 1 ? '' : 's'}
+        {playableCount !== undefined && query.playable === 'all' && (
+          <> · {playableCount.toLocaleString()} playable</>
+        )}
       </span>
     </div>
   );

@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadCardPool } from '@jonny-boi/cards';
-import { allAvailableCards, allCards, getCard } from './cards.js';
+import { allAvailableCards, allCards, getCard, cardImage } from './cards.js';
 
 /** Every card the SIM could ever propose as a swap-in candidate. */
 function simPoolCards() {
@@ -50,9 +50,12 @@ describe('the swap-in pool covers everything Suggestions can propose', () => {
   it('every simulatable card has real art, not a synthesized placeholder', () => {
     // The synthesized records exist as a safety net for an engine card Scryfall
     // data misses; if this fails the index needs re-fetching for the new cards.
+    // Asked through the UI's one art funnel (`cardImage`), not by peeking at
+    // `imageUris`: since §3.167 most records carry no URLs and derive them from
+    // the printing id, so a URL-less record is not an art-less one.
     const artless = simPoolCards()
       .map((def) => getCard(def.id))
-      .filter((card) => card && !card.imageUris?.normal && !card.imageUris?.large)
+      .filter((card) => card && cardImage(card, 'normal') === undefined)
       .map((card) => card!.name);
 
     expect(

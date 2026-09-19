@@ -725,6 +725,60 @@ button {
   box-shadow: var(--shadow-card);
 }
 
+/* §3.167 — a card the engine cannot play yet: the tile says so where the eye
+   lands (top-left, opposite the in-deck count) and the art is dimmed a touch,
+   so a grid of 32,000 reads at a glance as "these play, these do not". */
+.card-tile__unplayable {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 1;
+  background: var(--color-surface-raised);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  box-shadow: var(--shadow-card);
+}
+
+.card-tile--unplayable .card-tile__art-btn {
+  filter: saturate(0.55) brightness(0.8);
+}
+
+.card-tile--unplayable .card-tile__name {
+  color: var(--color-fg-muted);
+}
+
+/* The corpus tier arriving, or failing to: one line under the toolbar. */
+.cards-view__notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md, 0.5rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.cards-view__notice--failed {
+  border-color: var(--color-warning);
+  color: var(--color-fg);
+}
+
+/* The detail view's plain sentence about playability. */
+.modal__unplayable {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-warning);
+  background: var(--color-surface-raised);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 /* ---------- Empty state ---------- */
 .empty-state {
   text-align: center;

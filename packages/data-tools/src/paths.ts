@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CACHE_DIR_NAME,
   CARD_INDEX_FILENAME,
+  CORPUS_INDEX_FILENAME,
   DATA_DIR_NAME,
   IMAGE_CACHE_SUBDIR,
   RAW_CACHE_SUBDIR,
@@ -47,6 +48,10 @@ export function imageCacheDir(): string {
 /** Path to the committed normalized card index. */
 export function cardIndexPath(): string {
   return join(dataDir(), CARD_INDEX_FILENAME);
+}
+
+export function corpusIndexPath(): string {
+  return join(dataDir(), CORPUS_INDEX_FILENAME);
 }
 
 /** Path to the committed curated starter card-name list. */

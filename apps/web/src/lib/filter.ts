@@ -16,6 +16,23 @@ export interface CardQuery {
   types: ReadonlySet<string>;
   /** Sort order to apply to the result. */
   sort: SortId;
+  /**
+   * §3.167 — the whole of Scryfall is browsable, so the query says whether it
+   * wants every card or only the ones the engine plays today. `'all'` is the
+   * browser's default (he asked to see everything, marked); the Lab's pickers
+   * ask for `'playable'`, because a card the engine cannot play cannot be
+   * tested. Who is playable is the caller's predicate ({@link QueryOptions}):
+   * this module stays free of the engine pool.
+   */
+  playable: PlayableFilter;
+}
+
+export type PlayableFilter = 'all' | 'playable';
+
+/** What a caller supplies so the `playable` filter can be answered. */
+export interface QueryOptions {
+  /** Cheap per-card test; when absent, every card counts as playable. */
+  readonly isPlayable?: (card: NormalizedCard) => boolean;
 }
 
 /** An empty query that matches everything, sorted by name. */
@@ -24,6 +41,7 @@ export const EMPTY_QUERY: CardQuery = {
   colors: new Set(),
   types: new Set(),
   sort: 'name',
+  playable: 'all',
 };
 
 /** True when the card matches the free-text name search. */
@@ -118,9 +136,13 @@ function compareCards(a: NormalizedCard, b: NormalizedCard, sort: SortId): numbe
 export function queryCards(
   cards: readonly NormalizedCard[],
   query: CardQuery,
+  options: QueryOptions = {},
 ): NormalizedCard[] {
+  const isPlayable = options.isPlayable;
+  const wantPlayable = query.playable === 'playable' && isPlayable !== undefined;
   const filtered = cards.filter(
     (card) =>
+      (!wantPlayable || isPlayable(card)) &&
       matchesSearch(card, query.search) &&
       matchesColors(card, query.colors) &&
       matchesTypes(card, query.types),

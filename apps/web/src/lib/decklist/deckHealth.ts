@@ -22,6 +22,7 @@
 
 import { unsupportedReason } from './importedCards.js';
 import { getCard } from '../cards.js';
+import { corpusUnsupportedReason } from '../cards/playable.js';
 import { loadCardPool } from '../sim-pool.js';
 
 /** One card in a deck that the engine cannot play. */
@@ -88,6 +89,18 @@ const UNPLAYABLE_REASONS: ReadonlyArray<{
     row: 'an imported card the compiler could not finish: it knows precisely why',
     verdict: (cardId) => {
       const clauses = unsupportedReason(cardId);
+      if (!clauses) return undefined;
+      const systems = [...new Set(clauses.map((c) => c.missingEngineSystem))];
+      return systems.length > 0 ? systems : [NO_DEFINITION];
+    },
+  },
+  {
+    // §3.167 — the whole of Scryfall is browsable; a card from the corpus tier
+    // is compiled ONCE, on demand, so the marker can say which clauses the
+    // engine cannot play instead of only that it cannot.
+    row: 'a card in the browsable corpus: compile its text once and name the clauses',
+    verdict: (cardId) => {
+      const clauses = corpusUnsupportedReason(cardId);
       if (!clauses) return undefined;
       const systems = [...new Set(clauses.map((c) => c.missingEngineSystem))];
       return systems.length > 0 ? systems : [NO_DEFINITION];

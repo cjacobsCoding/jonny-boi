@@ -95,6 +95,20 @@ function replayPlayerAssets(): Plugin {
  */
 const MAX_PRECACHED_FILE_BYTES = 12 * 1024 * 1024;
 
+/**
+ * §3.167 — the CORPUS tier (every Scryfall card the engine pool does not hold)
+ * is a content-hashed JSON asset the app fetches on first use. It is NOT
+ * precached: it is ~10 MB raw, it is not needed to open a deck or play a game,
+ * and precaching it would make every install carry the whole of Magic before
+ * the shell can paint. It is cached at RUNTIME instead — CacheFirst, because
+ * the hash in its name changes exactly when its bytes do — so the second visit
+ * is offline-capable and the first offline visit says so honestly.
+ */
+const CORPUS_INDEX_ASSET = /\/assets\/corpus-index-[^/]*\.json$/;
+const CORPUS_INDEX_CACHE = 'corpus-index';
+/** Old hashes linger after an update; two entries is the live one plus one stale. */
+const CORPUS_INDEX_CACHE_ENTRIES = 2;
+
 export default defineConfig({
   base: DEPLOY_BASE,
 
@@ -141,7 +155,21 @@ export default defineConfig({
        * still loads without it — the limit is raised for the one asset that
        * needs it, not to hide a bundle nobody is watching.
        */
-      workbox: { maximumFileSizeToCacheInBytes: MAX_PRECACHED_FILE_BYTES },
+      workbox: {
+        maximumFileSizeToCacheInBytes: MAX_PRECACHED_FILE_BYTES,
+        globIgnores: ['**/corpus-index-*.json'],
+        runtimeCaching: [
+          {
+            urlPattern: CORPUS_INDEX_ASSET,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: CORPUS_INDEX_CACHE,
+              expiration: { maxEntries: CORPUS_INDEX_CACHE_ENTRIES },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
       includeAssets: [
         'icons/favicon-32.png',
         'icons/favicon-16.png',

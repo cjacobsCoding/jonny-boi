@@ -38,7 +38,27 @@ export {
   type PipelineResult,
 } from './pipeline.js';
 export {
+  SCRYFALL_IMAGE_ORIGIN,
+  imageUrisAreDerivable,
+  isScryfallUuid,
+  scryfallImageUrl,
+  stripImageQuery,
+  type ScryfallFace,
+  type ScryfallImageSize,
+} from './scryfall-image.js';
+export {
+  buildCorpusIndex,
+  serializeCorpusIndex,
+  slimCard,
+  SLIM_CARD_KEYS,
+  SLIM_FACE_KEYS,
+  type CorpusIndex,
+  type SlimScryfallCard,
+  type SlimScryfallCardFace,
+} from './corpus-index.js';
+export {
   cardIndexPath,
+  corpusIndexPath,
   starterCardListPath,
   imageCacheDir,
   rawCacheDir,
