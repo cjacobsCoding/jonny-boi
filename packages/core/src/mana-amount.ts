@@ -46,8 +46,9 @@ import { countPermanentsMatching, evaluateDerivedCount, type DerivedCountScope }
 import type { ManaColor, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
-import type { AggregatedMod } from './internal/stats.js';
-import { effectivePower, NO_MOD } from './internal/stats.js';
+import type { AggregatedMod } from './internal/continuous.js';
+import { NO_MOD } from './internal/continuous.js';
+import { effectivePower } from './internal/stats.js';
 
 /** The filtered-count discriminator, spelled once for this module's union. */
 export const MANA_AMOUNT_PERMANENTS_MATCHING = 'permanentsMatching';

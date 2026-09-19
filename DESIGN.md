@@ -10543,6 +10543,77 @@ changes nothing" — and dropped Heliod's lifegain counters on the floor while i
 enchantment. They are exactly what make it a 6/6 the turn devotion arrives. The gate is gone; the
 self form goes through the any-permanent reader the named kinds already used.
 
+### 3.164 A mana ability whose AMOUNT the board decides — Axebane Guardian, Gaea's Cradle, and Selvala's parley — ✅ done
+
+> "And Selvala, Explorer Returned" — and, from §3.161: *Tamiyo + Jace Surge* had one unsupported card
+> left, Axebane Guardian.
+
+**Measured first.** 83 cards on the 32,341-card corpus print a mana ability whose amount is not a
+number: "Add {G} **for each** creature you control" (37 — Gaea's Cradle, Priest of Titania, Elvish
+Archdruid, Cabal Stronghold), "Add X mana of any one color, **where X is** this creature's power"
+(19), "Add **an amount of** {G} **equal to** your devotion to green" (14 — Karametra's Acolyte,
+Cradle Clearcutter), "Add X mana **in any combination of colors**, where X is …" (5 — Axebane
+Guardian, Selvala, Heart of the Wilds). Every one reported before this, on the same missing piece.
+Selvala, Explorer Returned's parley is the 84th and its own shape: the amount is decided by a REVEAL.
+
+**The model (`core/mana-amount.ts`).** A mana ability's modes stay what they were — fixed
+productions indexed by `TapForManaAction.mode` — and `ManaAbility.amount` is a MULTIPLIER on the
+chosen mode, read off the board as the ability is activated (CR 605.3: a mana ability resolves at
+once, so the number is the number at that moment). A count of zero is a tap that adds nothing,
+which is the printed card too. The amount vocabulary is a CLOSED subset of the derived counts —
+the battlefield rows, a filtered permanent count, devotion, the source's own layered power — and
+the reason is the planner: it plans against a `ManaPlanView` (battlefield and pools, nothing else,
+because an online client plans against a redacted view), and an amount the engine could compute
+and the planner could not is a tap the two would value differently. `manaAmountOf` takes exactly
+that view. **The planner scales the mode by the same reader** (`mana-plan.ts`), so it funds
+{G}{G}{G} off one Cradle and three creatures, plans nothing from a Cradle on an empty board, and
+plans nothing from a parley, whose amount does not exist until the reveal.
+
+**"In any combination of colors."** The modes are the five colours, each worth the whole amount, so
+a pilot that wants X green taps for X green; the action may instead carry a `split`, validated to
+sum to the amount over the ability's own colours (short, over, or a colour it does not offer are
+refused by name; a split on an ability that prints no combination is refused too). The shipped
+planner does not search splits — it plans one mode per tap, as it always has — so the ENGINE is not
+narrowed by the model, and a human tapping Axebane through the menu gets the colour modes today.
+
+**The parley (`ManaAbilityRider.parley`).** "Each player reveals the top card of their library. For
+each nonland card revealed this way, add {G} and you gain 1 life. Then each player draws a card." A
+mana ability (CR 605.1a — no target, adds mana) whose amount is decided by a reveal, so the reveal
+happens BEFORE the mana is added, controller first, as public `cardRevealed` events; the life is
+gained through the one life-gain funnel (Rhox Faithmender doubles it, "whenever you gain life" sees
+it); each player draws through the one draw funnel; and the SBA pass that follows a draw runs. The
+ability's one mode is EMPTY, which is what keeps the planner honest: the engine adds what the reveal
+earns. The tap menu labels it *Parley*; a derived amount shows as its board's number ("3 G").
+
+**Compiler.** `mana-ability-derived-amount` reads the four shapes (with an optional mana cost in
+front of the `{T}`) through the SAME count readers every other count uses — `derivedEachValue`,
+`whereXBinding`, the devotion rows — and then refuses anything outside the amount vocabulary (a hand
+count, an offset). "This creature's power" is the one phrase with no count row. The filtered counts
+learned their SINGULAR "for each" spellings, generated from the same rows as their plurals
+(`FILTERED_EACH_TO_PLURAL`), which is what "for each Elf you control" needed and what every other
+"for each" consumer now has too. `mana-ability-parley` compiles Selvala's line to the rider.
+
+**Played** (`core/mana-amount.test.ts`, `cards/derived-mana-play.test.ts`): a Cradle for three and
+for nothing; Axebane's mode, a legal split and three illegal ones; a pumped Clearcutter for five;
+the planner's one Cradle tap; Selvala's reveal with a rigged nonland top — one green, one life, one
+`gainLife` event, both players draw and A draws the card it revealed — and the all-lands reveal that
+adds nothing and still draws. Compiled whole: Selvala, Explorer Returned, Axebane Guardian, Gaea's
+Cradle, Karametra's Acolyte, Priest of Titania, Elvish Archdruid, Cradle Clearcutter. **Both of his
+decks are now fully supported by the engine**: Thune's Life at all 77 cards, Tamiyo + Jace Surge at
+all 49. Pool at regeneration: **7,115 → 7,136** (+21, every one a scaling source: the seven above, and
+Cabal Coffers, Magus of the Coffers, Tolarian Academy, Serra's Sanctum, Rofellos, Marwyn, Circle of
+Dreams Druid, Viridian Joiner, Rainveil Rejuvenator, and the "Add X mana in any combination" family —
+Heronblade Elite, Kami of Whispered Hopes, Sanctum Weaver, Wirewood Channeler, Mona Lisa); index
+7,168/7,168, `--check` clean.
+
+**Two guards learned the shape.** The keyword glossary (a closed table; the index builder refuses a
+printed keyword it cannot explain) gained *Parley*. And `expanded-pool.test.ts`'s mana-ceiling guard —
+an independent reading of each card's printed "Add …" line — reported all 31 modes of the new family
+as "no printed line to check against": it now reads the printed SHAPES of a board-decided amount
+(`PRINTED_DERIVED_AMOUNT`) and holds a scaling line to a scaling mode whose base is exactly one
+mana (a parley's exactly none) — and, sabotaged to treat every mode as fixed, it named all eleven
+cards that scale, which is the red a guard has to be able to show.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

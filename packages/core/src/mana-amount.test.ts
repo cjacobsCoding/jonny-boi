@@ -30,7 +30,7 @@ import {
   type PlayerId,
 } from './index.js';
 import { manaAmountOf, scaleProduction, splitMatchesAmount } from './mana-amount.js';
-import { NO_MOD } from './internal/stats.js';
+import { NO_MOD } from './internal/continuous.js';
 import { creatureDef, deckOf, landDef } from './test-fixtures.js';
 
 const FOREST = landDef('Forest', 'G');

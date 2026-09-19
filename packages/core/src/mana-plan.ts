@@ -26,7 +26,7 @@ import type { GameState } from './state.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { addProduction, canPay, MANA_COLORS, payCost, productionTotal, usableMana } from './mana.js';
 import { manaAmountOf, scaleProduction } from './mana-amount.js';
-import { NO_MOD } from './internal/stats.js';
+import { NO_MOD } from './internal/continuous.js';
 import type { ManaSourcePreference } from './mana-source-preference.js';
 import { MANA_SOURCE_PREFERENCE_DEFAULT, manaSourceCollateral } from './mana-source-preference.js';
 import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
