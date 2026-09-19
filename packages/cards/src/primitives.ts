@@ -525,7 +525,7 @@ export const createPredefinedToken: EffectPrimitive = (ctx) => {
  * attaches its source to it. A second copy of this reader would eventually
  * disagree about a colour or a subtype line and the bug would belong to neither.
  */
-function tokenDefFromParams(ctx: EffectContext): CardDefinition {
+export function tokenDefFromParams(ctx: EffectContext): CardDefinition {
   const power = intParam(ctx, 'power', 1);
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';

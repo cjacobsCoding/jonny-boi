@@ -25,7 +25,6 @@ import type {
   KeywordFlags,
   PlayerId,
   SpellStackObject,
-  TargetRestriction,
   TokenEntryOptions,
 } from '@jonny-boi/core';
 import {
@@ -410,8 +409,7 @@ function copySourceFor(ctx: EffectContext): CardInstance | undefined {
   }
   const target = ctx.targets[0];
   if (target === undefined || target === 'A' || target === 'B') return undefined;
-  const restriction: TargetRestriction = restrictionParam(ctx);
-  if (!isLegalTarget(ctx.state, restriction, target, ctx.controller, ctx.source.def)) return undefined;
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return undefined;
   return ctx.state.battlefield.find((c) => c.instanceId === target);
 }
 

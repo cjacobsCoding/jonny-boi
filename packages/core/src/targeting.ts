@@ -332,6 +332,28 @@ export type TargetRestriction =
    */
   | 'nonlandPermanentYouControl'
   /**
+   * "target nonland permanent **an opponent controls**" / "**you don't
+   * control**" — Skyclave Apparition's aim, Deputy of Detention's, Perilous
+   * Voyage's; 58 cards on the 32,341-card corpus print one spelling or the
+   * other (measured 2026-09-18).
+   *
+   * ONE member for both printed spellings, because this engine seats exactly
+   * two players (`PlayerId` is 'A' | 'B') and in a two-seat game "you don't
+   * control" and "an opponent controls" select the same permanents. The name
+   * follows `creatureAnOpponentControls`. Controller-dependent like it: an
+   * absent actor makes every candidate ILLEGAL rather than guessed, and it is
+   * never widened to `nonlandPermanent` — a Skyclave that could exile its
+   * controller's own board is a card playing differently from its text.
+   */
+  | 'nonlandPermanentAnOpponentControls'
+  /**
+   * "target creature or enchantment you control" — Heliod, Sun-Crowned's
+   * lifegain trigger and Alseid of Life's Bounty's. Neither `creatureYouControl`
+   * widened (Heliod's own constellation half is the enchantment it most often
+   * grows) nor `permanent` narrowed. Controller-dependent like its neighbours.
+   */
+  | 'creatureOrEnchantmentYouControl'
+  /**
    * "target token you control" — Caretaker's Talent's level-2 aim. Reads the
    * CR 111.1 token-ness stamp (`def.isToken`), which `createOneTokenInState`
    * writes on every token however it was made — so a token copy of a printed
@@ -432,6 +454,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'permanentSpellYouControl' ||
     value === 'activatedOrTriggeredAbilityYouControl' ||
     value === 'nonlandPermanentYouControl' ||
+    value === 'nonlandPermanentAnOpponentControls' ||
+    value === 'creatureOrEnchantmentYouControl' ||
     value === 'tokenYouControl' ||
     value === 'enchantment' ||
     value === 'land' ||
@@ -500,6 +524,8 @@ const TARGET_RESTRICTION_MEMBERS = {
   permanentSpellYouControl: true,
   activatedOrTriggeredAbilityYouControl: true,
   nonlandPermanentYouControl: true,
+  nonlandPermanentAnOpponentControls: true,
+  creatureOrEnchantmentYouControl: true,
   tokenYouControl: true,
   enchantment: true,
   land: true,
@@ -577,6 +603,13 @@ export interface TargetBound {
   readonly withKeyword?: keyof KeywordFlags;
   /** "without <keyword>" — the printed negation, never "not in the card's own flags". */
   readonly withoutKeyword?: keyof KeywordFlags;
+  /**
+   * The printed adjective "**nontoken**" — "target nonland, nontoken permanent
+   * you don't control" (Skyclave Apparition), "target nontoken creature" (Kaya
+   * the Inexorable); 39 cards print it on a target. Read off the CR 111.1
+   * stamp core puts on every token it makes (`def.isToken`), never off a name.
+   */
+  readonly nontoken?: boolean;
   /**
    * "target <colour> permanent" — one of MTG's five, matched against the card's
    * printed colours.
@@ -716,6 +749,7 @@ export function targetMeetsBound(
     if (bound.withoutKeyword !== undefined && keywords[bound.withoutKeyword] === true) return false;
   }
   if (bound.colour !== undefined && !(permanent.def.colors ?? []).includes(bound.colour)) return false;
+  if (bound.nontoken === true && permanent.def.isToken === true) return false;
   return true;
 }
 
@@ -744,6 +778,7 @@ export function describeBound(bound: TargetBound): string {
   if (bound.atLeast !== undefined) parts.push(`with ${bound.atLeast.property} ${bound.atLeast.value} or greater`);
   if (bound.atMost !== undefined) parts.push(`with ${bound.atMost.property} ${bound.atMost.value} or less`);
   if (bound.colour !== undefined) parts.push(`that is ${bound.colour}`);
+  if (bound.nontoken === true) parts.push('that is not a token');
   return parts.join(' and ');
 }
 
@@ -1022,6 +1057,16 @@ function baseTargetIsLegal(
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
     return !isLand(permanent.def);
+  }
+  if (restriction === 'nonlandPermanentAnOpponentControls') {
+    // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
+    if (controller === undefined || permanent.controller === controller) return false;
+    return !isLand(permanent.def);
+  }
+  if (restriction === 'creatureOrEnchantmentYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+    return isCreature(permanent.def) || hasType(permanent.def, 'enchantment');
   }
   if (restriction === 'tokenYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
@@ -1386,6 +1431,28 @@ function enumerateTargets(
       }
     }
   }
+  if (restriction === 'nonlandPermanentAnOpponentControls' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller !== controller &&
+        !isLand(permanent.def) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'creatureOrEnchantmentYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        (isCreature(permanent.def) || hasType(permanent.def, 'enchantment')) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'tokenYouControl' && controller !== undefined) {
     for (const permanent of state.battlefield) {
       if (
@@ -1536,13 +1603,18 @@ export function illegalTargetReasonForEffects(
   targets: ReadonlyArray<InstanceId | PlayerId>,
   controller?: PlayerId,
   source?: CardDefinition,
+  /** "ANOTHER target …" — the activating permanent, when the ability excludes it. */
+  excludeInstanceId?: InstanceId,
 ): string | undefined {
   const restriction = restrictionOfEffects(effects);
   if (restriction === undefined) return undefined; // unrestricted — not policed
   if (targets.length !== 1) {
     return `${label} targets exactly one ${describeRestriction(restriction)}`;
   }
-  if (!isLegalTarget(state, restriction, targets[0]!, controller, source)) {
+  if (excludeInstanceId !== undefined && targets[0] === excludeInstanceId) {
+    return `${label} can only target another ${describeRestriction(restriction)}`;
+  }
+  if (!isLegalTarget(state, restriction, targets[0]!, controller, source, excludeInstanceId)) {
     return `${label} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;
@@ -1652,6 +1724,10 @@ export function describeRestriction(spec: TargetSpec): string {
       return 'an activated or triggered ability you control';
     case 'nonlandPermanentYouControl':
       return 'a nonland permanent you control';
+    case 'nonlandPermanentAnOpponentControls':
+      return 'a nonland permanent an opponent controls';
+    case 'creatureOrEnchantmentYouControl':
+      return 'a creature or enchantment you control';
     case 'tokenYouControl':
       return 'a token you control';
     case 'enchantment':

@@ -5194,6 +5194,8 @@ function applyActivateAbility(
     action.targets ?? [],
     action.player,
     source.def,
+    // "ANOTHER target …" — the same exclusion the offer loop applied.
+    ability.targetsExcludeSelf === true ? source.instanceId : undefined,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -5255,6 +5257,18 @@ function applyActivateAbility(
     // does, so leaves-the-battlefield triggers and instance reset behave alike.
     moveToZone(state, source, 'graveyard', emit, source.owner);
     resetInstanceForNewZone(source);
+  }
+  if (cost.removeCounters !== undefined) {
+    // Paid here, before the stack (CR 602.2b), and never refunded. The same
+    // `counters` map and the same `counterAdded` event (negative amount) the
+    // upkeep-cost primitives use when they take a counter off, so an observer
+    // counting counters sees one vocabulary. A 0/0 left with none dies to the
+    // state-based action after this action settles — that is the printed card
+    // (Spike Feeder's last two life), not a defect.
+    const { kind, count } = cost.removeCounters;
+    const left = (source.counters[kind] ?? 0) - count;
+    source.counters = { ...source.counters, [kind]: left };
+    emit({ type: 'counterAdded', instanceId: source.instanceId, kind, amount: -count });
   }
   if (cost.loyalty !== undefined) {
     // The loyalty cost is PAID here, before the ability reaches the stack, and
@@ -5448,6 +5462,14 @@ function unpayableActivationReason(
     const needed = cost.sacrificeCount ?? 1;
     if (sacrificeCostCandidates(state, source, cost).length < needed) {
       return 'you do not control enough permanents to pay that sacrifice cost';
+    }
+  }
+  if (cost.removeCounters !== undefined) {
+    // CR 122.5 — a counter that is not there cannot be removed. The source's
+    // OWN counters, read the same way "as long as it has a +1/+1 counter" is.
+    const held = source.counters[cost.removeCounters.kind] ?? 0;
+    if (held < cost.removeCounters.count) {
+      return `${source.def.name} does not have ${cost.removeCounters.count} ${cost.removeCounters.kind} counter(s) to remove`;
     }
   }
   if (cost.loyalty !== undefined) {
@@ -6176,7 +6198,10 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
             });
             continue;
           }
-          for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
+          // "ANOTHER target …" (Heliod's lifelink grant) — the source itself is
+          // never on its own menu, and the apply path refuses it by the same flag.
+          const excluded = ability.targetsExcludeSelf === true ? perm.instanceId : undefined;
+          for (const target of legalTargetsFor(state, restriction, me, perm.def, excluded)) {
             actions.push({
               kind: 'activateAbility',
               player: me,
