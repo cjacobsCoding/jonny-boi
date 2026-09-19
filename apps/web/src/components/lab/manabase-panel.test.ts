@@ -132,7 +132,7 @@ describe('the Manabase tab before a run', () => {
 
   it('shows the base manabase as built, from the same generator the worker runs', () => {
     expect(html).toContain('As built:');
-    expect(html).toContain('24 lands — 8 Forest, 8 Plains, 4 Selesnya Guildgate, 4 Blossoming Sands');
+    expect(html).toContain('24 lands — 4 Selesnya Guildgate, 4 Blossoming Sands, 8 Forest, 8 Plains · spells need W ×17, G ×19');
   });
 
   it('previews the enumerated family with labels, and the skips with reasons', () => {
