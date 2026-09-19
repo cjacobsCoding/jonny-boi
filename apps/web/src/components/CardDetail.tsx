@@ -1,11 +1,29 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { cardImage, displayRarity } from '../lib/cards.js';
+import { whyUnplayable } from '../lib/decklist/deckHealth.js';
 import { ManaCost } from './ManaCost.js';
 
 interface CardDetailProps {
   card: NormalizedCard;
   onClose: () => void;
+}
+
+/**
+ * §3.167 — "Not playable yet — needs …", from the same funnel the deck builder's
+ * ⚠ and Play's refusal read (`whyUnplayable`), so the detail view can never say
+ * something a deck holding the card would not. Nothing is rendered for a card
+ * the engine plays.
+ */
+function UnplayableNote({ cardId }: { readonly cardId: string }): ReactElement | null {
+  const systems = whyUnplayable(cardId);
+  if (systems === undefined) return null;
+  return (
+    <p className="modal__unplayable" role="note">
+      <strong>Not playable yet.</strong> You can add it to a deck, but that deck cannot be played or
+      tested until the engine learns: {systems.join('; ')}.
+    </p>
+  );
 }
 
 /** Elements a Tab press may land on inside the dialog (the focus-trap ring). */
@@ -110,6 +128,8 @@ export function CardDetail({ card, onClose }: CardDetailProps): ReactElement {
             <ManaCost cost={card.manaCost} />
           </div>
           <div className="modal__type">{card.rawTypeLine}</div>
+
+          <UnplayableNote cardId={card.id} />
 
           {card.oracleText && <p className="oracle-text">{card.oracleText}</p>}
 

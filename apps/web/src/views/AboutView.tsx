@@ -15,6 +15,7 @@ import {
 } from '../lib/cards/unsupportedRegistry.js';
 import { copyText } from '../lib/clipboard.js';
 import { EffectsPreview } from '../components/play/EffectsPreview.js';
+import { MechanicsChangelog } from '../components/about/MechanicsChangelog.js';
 import { StoragePanel } from '../components/StoragePanel.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import './about.css';
@@ -103,6 +104,8 @@ export function AboutView({ decks }: { readonly decks: DecksApi }): ReactElement
           <dd>{summary.templateGaps}</dd>
         </div>
       </dl>
+
+      <MechanicsChangelog />
 
       <h3 className="about__heading">Supported today</h3>
       <div className="about__groups">

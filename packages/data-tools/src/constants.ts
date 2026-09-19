@@ -58,6 +58,11 @@ export const DATA_DIR_NAME = 'data';
 
 /** Filename of the committed normalized card index. */
 export const CARD_INDEX_FILENAME = 'card-index.json';
+/**
+ * §3.167 — the slim index of every corpus card the pool does not hold, written
+ * beside the pool index by a corpus run and fetched by the app on demand.
+ */
+export const CORPUS_INDEX_FILENAME = 'corpus-index.json';
 
 /** Filename of the committed curated starter card-name list. */
 export const STARTER_CARD_LIST_FILENAME = 'starter-cards.json';

@@ -5273,7 +5273,7 @@ function applyActivateAbility(
   // the spell is on the stack. Mana abilities are `tapForMana`, never this path.
   if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
 
-  const problem = unpayableActivationReason(state, source, ability);
+  const problem = unpayableActivationReason(state, source, ability, action.abilityIndex);
   if (problem) return rejectWith(prevState, problem);
 
   // Target legality, from the ability's OWN effects rather than the card's — a
@@ -5379,6 +5379,12 @@ function applyActivateAbility(
       });
     }
     source.loyaltyActivatedTurn = state.turnNumber;
+  }
+  // §3.168 — remember THIS turn for a once-each-turn ability, as the activation
+  // is paid for (CR 602.5d counts activations, not resolutions: a countered
+  // activation still used the turn's one).
+  if (ability.activateOnly?.kind === 'onceEachTurn') {
+    source.onceEachTurnActivated = { ...source.onceEachTurnActivated, [action.abilityIndex]: state.turnNumber };
   }
 
   const abilityStackId = state.nextInstanceId++;
@@ -5510,19 +5516,27 @@ function unpayableActivationReason(
   state: GameState,
   source: CardInstance,
   ability: ActivatedAbility,
+  abilityIndex: number,
 ): string | undefined {
   // §3.149 — the printed "Activate only if …" (CR 602.5a). Checked BEFORE any
   // cost, because it is not a cost: it gates whether the ability may be
   // activated at all, and the counters it reads are never spent.
   const restriction = ability.activateOnly;
   if (restriction !== undefined) {
-    // `sourceHasCounters` is the only member; the switch is here so adding a
-    // second one is a compile error at this site rather than a silent pass.
+    // A closed union: the switch is exhaustive so adding a member is a compile
+    // error at this site rather than a silent pass.
     switch (restriction.kind) {
       case 'sourceHasCounters': {
         const held = source.counters[restriction.counter] ?? 0;
         if (held < restriction.min) {
           return `${source.def.name} does not have ${restriction.min} ${restriction.counter} counters`;
+        }
+        break;
+      }
+      case 'onceEachTurn': {
+        // §3.168 — the same comparison the loyalty rule makes, per ability.
+        if (source.onceEachTurnActivated?.[abilityIndex] === state.turnNumber) {
+          return `${source.def.name}'s ability has already been activated this turn`;
         }
         break;
       }
@@ -6284,7 +6298,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       if (index >= printedCount && manaAbilityFromActivated(ability) !== undefined) continue;
       const timing = ability.timing ?? 'instant';
       if (timing === 'sorcery' && !sorcerySpeedWindow) continue;
-      if (unpayableActivationReason(state, perm, ability)) continue;
+      if (unpayableActivationReason(state, perm, ability, index)) continue;
       const restriction = restrictionOfEffects(ability.effects);
       // A "Sacrifice a <noun>" cost is enumerated like a target: one action per
       // legal payer, because the cost is paid at ACTIVATION (CR 602.2b) and

@@ -198,6 +198,17 @@ export interface CardInstance {
    */
   loyaltyActivatedTurn?: number;
   /**
+   * §3.168 — for each activated ability that prints "Activate only once each
+   * turn", the turn number it was last activated on, keyed by the ability's
+   * index in the permanent's effective activated list. Same design as
+   * {@link loyaltyActivatedTurn} (compare to `GameState.turnNumber`; no reset
+   * pass; dropped on a zone change), and the same conditional-copy rule in
+   * `internal/clone.ts`: only a permanent that has actually used such an
+   * ability ever carries it. Anyone adding a field here must also edit
+   * `internal/clone.ts`.
+   */
+  onceEachTurnActivated?: Readonly<Record<number, number>>;
+  /**
    * §3.150 — how many of this permanent's controller's UPCOMING untap steps it
    * will sit out: "it doesn't untap during its controller's **next** untap step"
    * (Frost Trickster, Tamiyo's +1), and Telekinesis' "next **two** untap steps".

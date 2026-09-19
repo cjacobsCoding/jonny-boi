@@ -169,9 +169,7 @@ describe('§3.149 — inert named counters compile; counters with RULES do not',
       { typeLine: { supertypes: [], types: ['Instant'], subtypes: [] } },
     );
     const result = compileCard(freeFromFlesh);
-    expect(result.status, 'a spell cannot hold counters, so the clause reports').toBe(
-      'incomplete',
-    );
+    expect(result.status, 'a spell cannot hold counters, so the clause reports').toBe('incomplete');
     expect(result.matchedRules).not.toContain('put-named-counter-on-self');
   });
 
@@ -327,6 +325,44 @@ describe('§3.149 — "Activate only if …"', () => {
       '{T}: Draw a card. Activate only if this artifact has umpteen or more oil counters on it.',
     );
     const result = compileCard(weird);
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.activated ?? [], 'the whole ability is refused').toHaveLength(0);
+  });
+});
+
+describe('§3.168 — "Activate only once each turn"', () => {
+  it('reads the sentence into the second member of the closed restriction — Frilled Oculus, real printed text', () => {
+    const oculus = card(
+      'Frilled Oculus',
+      '{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.',
+      {
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Homunculus'] },
+        power: 1,
+        toughness: 3,
+      },
+    );
+    const result = compileCard(oculus);
+    expect(result.status, why(oculus)).toBe('complete');
+    const ability = result.definition.activated?.[0];
+    expect(ability?.activateOnly).toEqual({ kind: 'onceEachTurn' });
+    // The sentence is sliced off the body — the pump compiled from what is left.
+    expect(ability?.cost).toEqual({ mana: { generic: 1, G: 1 } });
+    expect(ability?.effects.length).toBeGreaterThan(0);
+  });
+
+  it('REFUSES the "… and only if …" forms, which carry a second condition', () => {
+    // Three cards print this; the exact-sentence anchor leaves them reporting
+    // rather than quietly compiled as a plain once-a-turn ability.
+    const twoConditions = card(
+      'Test Two Conditions',
+      '{1}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn and only if there are seven or more cards in your graveyard.',
+      {
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Elf'] },
+        power: 1,
+        toughness: 1,
+      },
+    );
+    const result = compileCard(twoConditions);
     expect(result.status).toBe('incomplete');
     expect(result.definition.activated ?? [], 'the whole ability is refused').toHaveLength(0);
   });

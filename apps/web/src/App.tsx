@@ -7,6 +7,7 @@ import {
   type ReactElement,
 } from 'react';
 import { attribution, allAvailableCards } from './lib/cards.js';
+import { corpusVersion, loadCorpus, subscribeToCorpus } from './lib/cards/corpus.js';
 import { BugReporter } from './components/BugReporter.js';
 import { registerStateSection } from './lib/bugreport/state-dump.js';
 import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
@@ -64,6 +65,12 @@ export function App(): ReactElement {
   // read a stale, never-changing number that looked hardcoded, and stayed wrong
   // after adding a card. Subscribing to the imported-card store keeps it honest.
   useSyncExternalStore(subscribeToImportedCards, importedCardCount, importedCardCount);
+  // §3.167 — the corpus tier joins the count the moment it arrives, and the
+  // shell starts fetching it at mount so the browser rarely has to wait.
+  useSyncExternalStore(subscribeToCorpus, corpusVersion, () => 0);
+  useEffect(() => {
+    void loadCorpus();
+  }, []);
   const cardCount = allAvailableCards().length;
 
   const [view, setView] = useState<ViewId>(initialView);
@@ -133,7 +140,9 @@ export function App(): ReactElement {
           `cards_available ${cardCount}`,
           `decks ${decks.decks.length}`,
           `active_deck ${decks.activeDeck ? `${decks.activeDeck.name} (${decks.activeDeck.cards.length} entries)` : 'none'}`,
-          ...decks.decks.map((d) => `deck ${d.name} — ${d.cards.length} entries, updated ${d.updatedAt}`),
+          ...decks.decks.map(
+            (d) => `deck ${d.name} — ${d.cards.length} entries, updated ${d.updatedAt}`,
+          ),
         ].join('\n'),
       ),
     [view, cardCount, decks],
@@ -203,7 +212,7 @@ export function App(): ReactElement {
       </main>
 
       <footer className="app__footer">
-        {cardCount} cards · {attribution}
+        {cardCount.toLocaleString()} cards · {attribution}
       </footer>
 
       {/*
@@ -217,4 +226,3 @@ export function App(): ReactElement {
     </div>
   );
 }
-

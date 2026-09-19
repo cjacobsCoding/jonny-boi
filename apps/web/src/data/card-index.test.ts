@@ -58,7 +58,10 @@ describe('bundled card index — derived, never hand-copied', () => {
   it('covers every card in the canonical index — no silently dropped rows', () => {
     expect(webIndex.cards.length, REGENERATE_HINT).toBe(canonicalIndex.cards.length);
     const canonicalIds = canonicalIndex.cards.map((card) => card.id);
-    expect(webIndex.cards.map((card) => card.id), REGENERATE_HINT).toEqual(canonicalIds);
+    expect(
+      webIndex.cards.map((card) => card.id),
+      REGENERATE_HINT,
+    ).toEqual(canonicalIds);
   });
 });
 
@@ -70,20 +73,29 @@ describe('bundled card index — joins to the engine pool', () => {
     const missing = pool.cards.filter((card) => !displayIds.has(card.id));
     // Named, not counted: a bare number here would not tell the next reader
     // which card lost its art.
-    expect(missing.map((card) => `${card.name} (${card.id})`), REGENERATE_HINT).toEqual([]);
+    expect(
+      missing.map((card) => `${card.name} (${card.id})`),
+      REGENERATE_HINT,
+    ).toEqual([]);
   });
 
   it('resolves art for every display row through the UI’s own cardImage()', () => {
     const artless = webIndex.cards.filter(
       (card) => cardImage(card as NormalizedCard, 'normal') === undefined,
     );
-    expect(artless.map((card) => card.name), REGENERATE_HINT).toEqual([]);
+    expect(
+      artless.map((card) => card.name),
+      REGENERATE_HINT,
+    ).toEqual([]);
   });
 
   it('carries no rows the engine pool does not know about', () => {
     const poolIds = new Set(pool.cards.map((card) => card.id));
     const orphans = webIndex.cards.filter((card) => !poolIds.has(card.id));
-    expect(orphans.map((card) => card.name), REGENERATE_HINT).toEqual([]);
+    expect(
+      orphans.map((card) => card.name),
+      REGENERATE_HINT,
+    ).toEqual([]);
   });
 });
 
@@ -125,11 +137,32 @@ describe('bundled card index — the projection stays in step with the UI', () =
     }
   });
 
-  it('degrades a card with no art to a readable text card rather than crashing', () => {
+  it('derives art from a PRINTING id when a record carries no URLs (§3.167)', () => {
+    // The projection drops every URL that is exactly what the id derives, so
+    // most bundled rows now carry none — and must still resolve art.
+    const derivable = webIndex.cards.find(
+      (card) => Object.keys(card.imageUris ?? {}).length === 0,
+    ) as NormalizedCard | undefined;
+    expect(
+      derivable,
+      'the projection should have dropped derivable URLs from at least one row',
+    ).toBeDefined();
+    expect(cardImage(derivable!, 'normal')).toBe(
+      `https://cards.scryfall.io/normal/front/${derivable!.id[0]}/${derivable!.id[1]}/${derivable!.id}.jpg`,
+    );
+    expect(cardImage(derivable!, 'art_crop')).toContain('/art_crop/front/');
+  });
+
+  it('degrades a card with no art AND no printing id to a readable text card rather than crashing', () => {
     // Rule 6 (graceful fallback). `cardImage` returning `undefined` is the
     // signal `CardArt` uses to render its labelled tile; the card still has the
-    // name and cost needed to read it.
-    const artless = { ...webIndex.cards[0]!, imageUris: {} } as NormalizedCard;
+    // name and cost needed to read it. An id that is not a Scryfall uuid (a
+    // synthesized engine record) cannot derive a URL, so there is nothing to show.
+    const artless = {
+      ...webIndex.cards[0]!,
+      id: 'engine:synthesized',
+      imageUris: {},
+    } as NormalizedCard;
     expect(cardImage(artless, 'normal')).toBeUndefined();
     expect(cardImage(artless, 'large')).toBeUndefined();
     expect(cardImage(artless, 'art_crop')).toBeUndefined();
