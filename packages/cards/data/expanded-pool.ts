@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7010 cards.
+ * 7011 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -55447,6 +55447,64 @@ const POOL_6: readonly CardDefinition[] = [
     cost: { generic: 2 },
     manaAbilities: [{ produces: [{ U: 1, R: 1 }], cost: { mana: { generic: 1 } } }],
   },
+  // +1: Until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn.
+  // −2: Reveal the top three cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other on the bottom of your library in any order.
+  // −8: For each player, search that player's library for a nonland card and exile it, then that player shuffles. You may cast those cards without paying their mana costs.
+  {
+    id: '7051cdfa-509e-4d84-bbae-f77556c861e4',
+    name: 'Jace, Architect of Thought',
+    types: ['planeswalker'],
+    cost: { generic: 2, U: 2 },
+    loyalty: 4,
+    legendary: true,
+    subtypes: ['jace'],
+    activated: [
+      {
+        cost: { loyalty: 1 },
+        effects: [
+          {
+            primitive: 'installUntilYourNextTurnTrigger',
+            params: {
+              condition: { on: 'creatureAttacks', who: 'opponent' },
+              effects: [
+                {
+                  primitive: 'pumpUntilEndOfTurn',
+                  params: { power: -1, toughness: 0, subject: 'triggering' },
+                },
+              ],
+              label: 'Until your next turn: a creature (opponent) attacks — it gets -1/-0 until end of turn',
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '+1: until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn',
+      },
+      {
+        cost: { loyalty: -2 },
+        effects: [{ primitive: 'revealAndOpponentSplitsPiles', params: { count: 3, rest: 'libraryBottom' } }],
+        timing: 'sorcery',
+        label: '−2: reveal the top three cards of your library. an opponent separates those cards into two piles. put one pile into your hand and the other on the bottom of your library in any order',
+      },
+      {
+        cost: { loyalty: -8 },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'each',
+              chooser: 'controller',
+              count: 1,
+              filter: { noneOfTypes: ['land'] },
+              destination: 'exile',
+              grantCast: 'free',
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '−8: for each player, search that player\'s library for a nonland card and exile it, then that player shuffles. you may cast those cards without paying their mana costs',
+      },
+    ],
+  },
   // Draw three cards.
   {
     id: 'ad4932ba-e272-4f22-89f5-a6153ca570b5',
@@ -63220,6 +63278,9 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['giant'],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // {T}: Prevent the next 2 damage that would be dealt to any target this turn.
   {
     id: 'a55f0113-3ced-49c7-9fa8-f1cc873bdc4c',
@@ -63247,9 +63308,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   {
     id: '00c050c3-4f50-4bb6-8477-6737887ca10d',
     name: 'Loxodon Convert',
@@ -72197,6 +72255,9 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // {2}{B}, Sacrifice this creature: Target creature gets -1/-1 until end of turn.
   {
     id: 'd11a56e7-30a4-44da-a58b-336f4c0c4882',
@@ -72219,9 +72280,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // Flash
   // Flying
   // When this creature enters, target opponent mills two cards. (They put the top two cards of their library into their graveyard.)
@@ -81259,6 +81317,9 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // As this creature enters, choose a color.
   // {T}: Add {G}.
   // {T}: Add one mana of the chosen color.
@@ -81274,9 +81335,6 @@ const POOL_8: readonly CardDefinition[] = [
     effects: [{ primitive: 'chooseAsEnters', params: {} }],
     manaAbilities: [{ produces: [{ G: 1 }] }, { chosenColor: true, label: 'Add one mana of the chosen color' }],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // {T}: Add one mana of any color that a land an opponent controls could produce.
   {
     id: 'd56bae65-1811-4428-93f4-60c36ceee715',
@@ -90252,6 +90310,9 @@ const POOL_9: readonly CardDefinition[] = [
     keywords: { cantBlock: true },
     subtypes: ['insect'],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // This land enters tapped.
   // {T}: Add {C}.
   // {T}, Tap an untapped creature you control: Add one mana of any color.
@@ -90277,9 +90338,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // {W}, {T}: Tap target permanent.
   {
     id: '888bc7ca-f9fa-4da4-b466-b9dc273d5319',
@@ -99226,6 +99284,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // Destroy target artifact or enchantment. You gain 4 life.
   {
     id: 'e30d14b8-b431-4764-9b30-f511bd40fd08',
@@ -99237,9 +99298,6 @@ const POOL_10: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 4 } },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
   // When this creature dies, you may draw a card.
   {
@@ -108236,6 +108294,9 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Echo {4}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
   // This creature attacks each combat if able.
   {
@@ -108264,9 +108325,6 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Flying; trample; rampage 4 (Whenever this creature becomes blocked, it gets +4/+4 until end of turn for each creature blocking it beyond the first.)
   {
     id: '57e8971d-baeb-4e4f-8c4d-0e8109e4505e',
@@ -117059,6 +117117,9 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // Destroy target nonblack creature. It can't be regenerated. You lose life equal to that creature's toughness.
   {
     id: '039fc76d-3b7e-4329-a997-07c25509e421',
@@ -117073,9 +117134,6 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
   {
@@ -125510,6 +125568,9 @@ const POOL_13: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
     subtypes: ['rat'],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // Plainswalk (This creature can't be blocked as long as defending player controls a Plains.)
   {
     id: '81dd362e-42f6-4eeb-9fe7-0d9cbeb4f21e',
@@ -125521,9 +125582,6 @@ const POOL_13: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'plains' }] },
     subtypes: ['bird'],
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
   {
     id: '6d30d6f0-ca4c-4442-a47f-ecdf52088ecc',
