@@ -1,0 +1,180 @@
+/*
+ * THE CARD PICKER (§3.165) — a combobox over a card list of any size.
+ *
+ * Own file, beside the panel it was built for, so the Lab's other in-flight
+ * styles are untouched. Tokens only; the chips are the card browser's own
+ * classes and are not restyled here.
+ */
+
+.card-picker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.card-picker__row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.card-picker__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.card-picker__filters-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.card-picker__filters-toggle--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* What is picked, said under the box when the list is closed — the input keeps
+   its placeholder as the name too, but a placeholder is not a value. */
+.card-picker__picked {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--text-sm);
+}
+
+.card-picker__picked-name {
+  font-weight: 600;
+}
+
+.card-picker__count {
+  color: var(--color-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-picker__popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: var(--space-1);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 0.5rem);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  max-height: min(60vh, 28rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.card-picker__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card-picker__mv {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+.card-picker__mv-input {
+  width: 4rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.card-picker__clear {
+  font-size: var(--text-xs);
+  padding: 0.2rem 0.5rem;
+}
+
+.card-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1) 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.card-picker__option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'name count cost'
+    'type type cost';
+  column-gap: var(--space-2);
+  align-items: center;
+  padding: 0.3rem var(--space-3);
+  cursor: pointer;
+}
+
+.card-picker__option--active {
+  background: var(--color-surface-raised, rgba(255, 255, 255, 0.06));
+}
+
+.card-picker__option--picked .card-picker__option-name {
+  color: var(--color-accent);
+}
+
+.card-picker__option-name {
+  grid-area: name;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-picker__option .card-picker__count {
+  grid-area: count;
+}
+
+.card-picker__option-type {
+  grid-area: type;
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-picker__option-cost {
+  grid-area: cost;
+  justify-self: end;
+}
+
+.card-picker__empty,
+.card-picker__footer {
+  padding: 0.35rem var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+.card-picker__footer {
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 480px) {
+  .card-picker__popover {
+    /* On a phone the list takes the width it needs; the row's grid still fits. */
+    max-height: 50vh;
+  }
+}
+
+/* The Lab's swap row: each picker takes an equal share, and the popover may
+   overflow the row (the row must not clip it). */
+.lab-field--picker {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.lab-controls--swap {
+  overflow: visible;
+}
