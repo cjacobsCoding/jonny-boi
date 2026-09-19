@@ -295,6 +295,17 @@ export type { TargetBound, TargetNumericProperty, BoundedTarget, TargetSpec } fr
 // §3.163 — devotion (CR 700.5) and the gods' "isn't a creature" type layer.
 export { devotionTo, devotionOfCost, settleDevotionForms, nonCreatureFormOf, creatureFormOf } from './devotion.js';
 export type { CreatureUnlessDevotion } from './devotion.js';
+// §3.164 — a mana ability's board-derived amount, and the any-combination split.
+export {
+  manaAmountOf,
+  scaleProduction,
+  splitMatchesAmount,
+  hasDerivedManaAmount,
+  MANA_AMOUNT_COUNTS,
+  MANA_AMOUNT_PERMANENTS_MATCHING,
+} from './mana-amount.js';
+export type { ManaAmountSource, ManaAmountCount, ManaAmountView } from './mana-amount.js';
+export type { ParleyManaRider } from './card.js';
 export {
   TARGET_RESTRICTION_PARAM,
   DEFAULT_TARGET_RESTRICTION,

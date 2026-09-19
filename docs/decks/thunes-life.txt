@@ -37,4 +37,4 @@
 +2 Spike Feeder                 // ✅ compiles — §3.162 (remove-counters cost)
 +2 Voice of the Blessed         // ✅ compiles — §3.162 (counter-threshold static)
 +2 Heliod, Sun-Crowned          // ✅ compiles — §3.163 (devotion, and the gods' type layer)
-+2 Selvala, Explorer Returned   // ✗ parley's mana AMOUNT is board-derived (the Axebane Guardian family) — §3.164; wish-list until then
++2 Selvala, Explorer Returned   // ✅ compiles — §3.164 (parley as a mana-ability rider)

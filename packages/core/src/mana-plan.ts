@@ -24,7 +24,9 @@ import {
 import { anyContinuousModification, indexContinuous } from './internal/continuous.js';
 import type { GameState } from './state.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
-import { addProduction, canPay, MANA_COLORS, payCost, usableMana } from './mana.js';
+import { addProduction, canPay, MANA_COLORS, payCost, productionTotal, usableMana } from './mana.js';
+import { manaAmountOf, scaleProduction } from './mana-amount.js';
+import { NO_MOD } from './internal/continuous.js';
 import type { ManaSourcePreference } from './mana-source-preference.js';
 import { MANA_SOURCE_PREFERENCE_DEFAULT, manaSourceCollateral } from './mana-source-preference.js';
 import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
@@ -439,8 +441,25 @@ export function planManaPayment(
     }
     if (!modes) continue;
     const mode = action.mode ?? 0;
-    const production = modes[mode];
+    let production = modes[mode];
     if (!production) continue;
+    // §3.164 — a board-derived amount scales the mode, read off the same view
+    // the rest of this plan reads (see `mana-amount.ts` for why the amount
+    // vocabulary is the battlefield subset). A parley's amount is unknown until
+    // it reveals, so its mode plans as nothing: the engine will add what it
+    // adds, and a plan that counted on it would be a plan the engine refuses.
+    const planExtra = lastExtras?.[mode];
+    if (planExtra !== undefined && lastPerm !== undefined) {
+      const amountSpec = planExtra.ability.amount;
+      if (amountSpec !== undefined) {
+        const mod =
+          amountSpec.countOf === 'sourcePower' && grantIndex !== undefined ? (grantIndex.get(lastPerm.instanceId) ?? NO_MOD) : NO_MOD;
+        production = scaleProduction(production, manaAmountOf(view, lastPerm, amountSpec, mod));
+        if (productionTotal(production) === 0) continue;
+      } else if (planExtra.ability.rider?.parley !== undefined) {
+        continue;
+      }
+    }
 
     // A tap whose mana THIS payment could never legally spend is not a candidate
     // at all. Dropping it here rather than letting it score zero is what keeps the
