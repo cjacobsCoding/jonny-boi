@@ -67,3 +67,18 @@ export function attackingCreatureIds(combat: CombatState): readonly InstanceId[]
   if (removed === undefined || removed.length === 0) return combat.attackers;
   return combat.attackers.filter((id) => !removed.includes(id));
 }
+
+/**
+ * §3.173 — the creatures BLOCKING this combat and still in it, in declaration
+ * order: the keys of `combat.blocks`, less anything removed. The other half of
+ * "target attacking or blocking creature" (Sandblast, Elite Archers), read the
+ * same way the attacking half is so removal from combat means one thing.
+ */
+export function blockingCreatureIds(combat: CombatState): readonly InstanceId[] {
+  const out: InstanceId[] = [];
+  for (const key of Object.keys(combat.blocks)) {
+    const id = Number(key) as InstanceId;
+    if (!isRemovedFromCombat(combat, id)) out.push(id);
+  }
+  return out;
+}

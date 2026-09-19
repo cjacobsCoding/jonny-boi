@@ -448,6 +448,8 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // ordinary primitives listed here, each classified on its own terms — which is
   // strictly better for this table than one opaque wrapper would have been.
   'returnToHand',
+  // §3.173 — the source's own bounce: the same battlefield → hand move.
+  'bounceSelf',
   'tapPermanents',
   // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile
   // split's) choice is over permanents in play, and every card moved emits its

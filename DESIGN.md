@@ -11042,6 +11042,51 @@ card"*, 3 *"a land card"*, 1 *"an artifact card"*. Above the 92 the probe promis
 counted cards whose ONLY refusal was the cost, and eleven more printed two discard abilities, or a
 discard beside a hybrid symbol §3.171 had just made payable.
 
+### 3.173 Six rows from the one-clause ranking — combat targets, the other board, your turn, can't block, self-bounce, two taplands — ✅ done
+
+> "start adding all the rest of the missing mechanics"
+
+The one-clause ranking re-run on the 7,599 pool (`near-miss-report`, 17,206 cards one clause from
+playable) is, below the big systems (morph 71, crew 21, the quoted-ability attachments ~70), a long
+tail of shapes that are each ONE ROW in a table the compiler already has. Six of them, measured
+together before building (`probe-sixrows`): **180 cards** with nothing else blocking them.
+
+| row | printed | sole | what it is |
+|---|---|---|---|
+| A | *"Creatures your opponents control get -2/-0 until end of turn"*, *"All creatures get -1/-1 until end of turn"* (Turn the Tide, Make Obsolete, Nausea, Marsh Gas, Massacre Wurm's trigger) | 31 | the §3.155 mass modification with a SCOPE: `'opponent'` the primitive already read, `'all'` the one it gained |
+| B | *"~ deals N damage to target attacking or blocking creature"* (Sandblast, Impeccable Timing, Elite Archers, D'Avenant Archer) | 33 | a `TargetRestriction` read off both sides of the live combat, less anything removed from it; nothing outside combat |
+| C | *"During your turn, ~ has first strike"*, *"~ gets +2/+0 during your turn"*, *"as long as it's your turn"* (Fresh-Faced Recruit, Skophos Reaver, Faithful Pikemaster) | 22 | a `StaticCondition` member (`yourTurn`), stripped in both printed orders by the §3.169 pre-pass |
+| D | *"Target creature can't block this turn"* (Goblin Shortcutter, Goblin Heelcutter, Renegade Tactics, Stun) | 41 | the mirror of the unblockable grant: `cantBlock` until end of turn on one target |
+| E | *"{U}: Return ~ to its owner's hand"* (Darting Merfolk, Shackles, Sliptide Serpent, the Odyssey *"Discard a card:"* flyers) | 32 | `bounceSelf` — the source, through the same zone move the targeted bounce makes; not dash's `returnSelfToHand`, which rightly refuses anything not dashed |
+| F | *"~ enters tapped unless a player has 13 or less life"*, *"~ enters tapped unless you have two or more opponents"* (Abandoned Campground, Spire Garden) | 20 | two `EntersUntappedCondition` fields, reading two new facts the three entry paths now hand over (`lifeTotals`, `opponentCount`) |
+
+**What each row refuses, on purpose.** D compiles the single target only: *"up to two target
+creatures can't block"* (Abandon the Post) is a counted selection and *"creatures without flying
+can't block"* (Falter) a filtered set, and both keep reporting. A reads *"all"* and *"your opponents
+control"* and nothing looser — *"each creature"* reports. F's Battlebond lands are compiled as the
+printed condition, NOT as "always tapped": the engine counts the opponents it seats (one), so the
+land enters tapped exactly as the card does at a two-player table, and the day a multiplayer seat
+exists the same data reads true. E is priced by the pilot as the loss it is when activated blind
+(dash's rider's debit): a self-bounce is a defensive trick the heuristic cannot time, so it leaves
+the ability alone rather than bouncing its own board.
+
+**Verification.** `core/six-rows-core.test.ts` (5) and `cards/six-rows.test.ts` (11) — 16 red on the
+previous sources, 16 green after. Core: during a declared combat the attacker and the blocker are the
+legal targets and neither bystander is, a creature removed from combat stops being legal, outside
+combat nothing is; a `yourTurn` static is on during its controller's turn and off on the opponent's,
+read live across the turn change; the two enters-tapped facts through the accessor and through a
+land PLAYED in a real game (both at 20: tapped; the opponent at 12: untapped; one opponent: tapped).
+Cards: every row compiled from printed text with its refusals, then played — Sandblast mid-combat is
+offered the attacker and the blocker only and kills the blocker; Nausea shrinks BOTH boards (my 1/1
+dies too) and Turn the Tide only the opponent's; Goblin Shortcutter's target is refused as a blocker
+while its sibling is accepted; Darting Merfolk returns itself to hand for {U}; Abandoned Campground
+enters untapped only once a player is at 13, Spire Garden tapped. The observation scan's `regeneration` witness went inert on the larger pool — the §3.162
+class — and got the sequenced overtime lane, red before it and green after. Pool at regeneration:
+**7,599 → 7,780** (+181 against the 180 measured — nothing left; index 7,812/7,812, `--check` clean): A 34,
+B 28, C 25, D 28, E 31, F 20, and a handful the rows reached through the pre-passes already in
+place — Ground Rift's *"target creature WITHOUT FLYING can't block"* through the target-bound
+strip, Fleeting Effigy's end-step *"return this creature to its owner's hand"* as a trigger body.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

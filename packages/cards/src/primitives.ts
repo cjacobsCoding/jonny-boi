@@ -407,7 +407,8 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
  *
  * `params.anyOfTypes` narrows the set the way the printed noun does; omitting it
  * is the printed word "permanents", which narrows nothing. `params.scope` is
- * `'you'` (the default) or `'opponent'`. `params.power` / `params.toughness`
+ * `'you'` (the default), `'opponent'` ("creatures your opponents control"), or
+ * `'all'` ("all creatures" — §3.173, both boards). `params.power` / `params.toughness`
  * accept a printed number OR a derived descriptor (`intParam`), so "+X/+X where
  * X is the number of creatures you control" is counted when this resolves.
  *
@@ -437,10 +438,12 @@ export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const grant = isEmptyKeywords(keywords) ? {} : { keywords };
   const pump = power === 0 && toughness === 0 ? {} : { power, toughness };
   const types = strArrayParam(ctx, 'anyOfTypes');
-  const opponents = strParam(ctx, 'scope') === 'opponent';
+  const scope = strParam(ctx, 'scope');
+  const opponents = scope === 'opponent';
+  const everyBoard = scope === 'all';
   for (const perm of ctx.state.battlefield) {
     const theirs = perm.controller !== ctx.controller;
-    if (theirs !== opponents) continue;
+    if (!everyBoard && theirs !== opponents) continue;
     if (types.length > 0 && !types.some((type) => perm.def.types.includes(type as CardType))) continue;
     ctx.addContinuousEffect({ target: perm.instanceId, ...grant, ...pump, duration: 'endOfTurn' });
   }

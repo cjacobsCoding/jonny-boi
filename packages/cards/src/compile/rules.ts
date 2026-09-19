@@ -160,6 +160,11 @@ const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = 
   // 'creature': a burn trigger that may be pointed at your own board is a
   // strictly worse play offered as though it were legal.
   'target creature an opponent controls': 'creatureAnOpponentControls',
+  // §3.173 — the archer family ("{T}: ~ deals 1 damage to target attacking or
+  // blocking creature" — Elite Archers, D'Avenant Archer) and the combat-only
+  // removal spells (Sandblast, Impeccable Timing). 33 cards were blocked by
+  // this phrase alone; the restriction reads the live combat on both sides.
+  'target attacking or blocking creature': 'attackingOrBlockingCreature',
   'target creature, player, or planeswalker': 'any',
   'target creature, player or planeswalker': 'any',
 });
@@ -4629,6 +4634,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // §3.173 — "**Return ~ to its owner's hand**" as the body of an activated
+    // ability: "{U}: Return Darting Merfolk to its owner's hand", Shackles'
+    // "{W}: Return Shackles to its owner's hand", Sliptide Serpent, the Odyssey
+    // "Discard a card: Return ~ to its owner's hand" flyers (payable since
+    // §3.172). The source itself, so no target — which is also what lets a
+    // trigger carry it. 32 cards had nothing else blocking them.
+    id: 'bounce-self',
+    description: `"Return ~ to its owner's hand" — the source bounces itself (Darting Merfolk, Shackles, Sliptide Serpent)`,
+    pattern: /^return ~ to its owner'?s hand$/,
+    build() {
+      return effects({ primitive: 'bounceSelf' });
+    },
+  },
+  {
     id: 'creature-fights',
     description: '"~ fights target creature"',
     pattern: /^~ fights target creature$/,
@@ -5323,6 +5342,35 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
+  {
+    // §3.173 — the same modification on the OPPONENTS' board ("Creatures your
+    // opponents control get -2/-0 until end of turn" — Turn the Tide, Make
+    // Obsolete, Massacre Wurm's enters trigger) and on EVERY board ("All
+    // creatures get -1/-1 until end of turn" — Nausea, Marsh Gas, Shrivel,
+    // Death's-Head Buzzard's dies trigger). Same primitive, same body parser,
+    // same nouns; only `scope` differs — 'opponent' was already a value the
+    // primitive read, 'all' is the one it gained. 31 cards had nothing else
+    // blocking them. Like its sibling, it targets nothing, so a trigger may
+    // carry it.
+    id: 'mass-modify-scoped-until-eot',
+    description:
+      '"Creatures your opponents control / All creatures get +X/+Y and/or gain KEYWORDS until end of turn" (Turn the Tide, Make Obsolete, Nausea, Marsh Gas, Massacre Wurm)',
+    pattern: new RegExp(
+      `^(?:all (${Object.keys(STATIC_NOUN_TYPES).join('|')})s|(${Object.keys(STATIC_NOUN_TYPES).join('|')})s your opponents control) (.+) until end of turn$`,
+    ),
+    build(match, ctx) {
+      const noun = match[1] ?? match[2] ?? '';
+      const nounType = STATIC_NOUN_TYPES[noun];
+      if (nounType === undefined) return null;
+      const modification = parseMassModification(match[3] ?? '', ctx);
+      if (modification === null) return null;
+      const scope = match[1] !== undefined ? 'all' : 'opponent';
+      return effects({
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { ...modification, scope, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
+      });
+    },
+  },
   // ======================= end §3.155 region =================================
   {
     // The SELF form of the evasion grant, with a comparing restriction attached:
@@ -5363,6 +5411,28 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
           keywords: { unblockable: true },
           targets: match[1] ? CREATURE_YOU_CONTROL_TARGET : CREATURE_TARGET,
         },
+      });
+    },
+  },
+  {
+    // §3.173 — the mirror of the unblockable grant: "**Target creature can't
+    // block this turn**" (Goblin Shortcutter's enters trigger, Goblin
+    // Heelcutter's attack trigger, Renegade Tactics, Stun). The same phrase
+    // table already maps "can't block" to the `cantBlock` flag for statics and
+    // attachments; this is the until-end-of-turn one-shot of it, through the
+    // same grant primitive, so it wears off at cleanup with everything else.
+    // "Up to two target creatures" (Abandon the Post) and "creatures without
+    // flying" (Falter) are counted selections and filtered sets this row does
+    // not print, and they keep reporting. 41 cards had nothing else blocking
+    // them; 17 of those print exactly this sentence.
+    id: 'grant-cant-block-until-eot',
+    description: `"Target creature can't block this turn" (Goblin Shortcutter, Goblin Heelcutter, Renegade Tactics, Stun)`,
+    pattern: /^target creature can'?t block this turn$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { cantBlock: true }, targets: CREATURE_TARGET },
       });
     },
   },
@@ -10596,6 +10666,35 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // §3.173 — "~ enters tapped unless a player has 13 or less life" (the
+    // Duskmourn slow lands: Abandoned Campground, Raucous Carnival, Strangled
+    // Cemetery …). ANY player's total, read live as the land enters.
+    id: 'enters-tapped-unless-a-player-life-at-most',
+    description: '"~ enters tapped unless a player has 13 or less life" (Abandoned Campground, Raucous Carnival)',
+    pattern: /^~ enters(?: the battlefield)? tapped unless a player has (\d+) or less life$/,
+    build(match) {
+      const max = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(max) || max <= 0) return null;
+      return { entersTappedUnless: { anyPlayerLifeAtMost: max } };
+    },
+  },
+  {
+    // §3.173 — "~ enters tapped unless you have two or more opponents" (the
+    // Battlebond lands: Spire Garden, Sea of Clouds, Bountiful Promenade …).
+    // Compiled as the printed condition, not as "always tapped": the engine
+    // counts the opponents it has (one, in its two-player games), so the land
+    // enters tapped exactly as the card does at a two-player table, and the
+    // day a multiplayer seat exists the same data reads true.
+    id: 'enters-tapped-unless-min-opponents',
+    description: '"~ enters tapped unless you have two or more opponents" (Spire Garden, Sea of Clouds, Bountiful Promenade)',
+    pattern: /^~ enters(?: the battlefield)? tapped unless you have (\w+) or more opponents$/,
+    build(match) {
+      const min = SMALL_NUMBER_WORDS[match[1] ?? ''];
+      if (min === undefined) return null;
+      return { entersTappedUnless: { minOpponents: min } };
+    },
+  },
+  {
     id: 'must-be-blocked-if-able',
     description: '"~ must be blocked if able" — a block REQUIREMENT (CR 509.1c)',
     // The other half of declare-blockers from every restriction above. It is not a
@@ -14176,7 +14275,19 @@ const STATIC_CONDITION_SHAPES: ReadonlyArray<{
       return max === null ? null : { kind: 'lifeAtMost', max };
     },
   },
+  {
+    // §3.173 — "as long as it's your turn" (Faithful Pikemaster); the more
+    // common "during your turn" order is read by `stripStaticCondition` below
+    // and lands on this same member.
+    pattern: /^it'?s your turn$/,
+    build() {
+      return { kind: 'yourTurn' };
+    },
+  },
 ];
+
+/** §3.173 — the condition "during your turn" prints, in either order. */
+const YOUR_TURN_CONDITION: StaticCondition = { kind: 'yourTurn' };
 
 /** The closed-union member a printed condition means, or null when it is outside the table. */
 export function staticConditionOf(text: string): StaticCondition | null {
@@ -14197,6 +14308,16 @@ export function staticConditionOf(text: string): StaticCondition | null {
  * nothing and the line reports.
  */
 export function stripStaticCondition(clause: string): StrippedStaticCondition | null {
+  // §3.173 — "During your turn, ~ has first strike" (Fresh-Faced Recruit,
+  // Sun-Spider, Skophos Reaver's "gets +2/+2") and its tail order "~ has first
+  // strike during your turn" (Razorkin Needlehead). The same closed member the
+  // "as long as it's your turn" row builds, in the two orders the cards print.
+  const duringPrefix = /^during your turn, (.+)$/.exec(clause);
+  if (duringPrefix) {
+    return { clause: (duringPrefix[1] ?? '').trim().replace(/^it /, '~ '), condition: YOUR_TURN_CONDITION };
+  }
+  const duringTail = /^(.+?) during your turn\.?$/.exec(clause);
+  if (duringTail) return { clause: (duringTail[1] ?? '').trim(), condition: YOUR_TURN_CONDITION };
   const tail = /^(.+?) as long as (.+?)\.?$/.exec(clause);
   if (tail) {
     const condition = staticConditionOf(tail[2] ?? '');

@@ -43,7 +43,7 @@ import { protectionBlocksSource } from './protection.js';
 // "what is this cost worth" (CR 202.3b hybrid included), never a second sum.
 import { convertedManaCost } from './mana.js';
 // §3.112 — "target attacking creature" reads the live combat record.
-import { attackingCreatureIds } from './combat-removal.js';
+import { attackingCreatureIds, blockingCreatureIds } from './combat-removal.js';
 
 /**
  * The creature type Restoration Angel's printed line excludes. Named because a
@@ -118,6 +118,16 @@ export type TargetRestriction =
    * card than the printed one.
    */
   | 'attackingCreature'
+  /**
+   * §3.173 — "target ATTACKING OR BLOCKING creature": the aim of the archer
+   * family ("{T}: ~ deals 1 damage to target attacking or blocking creature" —
+   * Elite Archers, D'Avenant Archer) and of the combat-only removal spells
+   * (Sandblast, Impeccable Timing, Divine Verdict's cousins). Read off the live
+   * combat record's attackers AND blockers, less anything removed from combat;
+   * outside combat nothing is legal. Never widened to `'creature'`: an archer
+   * that could shoot a creature at sorcery speed is a strictly better card.
+   */
+  | 'attackingOrBlockingCreature'
   /**
    * "target artifact or creature you control" — Molten Duplication's aim.
    * Neither 'creatureYouControl' widened nor 'permanent' narrowed: the first
@@ -431,6 +441,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureYouControl' ||
     value === 'nonlegendaryCreatureYouControl' ||
     value === 'attackingCreature' ||
+    value === 'attackingOrBlockingCreature' ||
     value === 'artifactOrCreatureYouControl' ||
     value === 'nonAngelCreatureYouControl' ||
     value === 'creatureAnOpponentControls' ||
@@ -498,6 +509,7 @@ const TARGET_RESTRICTION_MEMBERS = {
   nonAngelCreatureYouControl: true,
   nonlegendaryCreatureYouControl: true,
   attackingCreature: true,
+  attackingOrBlockingCreature: true,
   artifactOrCreatureYouControl: true,
   creatureAnOpponentControls: true,
   artifactEnchantmentOrLand: true,
@@ -1048,6 +1060,16 @@ function baseTargetIsLegal(
     if (combat === null || combat === undefined) return false;
     return isCreature(permanent.def) && attackingCreatureIds(combat).includes(permanent.instanceId);
   }
+  // §3.173 — either side of the combat, still in it.
+  if (restriction === 'attackingOrBlockingCreature') {
+    const combat = state.combat;
+    if (combat === null || combat === undefined) return false;
+    return (
+      isCreature(permanent.def) &&
+      (attackingCreatureIds(combat).includes(permanent.instanceId) ||
+        blockingCreatureIds(combat).includes(permanent.instanceId))
+    );
+  }
   if (restriction === 'creatureAnOpponentControls') {
     // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
     if (controller === undefined || permanent.controller === controller) return false;
@@ -1513,6 +1535,16 @@ function enumerateTargets(
       }
     }
   }
+  // §3.173 — attackers first, then blockers, each list in declaration order
+  // (the same two records `isLegalTarget` reads).
+  if (restriction === 'attackingOrBlockingCreature' && state.combat) {
+    for (const id of [...attackingCreatureIds(state.combat), ...blockingCreatureIds(state.combat)]) {
+      const permanent = state.battlefield.find((c) => c.instanceId === id);
+      if (permanent && isCreature(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'enchantment' || restriction === 'land' || restriction === 'planeswalker') {
     for (const permanent of state.battlefield) {
       const kindOk =
@@ -1674,6 +1706,8 @@ export function describeRestriction(spec: TargetSpec): string {
       return 'a nonlegendary creature you control';
     case 'attackingCreature':
       return 'an attacking creature';
+    case 'attackingOrBlockingCreature':
+      return 'an attacking or blocking creature';
     case 'artifactOrCreatureYouControl':
       return 'an artifact or creature you control';
     case 'nonAngelCreatureYouControl':

@@ -882,6 +882,11 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
    */
   sacrificeSelfIfCastWith: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
   returnSelfToHand: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
+  // §3.173 — "{U}: Return ~ to its owner's hand": the same debit. The trick is
+  // defensive (save it from removal, reset an Aura) and the heuristic cannot
+  // time that yet, so it is honestly priced as the loss it is when activated
+  // blind; the pilot leaves it alone rather than bouncing its own board.
+  bounceSelf: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
   warpExile: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
   /** The life-cost bill, priced exactly as the mana one: nothing when it can be paid. */
   payLifeOrElse: (params, ctx) => {

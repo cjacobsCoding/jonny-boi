@@ -205,6 +205,7 @@ import { attackingCreatureIds } from './combat-removal.js';
 import { attackDeclarationProblem, attackRequirementProblem, requiredAttackerIds } from './attack-requirements.js';
 import { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
+import type { EntersTappedContext } from './card.js';
 import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
@@ -814,6 +815,20 @@ function otherPlayer(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
 }
 
+/**
+ * §3.173 — the game facts an enters-tapped condition may read beyond the board:
+ * every life total ("unless a player has 13 or less life") and the opponent
+ * count ("unless you have two or more opponents" — one, in this engine's
+ * two-player games). ONE helper for the three entry paths, so a fourth fact is
+ * a line here and not three edits.
+ */
+function entersTappedFacts(state: GameState): Pick<EntersTappedContext, 'lifeTotals' | 'opponentCount'> {
+  return {
+    lifeTotals: PLAYER_IDS.map((id) => state.players[id].life),
+    opponentCount: PLAYER_IDS.length - 1,
+  };
+}
+
 // --- combat damage orchestration ----------------------------------------------
 
 /**
@@ -1294,6 +1309,7 @@ function finishSpellResolution(
       controller: card.controller,
       battlefield: state.battlefield,
       self: card,
+      ...entersTappedFacts(state),
     });
     card.damageMarked = 0;
     card.markedByDeathtouch = false;
@@ -2085,6 +2101,7 @@ function applyAnswerChoice(
         controller: land.controller,
         battlefield: state.battlefield,
         self: land,
+        ...entersTappedFacts(state),
       });
       raiseLandEntryChoice(state, land, choice.chooser, emit);
       checkStateBasedActions(state, emit);
@@ -2323,6 +2340,7 @@ function applyPlayLand(
     controller: action.player,
     battlefield: state.battlefield,
     self: card,
+    ...entersTappedFacts(state),
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
