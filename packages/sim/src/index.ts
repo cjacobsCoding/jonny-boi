@@ -122,6 +122,67 @@ export {
   copiesSwappedBy,
   GAMES_PER_PAIRED_GAME,
 } from './swap.js';
+// §3.174 — a CUT is a swap whose in-card is nothing; `applySwap` builds it.
+export { SWAP_IN_NOTHING, CUT_OUT_SEPARATOR, isCut, cutOutRefs } from './swap.js';
+
+/**
+ * THE LAB TRIM (DESIGN §3.174) — reduce a deck toward a target size by
+ * evaluating single-card REMOVALS round by round through the paired A/B
+ * machinery, with a mana-aware prior. Pure; the CLI-less web Lab drives the
+ * same plan over its worker pool and finishes it with the same function.
+ */
+export type {
+  TrimRoundKind,
+  TrimOnImprovement,
+  TrimOnNoImprovement,
+  TrimSettings,
+  TrimPriorWeights,
+  TrimConfig,
+  LandRatio,
+  FavouredCut,
+  LandCutReading,
+  TrimCut,
+  TrimCandidate,
+  TrimCandidateOptions,
+  PrepareTrimRoundOptions,
+  TrimRoundPlan,
+  TrimRow,
+  TrimRoundVerdict,
+  TrimRoundReport,
+  FinishTrimRoundInput,
+  TrimArmRunner,
+  TrimProgress,
+  RunTrimRoundOptions,
+  TrimStopReason,
+  TrimSessionResult,
+  TrimSessionOptions,
+} from './trim.js';
+export {
+  TRIM_SWAP_SCOPE,
+  LAND_RATIO_TOLERANCE_LANDS,
+  TRIM_ROUND_KINDS,
+  CARDS_PER_CUT,
+  TRIM_ON_IMPROVEMENT,
+  TRIM_ON_NO_IMPROVEMENT,
+  DEFAULT_TRIM_CONFIG,
+  TRIM_IN_NAME,
+  TRIM_PAIRING_NOTE,
+  TRIM_SKIP_NOT_APPLICABLE,
+  landCutDue,
+  isLandCard,
+  landRatioOf,
+  deckSizeOf,
+  isTrimCandidate,
+  describeCuts,
+  generateTrimCandidates,
+  prepareTrimRound,
+  finishTrimRound,
+  applyTrimCut,
+  nextWideningStep,
+  driveTrimRound,
+  runTrimRound,
+  trimDeck,
+} from './trim.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE, copiesForScope, describeScope } from './config.js';
 

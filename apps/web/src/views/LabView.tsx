@@ -20,11 +20,15 @@ import {
   SUGGEST_GAMES,
   SUGGEST_MAX_CANDIDATES,
 } from '../lib/lab-config.js';
+import { TRIM_DEFAULT_SETTINGS, TRIM_TARGET_SIZE } from '../lib/lab-config.js';
+import { applyCutToDeck, describeCutApplied } from '../lib/lab/trimApply.js';
+import type { TrimCut } from '@jonny-boi/sim';
 import { RunStatus } from '../components/RunStatus.js';
 import { GauntletPanel } from '../components/lab/GauntletPanel.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
 import { SwapPanel } from '../components/lab/SwapPanel.js';
 import { SuggestPanel } from '../components/lab/SuggestPanel.js';
+import { TrimPanel } from '../components/lab/TrimPanel.js';
 import { ManabasePanel } from '../components/lab/ManabasePanel.js';
 import { applyManabaseToDeck } from '../lib/lab/manabaseApply.js';
 import type { ManabaseVariant } from '@jonny-boi/sim';
@@ -35,6 +39,7 @@ const LAB_TABS = [
   { id: 'gauntlet', label: 'Gauntlet' },
   { id: 'swap', label: 'A/B Swap Test' },
   { id: 'suggest', label: 'Suggestions' },
+  { id: 'trim', label: 'Trim' },
   { id: 'manabase', label: 'Manabase' },
 ] as const;
 
@@ -113,6 +118,19 @@ export function LabView({
             hero.name,
           ),
         );
+      }
+    : undefined;
+
+  // §3.174 — applying a REMOVAL edits the hero the same way a swap does: through
+  // the deck module's own funnel, with a note that says what left. The result is
+  // returned because the trim panel's auto mode has to know whether the deck
+  // actually shrank before it issues the next round.
+  const onApplyCut = canEditHero
+    ? (cuts: readonly TrimCut[]) => {
+        const result = applyCutToDeck(hero, cuts);
+        if (result.copiesRemoved > 0) decks.updateDeck(result.deck);
+        setApplyNote(describeCutApplied(result, hero.name));
+        return result;
       }
     : undefined;
 
@@ -228,6 +246,17 @@ export function LabView({
             // §3.136 — the SAME hero card list the A/B tab cuts from, so the two
             // tabs can never offer different cards for the same deck.
             cutOptions={hero ? heroOutOptions(hero) : []}
+          />
+        )}
+        {tab === 'trim' && (
+          <TrimPanel
+            {...sharedProps}
+            // §3.174 — games per finalist REUSES the Suggest slider: the trim runs
+            // the same adaptive ladder, one round per card cut.
+            gamesConfig={SUGGEST_GAMES}
+            targetConfig={TRIM_TARGET_SIZE}
+            defaultSettings={TRIM_DEFAULT_SETTINGS}
+            {...(onApplyCut ? { onApplyCut } : {})}
           />
         )}
         {tab === 'manabase' && (

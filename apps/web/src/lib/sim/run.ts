@@ -26,7 +26,9 @@ import type {
   SimResultPayload,
   SuggestRequest,
   SwapRequest,
+  TrimRequest,
 } from '../sim-protocol.js';
+import { TRIM_SWAP_SCOPE, finishTrimRound } from '@jonny-boi/sim';
 import {
   finishManabaseRun,
   variantForCandidateKey,
@@ -42,6 +44,7 @@ import {
   finishSuggestionRun,
   summarizePairedSwap,
   type AdaptiveRound,
+  type AdaptiveSearchOutcome,
   type PairedBaseRecord,
   type PairedTable,
   type SkippedCandidate,
@@ -71,6 +74,7 @@ import type {
   ShardJob,
   ShardResult,
   SuggestPlanResult,
+  TrimPlanResult,
   VariantSliceShardResult,
 } from './shard-protocol.js';
 
@@ -402,72 +406,22 @@ export async function runSwap(
 // --- suggestions ---------------------------------------------------------------
 
 /**
- * THE POOLED DRIVER OF THE ADAPTIVE SEARCH.
+ * THE POOLED LADDER, shared by Suggest and the Trim (§3.174).
  *
- * Successive halving cannot be flattened into a queue of independent games: which
- * arms survive round N+1 depends on what round N measured. So the pool drives the
- * sim's search generator **round by round, with a barrier**, and each round is two
- * parallel phases:
- *
- *   A. the SHARED base games for the slots this round newly needs (one game per
- *      slot for the whole run — base-arm reuse, preserved across workers), then
- *   B. every surviving arm's variant games over those slots, cut by slot range so
- *      a two-survivor round still fills the machine.
- *
- * Phase B needs phase A's records to keep the identical-game skip, which is what
- * forces the barrier between them. Utilisation is highest in the wide early
- * rounds and drops in the late ones — few arms, and the round can only finish when
- * its slowest shard does. That cost is inherent to a stateful search; the
- * alternative is a faster run that answers a different question.
- *
- * Everything this function decides is scheduling. Who survives, what each verdict
- * is, how the list ranks and what the next run should explore are all decided by
- * `@jonny-boi/sim` — `driveAdaptiveSearch` and `finishSuggestionRun`.
+ * Drive `driveAdaptiveSearch` over `plan` round by round with a barrier — the
+ * shared base games for the slots the round adds, then every surviving arm's
+ * variant games over those slots — and hand back the search's outcome plus the
+ * variant games it cost. Everything it decides is scheduling; who survives is
+ * the sim's call. A trim round drives it with a roster of REMOVALS (a swap
+ * whose in-card is nothing, built by `applySwap` in the workers), so one loop
+ * serves both searches and cannot quietly disagree with itself.
  */
-export async function runSuggest(
-  request: SuggestRequest,
+async function drivePooledSearch(
+  plan: SuggestionRunPlan,
+  context: ShardContext,
   runner: ShardRunner,
-  sink: ProgressSink,
-  progressIntervalSeconds: number,
-): Promise<SimResultPayload> {
-  const opponentNames = opponentsFor(request);
-  const context = contextFor(request, opponentNames);
-  const startedAt = nowSeconds();
-
-  // Phase 1 is a SINGLE job, so left alone the pool would spawn one worker now
-  // and the other ten during round 1 — putting their card-pool construction
-  // inside the first round of games instead of alongside the planning. Warm them
-  // all here and the spin-up overlaps work that has to happen anyway.
-  runner.warmUp?.();
-
-  // PHASE 1 — enumerate + pre-rank candidates, accept the cross-run record, plan
-  // the waves. Pure CPU over the whole card pool, so it runs on a worker; doing it
-  // on the main thread would freeze the UI before the first game is played.
-  sink({
-    type: 'progress',
-    done: 0,
-    total: 0,
-    gamesRun: 0,
-    elapsedSeconds: 0,
-    label: 'finding candidate swaps…',
-  });
-  const planned = (await runner.submit(
-    {
-      kind: 'suggest-plan',
-      context,
-      maxCandidates: request.maxCandidates,
-      gamesPerCandidate: request.gamesPerCandidate,
-      ...(request.history ? { history: request.history } : {}),
-      // §3.136 — which cards the search may cut. The scope rides the context
-      // (the arms need it too); this is the planning half.
-      ...(request.cutOnly && request.cutOnly.length > 0 ? { cutOnly: request.cutOnly } : {}),
-    },
-    () => {},
-  )) as SuggestPlanResult;
-  const plan = planned.plan;
-
-  const tally = new ProgressTally(estimatePlannedGames(plan), sink, progressIntervalSeconds);
-
+  tally: ProgressTally,
+): Promise<PooledSearchResult> {
   // Live state the rounds accumulate. Every one of these is either an integer sum
   // or keyed by the candidate's stable key, so none of them can carry arrival
   // order into the result.
@@ -599,7 +553,89 @@ export async function runSuggest(
     tally.setTotal(estimatePlannedGames(plan, tally.gamesDone, step.done ? undefined : step.value));
   }
 
-  const outcome = step.value;
+  return { outcome: step.value, variantGamesPlayed, variantGamesSkipped };
+}
+
+/** What the pooled ladder hands back: the search's outcome and the games it cost. */
+interface PooledSearchResult {
+  readonly outcome: AdaptiveSearchOutcome;
+  readonly variantGamesPlayed: number;
+  readonly variantGamesSkipped: number;
+}
+
+/**
+ * THE POOLED DRIVER OF THE ADAPTIVE SEARCH.
+ *
+ * Successive halving cannot be flattened into a queue of independent games: which
+ * arms survive round N+1 depends on what round N measured. So the pool drives the
+ * sim's search generator **round by round, with a barrier**, and each round is two
+ * parallel phases:
+ *
+ *   A. the SHARED base games for the slots this round newly needs (one game per
+ *      slot for the whole run — base-arm reuse, preserved across workers), then
+ *   B. every surviving arm's variant games over those slots, cut by slot range so
+ *      a two-survivor round still fills the machine.
+ *
+ * Phase B needs phase A's records to keep the identical-game skip, which is what
+ * forces the barrier between them. Utilisation is highest in the wide early
+ * rounds and drops in the late ones — few arms, and the round can only finish when
+ * its slowest shard does. That cost is inherent to a stateful search; the
+ * alternative is a faster run that answers a different question.
+ *
+ * Everything this function decides is scheduling. Who survives, what each verdict
+ * is, how the list ranks and what the next run should explore are all decided by
+ * `@jonny-boi/sim` — `driveAdaptiveSearch` and `finishSuggestionRun`.
+ */
+export async function runSuggest(
+  request: SuggestRequest,
+  runner: ShardRunner,
+  sink: ProgressSink,
+  progressIntervalSeconds: number,
+): Promise<SimResultPayload> {
+  const opponentNames = opponentsFor(request);
+  const context = contextFor(request, opponentNames);
+  const startedAt = nowSeconds();
+
+  // Phase 1 is a SINGLE job, so left alone the pool would spawn one worker now
+  // and the other ten during round 1 — putting their card-pool construction
+  // inside the first round of games instead of alongside the planning. Warm them
+  // all here and the spin-up overlaps work that has to happen anyway.
+  runner.warmUp?.();
+
+  // PHASE 1 — enumerate + pre-rank candidates, accept the cross-run record, plan
+  // the waves. Pure CPU over the whole card pool, so it runs on a worker; doing it
+  // on the main thread would freeze the UI before the first game is played.
+  sink({
+    type: 'progress',
+    done: 0,
+    total: 0,
+    gamesRun: 0,
+    elapsedSeconds: 0,
+    label: 'finding candidate swaps…',
+  });
+  const planned = (await runner.submit(
+    {
+      kind: 'suggest-plan',
+      context,
+      maxCandidates: request.maxCandidates,
+      gamesPerCandidate: request.gamesPerCandidate,
+      ...(request.history ? { history: request.history } : {}),
+      // §3.136 — which cards the search may cut. The scope rides the context
+      // (the arms need it too); this is the planning half.
+      ...(request.cutOnly && request.cutOnly.length > 0 ? { cutOnly: request.cutOnly } : {}),
+    },
+    () => {},
+  )) as SuggestPlanResult;
+  const plan = planned.plan;
+
+  const tally = new ProgressTally(estimatePlannedGames(plan), sink, progressIntervalSeconds);
+
+  const { outcome, variantGamesPlayed, variantGamesSkipped } = await drivePooledSearch(
+    plan,
+    context,
+    runner,
+    tally,
+  );
   const elapsedSeconds = nowSeconds() - startedAt;
   const baseGamesPlayed = outcome.baseSlotsPlayed;
   // Reserve candidates the search never reached — reported, never silent.
@@ -664,6 +700,82 @@ export async function runSuggest(
   tally.setTotal(tally.gamesDone);
   tally.emit(`${report.candidatesEvaluated} candidates · ${workersLabel(runner.workerCount)}`, true);
   return { kind: 'suggest', result: report, pilotId: request.pilotId };
+}
+
+// --- trim (§3.174) -------------------------------------------------------------------
+
+/**
+ * ONE ROUND OF THE TRIM, on the pool: plan the removals on a worker, drive the
+ * SAME pooled ladder Suggest drives, and let the sim's `finishTrimRound` decide
+ * the round — every verdict through the shared Holm correction, the winner and
+ * the on-the-edge candidate read off the same ranking the CLI would produce.
+ *
+ * The shard context carries the trim's ONE-copy scope, so the workers' arm
+ * runner builds each candidate's variant (one copy out, nothing in) exactly as
+ * the planner validated it.
+ */
+export async function runTrim(
+  request: TrimRequest,
+  runner: ShardRunner,
+  sink: ProgressSink,
+  progressIntervalSeconds: number,
+): Promise<SimResultPayload> {
+  const opponentNames = opponentsFor(request);
+  const context = contextFor({ ...request, swapScope: TRIM_SWAP_SCOPE }, opponentNames);
+  const startedAt = nowSeconds();
+
+  runner.warmUp?.();
+  sink({
+    type: 'progress',
+    done: 0,
+    total: 0,
+    gamesRun: 0,
+    elapsedSeconds: 0,
+    label: request.roundKind === 'pairs' ? 'finding nonland + land pairs to cut…' : 'finding cards to cut…',
+  });
+  const planned = (await runner.submit(
+    {
+      kind: 'trim-plan',
+      context,
+      gamesPerCandidate: request.gamesPerCandidate,
+      round: request.round,
+      roundKind: request.roundKind,
+      targetSize: request.targetSize,
+      ...(request.baseLandRatio ? { baseLandRatio: request.baseLandRatio } : {}),
+    },
+    () => {},
+  )) as TrimPlanResult;
+  const round = planned.round;
+
+  const tally = new ProgressTally(estimatePlannedGames(round.plan), sink, progressIntervalSeconds);
+  const { outcome, variantGamesPlayed, variantGamesSkipped } = await drivePooledSearch(
+    round.plan,
+    context,
+    runner,
+    tally,
+  );
+  const elapsedSeconds = nowSeconds() - startedAt;
+  const baseGamesPlayed = outcome.baseSlotsPlayed;
+
+  const report = finishTrimRound({
+    round,
+    outcome,
+    usage: {
+      baseGamesPlayed,
+      variantGamesPlayed,
+      variantGamesSkipped,
+      totalGamesPlayed: baseGamesPlayed + variantGamesPlayed,
+      // `finishTrimRound` overwrites this with the trim's own reason (a cut can
+      // never be skipped); what is passed here is never read.
+      identicalGameSkipEnabled: false,
+    },
+    elapsedSeconds,
+    workersUsed: runner.workerCount,
+  });
+
+  tally.setTotal(tally.gamesDone);
+  tally.emit(`${report.candidatesEvaluated} removals · ${workersLabel(runner.workerCount)}`, true);
+  return { kind: 'trim', result: report, pilotId: request.pilotId };
 }
 
 const EMPTY_TABLE: PairedTable = Object.freeze({
@@ -958,7 +1070,7 @@ export async function runMatchRequest(
 
 /** Run any Lab request on a shard runner. The one entry point the hook calls. */
 export async function runSimRequest(
-  request: GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | ManabaseRequest,
+  request: GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | TrimRequest | ManabaseRequest,
   runner: ShardRunner,
   sink: ProgressSink,
   progressIntervalSeconds: number,
@@ -972,6 +1084,8 @@ export async function runSimRequest(
       return runSuggest(request, runner, sink, progressIntervalSeconds);
     case 'match':
       return runMatchRequest(request, runner, sink);
+    case 'trim':
+      return runTrim(request, runner, sink, progressIntervalSeconds);
     case 'manabase':
       return runManabase(request, runner, sink, progressIntervalSeconds);
   }

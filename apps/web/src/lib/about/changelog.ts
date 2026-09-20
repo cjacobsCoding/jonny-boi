@@ -86,6 +86,14 @@ export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
       'A new Manabase tab in the Lab: it builds land-only variants of your deck — a land or two more or fewer, the basics shifted between colours, a playset of each dual from the pool that fits your colours — plays each one against your deck on the same games, and shows the win rate beside how often it missed a land drop, got colour-screwed, or had its lands by turn four. Two axes, side by side, with the rule that picks a recommendation printed; Apply swaps the lands in.',
   },
   {
+    section: '3.174',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'The Lab trims a deck toward a target size',
+    summary:
+      'Lab → Trim: set a target (60, or your own), and each round tests removing one copy of every card with the same paired A/B test as the other tabs. A removal that proves better is applied — or shown for you to apply — and the next round runs on the smaller deck, until the target. It takes mana into account (after enough nonland cuts a land cut is due, and the arithmetic is printed), and when nothing proves better it shows every row and the most likely improving removal as an on-the-edge Apply.',
+  },
+  {
     section: '3.173',
     date: '2026-09-19',
     kind: 'mechanic',

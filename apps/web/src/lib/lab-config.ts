@@ -12,6 +12,7 @@ import {
   FIDELITY_CAVEAT,
   LAND_COUNT_SWEEP_RADIUS,
 } from '@jonny-boi/sim';
+import { DEFAULT_DECK_RULES, type TrimSettings } from '@jonny-boi/sim';
 
 /**
  * The fixed base seed every Lab run uses by default, so results are reproducible
@@ -54,6 +55,31 @@ export const SUGGEST_MAX_CANDIDATES = {
   max: 24,
   step: 1,
 } as const;
+
+/**
+ * §3.174 — the Lab TRIM. The target-size input's bounds: never below the
+ * format's minimum (the sim refuses a plan under it), and up to the largest
+ * constructed deck anyone brings to the Lab. Games per candidate REUSES
+ * `SUGGEST_GAMES` — the trim runs Suggest's adaptive ladder, not a second one.
+ */
+export const LARGEST_CONSTRUCTED_DECK_SIZE = 100;
+export const TRIM_TARGET_SIZE = {
+  default: DEFAULT_DECK_RULES.minDeckSize,
+  min: DEFAULT_DECK_RULES.minDeckSize,
+  max: LARGEST_CONSTRUCTED_DECK_SIZE,
+  step: 1,
+} as const;
+
+/**
+ * The trim's opening settings: ASK before applying an improving removal, and
+ * PAUSE when a round finds none — the conservative pair, so nothing changes a
+ * deck until the user says so. Both are one click away in the panel.
+ */
+export const TRIM_DEFAULT_SETTINGS: TrimSettings = Object.freeze({
+  targetSize: TRIM_TARGET_SIZE.default,
+  onImprovement: 'ask',
+  onNoImprovement: 'pause',
+});
 
 /**
  * §3.175 — the manabase experiments: paired games per opponent a FINALIST
