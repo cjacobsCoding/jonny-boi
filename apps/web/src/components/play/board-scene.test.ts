@@ -189,6 +189,9 @@ describe('every fixed overlay is a SIBLING of the scene, not a descendant', () =
       // and the rail is a sibling of the scene (see the rail's own comment in
       // BoardScene), so handing the feed to `rail` is exactly where it belongs.
       '<StackPanel',
+      // §3.178 — the infinite-combo prompt (hotseat/solo only: the online view
+      // does not carry the window yet, see the DESIGN section).
+      '<ComboPrompt',
     ],
     'OnlineBoard.tsx': [
       '<CardZoomOverlay',

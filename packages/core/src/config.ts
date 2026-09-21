@@ -4,6 +4,8 @@
  * (and, later, surfaced to the debug inspector). Keep this module pure data.
  */
 
+import type { PlayerId } from './state.js';
+
 /** A frozen bundle of the rules knobs the engine reads. */
 export interface RulesConfig {
   /** Life each player starts the game with. */
@@ -37,6 +39,23 @@ export interface RulesConfig {
    * moves every recorded baseline in DESIGN §3.4a.
    */
   readonly maximumHandSize: number;
+  /**
+   * §3.178 — the seats the engine watches for an INFINITE COMBO and offers the
+   * repeat prompt to (`GameState.comboWindow`). EMPTY — the default, and what
+   * every simulation runs with — means the detector never runs, records
+   * nothing, and the engine plays byte-identically to before it existed.
+   *
+   * A list of seats rather than a boolean because the engine cannot tell a
+   * human from a pilot, and the board can: the Play session names its human
+   * seats here (both in pass-and-play, one in Solo). The loop's OWNER is the
+   * seat that took its non-pass actions, and a loop owned by an unlisted seat
+   * — the computer's — is never offered, however it was completed; the pilot's
+   * loops stay the CR 104.4b runaway the soak already guards. It is a rules
+   * knob rather than a session flag so a replay of the recorded actions opens
+   * the same window at the same action and the recorded `repeatCombo` is legal
+   * again.
+   */
+  readonly comboDetectionSeats: readonly PlayerId[];
 }
 
 /** The default MTG-faithful rules configuration. */
@@ -47,4 +66,5 @@ export const DEFAULT_RULES: RulesConfig = Object.freeze({
   playerOnPlaySkipsFirstDraw: true,
   cardsPerDrawStep: 1,
   maximumHandSize: 7,
+  comboDetectionSeats: Object.freeze([]) as readonly PlayerId[],
 });
