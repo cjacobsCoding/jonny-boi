@@ -625,8 +625,13 @@ export function generateManabaseVariants(
  * is applied line by line until the asked-for copies have moved; a step that
  * cannot move them all throws rather than building a deck that differs from the
  * label. The result is named after the variant, not after the chain of swaps.
+ *
+ * ⚠️ The parameter is the STEPS and the LABEL, not the whole variant, because
+ * this is the one fold in the repo that turns a list of replacements into a
+ * deck: the joint search (§3.177) builds its own moves from the same
+ * `ManabaseStep` shape and must not carry a second copy of this loop.
  */
-export function applyManabase(base: Deck, variant: ManabaseVariant, pool: CardPool): Deck {
+export function applyManabase(base: Deck, variant: Pick<ManabaseVariant, 'steps' | 'label'>, pool: CardPool): Deck {
   let deck: Deck = base;
   for (const step of variant.steps) {
     let remaining = step.copies;
