@@ -366,13 +366,36 @@ function landCountOf(row: JointMoveRow): number {
 }
 
 /**
- * Roll the count family up per land count, best partner first.
+ * How a count's partners are ordered when the count is attributed to its BEST
+ * one: by what the games decided first, and only then by how big the difference
+ * was. A partner PROVED better is a better answer to "is this count better?"
+ * than one with a larger point estimate that the correction could not separate
+ * from noise — the whole reason this module never ranks on a raw delta.
+ */
+const PARTNER_VERDICT_ORDER: Readonly<Record<SwapVerdict, number>> = Object.freeze({
+  better: 0,
+  inconclusive: 1,
+  worse: 2,
+});
+
+/**
+ * ROLL THE COUNT FAMILY UP PER LAND COUNT, best partner first.
+ *
+ * Exported because it is the load-bearing half of the fix and must be checkable
+ * on its own: a rollup that returned the first partner it was handed would agree
+ * with the phase report whenever the incoming rows happen to arrive ranked, and
+ * a test that only ever saw ranked rows could not tell the difference. It takes
+ * rows in ANY order and is tested with them shuffled.
  *
  * The maximum is taken over the partners that were PLAYED, and the row says how
  * many those were: a count reached by one partner is the confounded reading and
  * must not be presented as though it were the best build at that count.
  */
-function rollUpLandCounts(rows: readonly JointMoveRow[], plan: JointPhasePlan, baseWinRate: ProportionCI): LandCountRow[] {
+export function rollUpLandCounts(
+  rows: readonly JointMoveRow[],
+  base: ManabaseSummary,
+  baseWinRate: ProportionCI,
+): LandCountRow[] {
   const countRows = rows.filter((row) => row.move.family === 'count');
   if (countRows.length === 0) return [];
   const byCount = new Map<number, JointMoveRow[]>();
@@ -383,7 +406,7 @@ function rollUpLandCounts(rows: readonly JointMoveRow[], plan: JointPhasePlan, b
   }
   const out: LandCountRow[] = [
     {
-      landCount: plan.joint.base.landCount,
+      landCount: base.landCount,
       isBase: true,
       partnersTested: 0,
       partners: [],
@@ -393,7 +416,11 @@ function rollUpLandCounts(rows: readonly JointMoveRow[], plan: JointPhasePlan, b
     },
   ];
   for (const [landCount, list] of byCount) {
-    const partners = [...list].sort((a, b) => b.evaluation.delta - a.evaluation.delta);
+    const partners = [...list].sort(
+      (a, b) =>
+        PARTNER_VERDICT_ORDER[a.evaluation.verdict] - PARTNER_VERDICT_ORDER[b.evaluation.verdict] ||
+        b.evaluation.delta - a.evaluation.delta,
+    );
     const best = partners[0] as JointMoveRow;
     out.push({
       landCount,
@@ -478,7 +505,7 @@ export function finishJointPhase(input: FinishJointPhaseInput): JointPhaseReport
     rows,
     ...(winner ? { winner } : {}),
     ...(edge ? { edge } : {}),
-    landCounts: rollUpLandCounts(rows, plan, report.baseGauntletWinRate),
+    landCounts: rollUpLandCounts(rows, plan.joint.base, report.baseGauntletWinRate),
     baseWinRate: report.baseGauntletWinRate,
     movesEvaluated: rows.length,
     skipped: plan.joint.skipped,

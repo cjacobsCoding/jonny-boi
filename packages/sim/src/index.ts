@@ -406,6 +406,7 @@ export {
   moveForCandidateKey,
   nextJointPhase,
   planJointPhase,
+  rollUpLandCounts,
   runJointPhase,
   runJointSearch,
   startJointSearch,

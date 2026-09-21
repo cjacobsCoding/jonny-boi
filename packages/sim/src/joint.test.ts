@@ -32,6 +32,7 @@ import { createDefaultAiRegistry, HEURISTIC_PILOT_ID, type Pilot } from '@jonny-
 import { SELESNYA_BLINK, MONO_RED_AGGRO } from '../data/decks/index.js';
 import type { Deck } from './deck.js';
 import { loadDeck, validateDeck } from './deck.js';
+import type { SwapVerdict } from './swap.js';
 import type { MatchupPilots } from './matchup.js';
 import type { ArmHandle, PairedArmsUsage, SwapArm, VariantArmSpec } from './paired-arms.js';
 import {
@@ -45,11 +46,14 @@ import {
   jointStopReasonOf,
   moveForCandidateKey,
   planJointPhase,
+  rollUpLandCounts,
   runJointPhase,
   runJointSearch,
   startJointSearch,
   type JointArmRunner,
   type JointBudget,
+  type JointMove,
+  type JointMoveRow,
   type JointSearchOptions,
   type JointSearchState,
 } from './joint.js';
@@ -259,6 +263,38 @@ function riggedRunner(base: Deck): JointArmRunner {
   };
 }
 
+/**
+ * A `JointMoveRow` with only the fields the ROLLUP reads, so the rollup can be
+ * tested on rows in an order a finished phase would never hand it.
+ */
+function fakeRow(spec: {
+  readonly landCount: number;
+  readonly partner: string;
+  readonly delta: number;
+  readonly verdict: SwapVerdict;
+}): JointMoveRow {
+  const move: JointMove = {
+    key: `count:${spec.landCount}:${spec.partner}`,
+    family: 'count',
+    phase: 'manabase',
+    label: `${spec.landCount} lands (−1 Forest, +1 ${spec.partner})`,
+    note: 'fixture',
+    steps: [{ outId: 'forest', outName: 'Forest', inId: spec.partner, inName: spec.partner, copies: 1 }],
+    landCount: spec.landCount,
+    slotsChanged: 1,
+    partner: { cardId: spec.partner, name: spec.partner, direction: 'added', copies: 1, fitScore: 0, fitRank: 1 },
+  };
+  return {
+    rank: 1,
+    key: move.key,
+    move,
+    evaluation: { delta: spec.delta, verdict: spec.verdict } as JointMoveRow['evaluation'],
+    gamesPlayed: 100,
+    rawPValue: 0.01,
+    adjustedPValue: 0.02,
+  };
+}
+
 /** Two stand-in opponents: the rig never plays them, but the ladder counts them. */
 const realPool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -338,11 +374,19 @@ describe('joint move generator', () => {
     for (const [, partners] of byCount) expect(partners).toBeGreaterThan(1);
   });
 
-  it('reports the partners past the shortlist rather than dropping them', () => {
+  it('reports the partners past the shortlist rather than dropping them — in BOTH directions', () => {
     const set = generateJointMoves(FLOODED, POOL, { phase: 'manabase', partnerRule: 'measured', partnersPerCountStep: 1 });
     const past = set.skipped.filter((s) => s.reason.startsWith('past the partner shortlist'));
     expect(past.length).toBeGreaterThan(0);
-    expect(past[0]?.family).toBe('count');
+    expect(past.every((s) => s.family === 'count')).toBe(true);
+    // A skip label opens with the land count it belongs to, so the two
+    // directions are distinguishable — and both must report, or the half that
+    // does not would drop its extra partners in silence.
+    const counts = past.map((s) => Number.parseInt(s.label, 10));
+    expect(counts.some((n) => n < landsIn(FLOODED))).toBe(true);
+    expect(counts.some((n) => n > landsIn(FLOODED))).toBe(true);
+    // And each one names the shortlist it fell outside, with the denominator.
+    expect(past.every((s) => /1 of \d+ partners are measured at this count$/u.test(s.reason))).toBe(true);
   });
 
   it("the arbitrary-partner rule IS §3.175's sweep — one partner per count, and the same labels", () => {
@@ -466,6 +510,33 @@ describe('the planted answer is found', () => {
     // And the fewer-lands direction is what proved better here.
     expect(twentyEight?.verdict).toBe('better');
     expect(report.confoundNote).toBe(JOINT_CONFOUND_NOTE);
+  });
+
+  it('the rollup picks the best partner from rows in ANY order — proved verdict first, then delta', () => {
+    // Handed IN ASCENDING order, and with the largest point estimate on a row
+    // the correction could NOT separate from noise. A rollup that returned the
+    // first row it was given, or that ranked on the raw delta, gets this wrong —
+    // which is the point of testing the rollup on its own: inside a finished
+    // phase the rows already arrive ranked, so neither mistake would ever show.
+    const shuffled = [
+      fakeRow({ landCount: 23, partner: 'Weakest', delta: 0.01, verdict: 'better' }),
+      fakeRow({ landCount: 23, partner: 'Loudest', delta: 0.40, verdict: 'inconclusive' }),
+      fakeRow({ landCount: 23, partner: 'Best', delta: 0.09, verdict: 'better' }),
+      fakeRow({ landCount: 25, partner: 'Only', delta: -0.05, verdict: 'worse' }),
+    ];
+    const rolled = rollUpLandCounts(shuffled, summarizeManabase(FLOODED, POOL), { p: 0.5, low: 0.4, high: 0.6, n: 100 });
+    const at23 = rolled.find((r) => r.landCount === 23);
+    expect(at23?.best?.move.partner?.name).toBe('Best');
+    expect(at23?.partners.map((p) => p.move.partner?.name)).toEqual(['Best', 'Weakest', 'Loudest']);
+    expect(at23?.verdict).toBe('better');
+    expect(at23?.partnersTested).toBe(3);
+    expect(rolled.find((r) => r.landCount === 25)?.verdict).toBe('worse');
+    // The base row is always present, sits at its own count, and has no move.
+    const base = rolled.find((r) => r.isBase);
+    expect(base?.landCount).toBe(landsIn(FLOODED));
+    expect(base?.best).toBeUndefined();
+    expect(base?.verdict).toBe('base');
+    expect(rolled.map((r) => r.landCount)).toEqual([...rolled.map((r) => r.landCount)].sort((a, b) => a - b));
   });
 
   it('a count judged on ONE partner says so, instead of reading as the best build at it', () => {
