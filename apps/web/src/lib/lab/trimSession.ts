@@ -13,13 +13,17 @@
  * the engine cannot disagree about what "keep looking" means.
  */
 import {
+  DEFAULT_TRIM_BUDGET,
   TRIM_ROUND_KINDS,
+  deeperGamesPerCandidate,
   nextWideningStep,
   type LandRatio,
   type TrimRoundKind,
   type TrimRoundReport,
   type TrimRow,
   type TrimSettings,
+  type TrimSpend,
+  type TrimStopReason,
 } from '@jonny-boi/sim';
 import { resolveEntries, type Deck } from '../deck.js';
 
@@ -31,23 +35,54 @@ export type TrimNextStep =
   | { readonly kind: 'ask'; readonly row: TrimRow }
   /** Nothing improved, and the settings say widen: issue this round next. */
   | { readonly kind: 'widen'; readonly round: number; readonly roundKind: TrimRoundKind }
-  /** Nothing improved and nothing is left to widen to (or the settings say pause). */
-  | { readonly kind: 'exhausted'; readonly edge?: TrimRow };
+  /**
+   * The kinds are spent but the round is still UNSURE (§3.179): run the ladder
+   * again DEEPER. `gamesPerCandidate` is what the next request must ask for.
+   */
+  | { readonly kind: 'deepen'; readonly round: number; readonly roundKind: TrimRoundKind; readonly gamesPerCandidate: number }
+  /** The session is over. `reason` says WHICH of the several ways it ended. */
+  | { readonly kind: 'stopped'; readonly reason: TrimStopReason; readonly edge?: TrimRow };
 
 /** The first round of a session, and of every fresh start after an apply. */
 export const FIRST_ROUND_KIND: TrimRoundKind = TRIM_ROUND_KINDS[0];
 
-/** Decide what follows a finished round. The whole closed table, in one place. */
-export function stepAfterRound(report: TrimRoundReport, settings: TrimSettings): TrimNextStep {
+/**
+ * Decide what follows a finished round. The whole closed table, in one place.
+ *
+ * ⚠️ THIS MIRRORS `trimDeck`'s LOOP AND MUST NOT DRIFT FROM IT. The panel drives
+ * one round per worker request so Cancel stays the ordinary cancel, which is why
+ * the loop cannot simply be called — but every DECISION is imported
+ * (`nextWideningStep`, `deeperGamesPerCandidate`, the stop-reason vocabulary),
+ * so the engine and the Lab cannot disagree about what "keep looking" means.
+ * `trim-session-parity.test.ts` drives both over the same rounds and fails if
+ * they diverge.
+ */
+export function stepAfterRound(
+  report: TrimRoundReport,
+  settings: TrimSettings,
+  spend: TrimSpend,
+  gamesPerCandidate: number,
+): TrimNextStep {
   if (report.verdict === 'improved' && report.winner) {
     return settings.onImprovement === 'auto' ? { kind: 'apply', row: report.winner } : { kind: 'ask', row: report.winner };
   }
-  const next =
-    settings.onNoImprovement === 'keep-looking'
-      ? nextWideningStep(report.roundKind, report.deckSize, report.targetSize)
-      : undefined;
+  const edge = report.edgeCandidate ? { edge: report.edgeCandidate } : {};
+  if (settings.onNoImprovement === 'pause') return { kind: 'stopped', reason: 'paused', ...edge };
+
+  const next = nextWideningStep(report.roundKind, report.deckSize, report.targetSize);
   if (next !== undefined) return { kind: 'widen', round: report.round + 1, roundKind: next };
-  return { kind: 'exhausted', ...(report.edgeCandidate ? { edge: report.edgeCandidate } : {}) };
+
+  // The kinds are spent. A CONCLUSIVE round has settled the question; an UNSURE
+  // one has not, and the lever left is depth.
+  if (report.verdict === 'exhausted') return { kind: 'stopped', reason: 'no-improvement-conclusive', ...edge };
+
+  const budget = settings.budget ?? DEFAULT_TRIM_BUDGET;
+  if (spend.games >= budget.maxGames || spend.seconds >= budget.maxSeconds) {
+    return { kind: 'stopped', reason: 'budget-exhausted', ...edge };
+  }
+  const deeper = deeperGamesPerCandidate(gamesPerCandidate);
+  if (deeper === undefined) return { kind: 'stopped', reason: 'budget-exhausted', ...edge };
+  return { kind: 'deepen', round: report.round + 1, roundKind: FIRST_ROUND_KIND, gamesPerCandidate: deeper };
 }
 
 /** After a removal is applied: another round, or done? */

@@ -49,7 +49,14 @@ import {
   type SwapScope,
 } from './config.js';
 import type { CardSwap, SwapEvaluation } from './swap.js';
-import { applySwap, copiesSwappedBy, CUT_OUT_SEPARATOR, SWAP_IN_NOTHING, summarizePairedSwap } from './swap.js';
+import {
+  applySwap,
+  copiesSwappedBy,
+  CUT_OUT_SEPARATOR,
+  SWAP_IN_NOTHING,
+  summarizePairedSwap,
+  SWAP_VERDICT_REASON_BY_KEY,
+} from './swap.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor } from './matchup.js';
 import {
@@ -114,12 +121,70 @@ export type TrimOnImprovement = (typeof TRIM_ON_IMPROVEMENT)[number];
 export const TRIM_ON_NO_IMPROVEMENT = ['keep-looking', 'pause'] as const;
 export type TrimOnNoImprovement = (typeof TRIM_ON_NO_IMPROVEMENT)[number];
 
+/**
+ * THE DEEPENING LADDER (DESIGN §3.179) — the lever after the KINDS run out.
+ *
+ * ⚠️ THE BUG THIS REPLACES. `keep-looking` used to widen through
+ * `TRIM_ROUND_KINDS` and treat the end of that two-row table as the end of the
+ * search, so it got exactly TWO rounds and then reported `exhausted` — the
+ * "couple waves then stop" Caleb reported. The table is fine; reading the end of
+ * it as the end of the search was the defect.
+ *
+ * When a round ends with no winner, is still UNSURE (some row could yet be
+ * settled by more games) and the kinds are spent, the answer is not more kinds —
+ * it is more DEPTH on the same question. `gamesPerCandidate` grows by `factor`
+ * up to `maxGamesPerCandidate`, and the kind ladder resets so the singles get
+ * re-asked at a depth that can actually answer them.
+ *
+ * ⚠️ WHY THE WHOLE ROUND DEEPENS AND NOT A HAND-PICKED SHORTLIST.
+ * `driveAdaptiveSearch` is successive halving: a bigger round budget is already
+ * spent preferentially on the survivors. A second site choosing which candidates
+ * deserve depth would be a second answer to a question the ladder already
+ * answers, and the two would drift.
+ */
+export const TRIM_DEEPEN = Object.freeze({
+  /** Multiply `gamesPerCandidate` by this each time a round ends unsure. */
+  factor: 2,
+  /**
+   * The hard ceiling on per-candidate depth. Past this the paired A/B is not the
+   * thing that is short — the effect is smaller than the Lab is built to see —
+   * and saying so is more useful than spending another hour proving it.
+   */
+  maxGamesPerCandidate: 640,
+});
+
+/**
+ * A session's boundary. `keep-looking` is NOT permission to run forever, and
+ * hitting the edge is a REPORTED stop reason rather than a silent one.
+ */
+export interface TrimBudget {
+  /** Individual games (two per paired game), summed over every round. */
+  readonly maxGames: number;
+  /** Wall-clock seconds, summed over every round. */
+  readonly maxSeconds: number;
+}
+
+/**
+ * The default boundary. Deliberately generous — it exists so an unattended
+ * `keep-looking` session terminates and says why, not to ration an attended one.
+ */
+export const DEFAULT_TRIM_BUDGET: TrimBudget = Object.freeze({
+  maxGames: 40_000,
+  maxSeconds: 1_800,
+});
+
 /** The user's settings for a trim session. */
 export interface TrimSettings {
   /** The size to trim towards. Never below the format's `minDeckSize`. */
   readonly targetSize: number;
   readonly onImprovement: TrimOnImprovement;
   readonly onNoImprovement: TrimOnNoImprovement;
+  /**
+   * The session's game/time boundary (§3.179). Omitted means
+   * `DEFAULT_TRIM_BUDGET` — never "unbounded", because `keep-looking` now
+   * deepens instead of giving up and something has to stop it.
+   */
+  readonly budget?: TrimBudget;
 }
 
 /**
@@ -604,8 +669,23 @@ export interface TrimRow {
   readonly priorReasons: readonly string[];
 }
 
-/** A round's outcome: a removal proved better, or none did. */
-export type TrimRoundVerdict = 'improved' | 'exhausted';
+/**
+ * A round's outcome — a CLOSED set of three, not two (DESIGN §3.179).
+ *
+ * ⚠️ `'exhausted'` used to mean both "nothing helps" and "nothing could be
+ * read", and it printed the first while meaning the second. With almost every
+ * row coming back inconclusive there is never a winner, so every round ended
+ * `exhausted` and the session stopped having cut zero cards while telling the
+ * user the deck cannot be improved. It had not learned that nothing helps; it
+ * had learned NOTHING, and those want opposite responses.
+ *
+ *  - `improved`  — a removal proved better. Apply it (or ask).
+ *  - `exhausted` — no winner, and every row is CONCLUSIVE. Nothing helps, and
+ *                  more games would not change that. The search is over.
+ *  - `unsure`    — no winner, but some row could still be settled by more games.
+ *                  This is the one that earns a deeper round.
+ */
+export type TrimRoundVerdict = 'improved' | 'exhausted' | 'unsure';
 
 /** What one round of trimming found. */
 export interface TrimRoundReport {
@@ -734,6 +814,11 @@ export function finishTrimRound(input: FinishTrimRoundInput): TrimRoundReport {
   // by delta — so "first of its verdict" IS "best of its verdict".
   const winner = rows.find((row) => row.evaluation.verdict === 'better');
   const edge = winner ? undefined : rows.find((row) => row.evaluation.verdict === 'inconclusive');
+  // The three-way round verdict (§3.179). "Unsure" is read from the ROWS' own
+  // reasons through the shared table — the same `moreGamesCouldSettle` column
+  // `decideVerdict` fills — so the round and the rows can never disagree about
+  // whether this question is still open.
+  const unsure = rows.some((row) => SWAP_VERDICT_REASON_BY_KEY[row.evaluation.verdictReason].moreGamesCouldSettle);
   // The base arm is shared, so the deepest arm's base rate is the best-measured one.
   const deepest = rows.reduce<TrimRow | undefined>(
     (best, row) => (best === undefined || row.evaluation.nGames > best.evaluation.nGames ? row : best),
@@ -749,7 +834,7 @@ export function finishTrimRound(input: FinishTrimRoundInput): TrimRoundReport {
     roundKind: round.roundKind,
     cardsPerCut: round.cardsPerCut,
     reading: round.reading,
-    verdict: winner ? 'improved' : 'exhausted',
+    verdict: winner ? 'improved' : unsure ? 'unsure' : 'exhausted',
     rows,
     ...(winner ? { winner } : {}),
     ...(edge ? { edgeCandidate: edge } : {}),
@@ -912,14 +997,75 @@ export function runTrimRound(base: Deck, options: RunTrimRoundOptions): TrimRoun
 
 // --- the session loop -----------------------------------------------------------------
 
-/** Why a trim session stopped. */
-export type TrimStopReason =
-  /** The deck reached the target. */
-  | 'target-reached'
-  /** A round improved the deck and the settings say ask — the caller applies (or not). */
-  | 'awaiting-apply'
-  /** No removal improved the deck and nothing is left to widen to (or the settings say pause). */
-  | 'exhausted';
+/**
+ * WHY A TRIM SESSION STOPPED — a CLOSED table, one row per reason (§3.179).
+ *
+ * ⚠️ `'exhausted'` used to cover two OPPOSITE situations: "we tried everything
+ * and nothing helps" and "we ran out of road while still unable to read the
+ * rows". They deserve opposite responses from the user — accept the deck, or
+ * raise the budget — and printing one word for both is the same defect as
+ * INCONCLUSIVE one layer up. Adding a reason is a row here plus a row in
+ * `TRIM_STOP_REASON_WORDING`; `trim.test.ts` enumerates the reasons and fails if
+ * one has no wording, which is the guard that keeps this from rotting.
+ */
+export const TRIM_STOP_REASONS = [
+  'target-reached',
+  'awaiting-apply',
+  'no-improvement-conclusive',
+  'budget-exhausted',
+  'paused',
+] as const;
+export type TrimStopReason = (typeof TRIM_STOP_REASONS)[number];
+
+/** One stop reason's words, and whether it leaves the search genuinely finished. */
+export interface TrimStopReasonRow {
+  readonly reason: TrimStopReason;
+  /** The headline the panel prints. */
+  readonly label: string;
+  /** One sentence saying what happened and what the user can do about it. */
+  readonly detail: string;
+  /**
+   * Whether the question is settled. `false` means the search stopped with
+   * something still unread — a budget the user can raise, or a pause they chose
+   * — and the panel says so rather than implying the deck cannot be improved.
+   */
+  readonly conclusive: boolean;
+}
+
+export const TRIM_STOP_REASON_WORDING: Readonly<Record<TrimStopReason, TrimStopReasonRow>> = Object.freeze({
+  'target-reached': Object.freeze({
+    reason: 'target-reached' as const,
+    label: 'Target reached',
+    detail: 'The deck is down to the size you asked for.',
+    conclusive: true,
+  }),
+  'awaiting-apply': Object.freeze({
+    reason: 'awaiting-apply' as const,
+    label: 'Waiting for you',
+    detail: 'A removal proved better and your settings say ask before applying it.',
+    conclusive: false,
+  }),
+  'no-improvement-conclusive': Object.freeze({
+    reason: 'no-improvement-conclusive' as const,
+    label: 'Nothing helps',
+    detail:
+      'Every removal was measured deeply enough to call, and none of them improved the deck. More games would not change this answer.',
+    conclusive: true,
+  }),
+  'budget-exhausted': Object.freeze({
+    reason: 'budget-exhausted' as const,
+    label: 'Out of budget, still unsure',
+    detail:
+      'The session hit its game or time budget with rows it still could not read. This is NOT "nothing helps" — raise the budget or the depth to find out which.',
+    conclusive: false,
+  }),
+  paused: Object.freeze({
+    reason: 'paused' as const,
+    label: 'Paused',
+    detail: 'No removal improved the deck, and your settings say pause rather than keep looking.',
+    conclusive: false,
+  }),
+});
 
 /** A session's result: the deck as it stands, every round, and why it stopped. */
 export interface TrimSessionResult {
@@ -928,6 +1074,17 @@ export interface TrimSessionResult {
   /** The removals applied, in order. */
   readonly applied: readonly TrimRow[];
   readonly stopped: TrimStopReason;
+  /** What the session actually spent, so the budget stop can print its own arithmetic. */
+  readonly spend: TrimSpend;
+  /** The per-candidate depth the last round ran at — grows as the ladder deepens. */
+  readonly gamesPerCandidate: number;
+}
+
+/** What a session has spent so far, in the units the budget is written in. */
+export interface TrimSpend {
+  readonly games: number;
+  readonly seconds: number;
+  readonly rounds: number;
 }
 
 /** Options for a whole session — the round options minus what the loop decides. */
@@ -938,42 +1095,113 @@ export interface TrimSessionOptions extends Omit<RunTrimRoundOptions, 'round' | 
 }
 
 /**
- * THE AUTO LOOP: round, apply the winner, shrink by one, round again — until
- * the target, or until no removal improves the deck and there is nothing left
- * to widen to. Under `ask` it returns after the first improving round with the
- * winner unapplied. Nothing on-the-edge is ever applied here.
+ * The next per-candidate depth after a round that ended UNSURE, or `undefined`
+ * when the ladder has hit its ceiling (§3.179).
  *
- * The base land ratio is read ONCE, from the deck the session began with, so
- * the prior measures drift from where the user started — not from the previous
- * round.
+ * Exported because the web Lab drives the same ladder one round at a time over
+ * its worker pool and must not re-derive the growth rule — `trimSession.test.ts`
+ * and `trim.test.ts` both read this, so the two drivers cannot disagree about
+ * what "keep looking" costs.
+ */
+export function deeperGamesPerCandidate(current: number): number | undefined {
+  if (current >= TRIM_DEEPEN.maxGamesPerCandidate) return undefined;
+  return Math.min(Math.max(1, Math.ceil(current * TRIM_DEEPEN.factor)), TRIM_DEEPEN.maxGamesPerCandidate);
+}
+
+/**
+ * THE AUTO LOOP: round, apply the winner, shrink by one, round again — until the
+ * target, until nothing helps, or until the budget runs out. Under `ask` it
+ * returns after the first improving round with the winner unapplied. Nothing
+ * on-the-edge is ever applied here.
+ *
+ * ⚠️ WHAT §3.179 CHANGED. When a round finds no winner the loop no longer treats
+ * the end of `TRIM_ROUND_KINDS` as the end of the search. It asks what the round
+ * actually learned:
+ *
+ *  - the round is UNSURE and the kinds are spent → grow `gamesPerCandidate` and
+ *    start the kind ladder again, because the lever left is DEPTH;
+ *  - the round is CONCLUSIVE (`exhausted`) → stop immediately with
+ *    `no-improvement-conclusive`. **This branch is what keeps the deepening from
+ *    becoming an infinite loop**, and it is tested as such: re-measuring a
+ *    settled question buys nothing and costs the whole budget;
+ *  - the depth ceiling or the budget is reached → stop with `budget-exhausted`,
+ *    which says plainly that this is NOT "nothing helps".
+ *
+ * The base land ratio is read ONCE, from the deck the session began with, so the
+ * prior measures drift from where the user started — not from the previous round.
  */
 export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionResult {
   const { settings } = options;
+  const budget = settings.budget ?? DEFAULT_TRIM_BUDGET;
   const baseLandRatio = landRatioOf(base, options.pool);
   const rounds: TrimRoundReport[] = [];
   const applied: TrimRow[] = [];
   let deck = base;
   let round = 0;
   let kind: TrimRoundKind = TRIM_ROUND_KINDS[0];
+  let gamesPerCandidate = options.gamesPerCandidate;
+  let games = 0;
+  let seconds = 0;
+
+  const spend = (): TrimSpend => ({ games, seconds, rounds: rounds.length });
+  const stop = (stopped: TrimStopReason): TrimSessionResult => ({
+    deck,
+    rounds,
+    applied,
+    stopped,
+    spend: spend(),
+    gamesPerCandidate,
+  });
 
   while (deckSizeOf(deck) > settings.targetSize) {
-    const report = runTrimRound(deck, { ...options, round, roundKind: kind, targetSize: settings.targetSize, baseLandRatio });
+    // The budget is checked BEFORE a round, not after: a round begun with no
+    // budget left would spend past the boundary and then report having stopped
+    // at it, which is a number that is true only because nobody looked.
+    if (games >= budget.maxGames || seconds >= budget.maxSeconds) return stop('budget-exhausted');
+
+    const report = runTrimRound(deck, {
+      ...options,
+      gamesPerCandidate,
+      round,
+      roundKind: kind,
+      targetSize: settings.targetSize,
+      baseLandRatio,
+    });
     rounds.push(report);
+    games += report.notes.totalGamesRun;
+    seconds += report.notes.elapsedSeconds ?? 0;
     options.onRound?.(report);
     round += 1;
 
     if (report.verdict === 'improved' && report.winner) {
-      if (settings.onImprovement === 'ask') return { deck, rounds, applied, stopped: 'awaiting-apply' };
+      if (settings.onImprovement === 'ask') return stop('awaiting-apply');
       deck = applyTrimCut(deck, report.winner.cuts, options.pool);
       applied.push(report.winner);
+      // A smaller deck is a new question: back to the cheapest kind AND the
+      // starting depth, so the next cut is not paid for at the deep rate the
+      // previous impasse needed.
       kind = TRIM_ROUND_KINDS[0];
+      gamesPerCandidate = options.gamesPerCandidate;
       continue;
     }
 
-    const next: TrimRoundKind | undefined =
-      settings.onNoImprovement === 'keep-looking' ? nextWideningStep(kind, deckSizeOf(deck), settings.targetSize) : undefined;
-    if (next === undefined) return { deck, rounds, applied, stopped: 'exhausted' };
-    kind = next;
+    if (settings.onNoImprovement === 'pause') return stop('paused');
+
+    const next = nextWideningStep(kind, deckSizeOf(deck), settings.targetSize);
+    if (next !== undefined) {
+      kind = next;
+      continue;
+    }
+
+    // The kinds are spent. What the round LEARNED decides what happens now.
+    // `exhausted` means every row was conclusive and none was better: the
+    // question is settled, and deepening it is waste.
+    if (report.verdict === 'exhausted') return stop('no-improvement-conclusive');
+
+    const deeper = deeperGamesPerCandidate(gamesPerCandidate);
+    if (deeper === undefined) return stop('budget-exhausted');
+    gamesPerCandidate = deeper;
+    kind = TRIM_ROUND_KINDS[0];
   }
-  return { deck, rounds, applied, stopped: 'target-reached' };
+  return stop('target-reached');
 }

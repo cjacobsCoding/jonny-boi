@@ -39,7 +39,7 @@ import { DEFAULT_STATS_CONFIG } from './config.js';
 import type { PairedGameObservation, PairedGameWatch } from './paired-arms.js';
 import { HERO_SEAT } from './paired-arms-config.js';
 import { mcNemarTest, normalCdf, wilsonInterval, type PairedTable, type ProportionCI } from './stats.js';
-import { decideVerdict, type SwapVerdict } from './swap.js';
+import { decideVerdict, type SwapVerdict, type SwapVerdictReason } from './swap.js';
 import {
   COLOUR_SCREW_FROM_TURN,
   LAND_DROP_TURNS,
@@ -276,6 +276,12 @@ export interface ReliabilityMetricComparison {
    * metric's good side is; 'inconclusive' when the paired test cannot say.
    */
   readonly verdict: SwapVerdict;
+  /**
+   * WHY that verdict (DESIGN §3.179) — carried so the reliability table can say
+   * "too few games" rather than printing the same INCONCLUSIVE a genuinely
+   * even split earns.
+   */
+  readonly verdictReason: SwapVerdictReason;
   /** The paired test's p-value (McNemar for a rate, a paired z-test for a mean). */
   readonly pValue: number;
   /** Paired games the comparison rests on. */
@@ -344,8 +350,15 @@ export function compareReliability(
       const paired: PairedTable = table;
       const test = mcNemarTest(paired);
       const delta = (table.variantOnly - table.baseOnly) / Math.max(1, pairs.length);
-      const verdict = decideVerdict(delta, test.pValue, pairs.length, stats.alpha, stats.minGamesForVerdict);
-      return { id: metric.id, label: metric.label, verdict, pValue: test.pValue, nPaired: pairs.length };
+      const decision = decideVerdict(delta, test.pValue, pairs.length, stats.alpha, stats.minGamesForVerdict);
+      return {
+        id: metric.id,
+        label: metric.label,
+        verdict: decision.verdict,
+        verdictReason: decision.reason,
+        pValue: test.pValue,
+        nPaired: pairs.length,
+      };
     }
     // A mean metric: the paired per-game difference, variant − base, over the
     // games where BOTH arms reached the reading.
@@ -358,8 +371,16 @@ export function compareReliability(
     const meanDifference = meanInterval(differences, stats.z);
     const pValue = pairedMeanPValue(differences);
     const signed = metric.direction === 'higherIsBetter' ? meanDifference.mean : -meanDifference.mean;
-    const verdict = decideVerdict(signed, pValue, differences.length, stats.alpha, stats.minGamesForVerdict);
-    return { id: metric.id, label: metric.label, verdict, pValue, nPaired: differences.length, meanDifference };
+    const decision = decideVerdict(signed, pValue, differences.length, stats.alpha, stats.minGamesForVerdict);
+    return {
+      id: metric.id,
+      label: metric.label,
+      verdict: decision.verdict,
+      verdictReason: decision.reason,
+      pValue,
+      nPaired: differences.length,
+      meanDifference,
+    };
   });
 
   return {

@@ -16,7 +16,7 @@ import { adjustPValues } from './stats.js';
 import type { StatsConfig } from './config.js';
 import { FIDELITY_CAVEAT } from './config.js';
 import type { SwapEvaluation } from './swap.js';
-import { decideVerdict } from './swap.js';
+import { decideVerdict, gamesToSettle, SWAP_VERDICT_REASON_BY_KEY } from './swap.js';
 import type { EliminationReason } from './suggest-schedule.js';
 import type { SwapCandidate, SkippedCandidate } from './suggest-candidates.js';
 import { rankEvaluations } from './suggest-candidates.js';
@@ -225,15 +225,36 @@ export function finishSuggestionRun(input: SuggestionReportInput): SuggestionRep
   const byEvaluation = new Map<SwapEvaluation, { readonly outcome: CandidateOutcome; readonly adjustedP: number }>();
   const corrected: SwapEvaluation[] = outcomes.map((outcome, i) => {
     const adjustedP = adjusted[i] as number;
-    const verdict = decideVerdict(
+    const decision = decideVerdict(
       outcome.evaluation.delta,
       adjustedP,
       outcome.evaluation.nGames,
       input.stats.alpha,
       input.stats.minGamesForVerdict,
     );
-    if (outcome.evaluation.verdict !== 'inconclusive' && verdict === 'inconclusive') demotedByCorrection++;
-    const evaluation: SwapEvaluation = { ...outcome.evaluation, verdict };
+    if (outcome.evaluation.verdict !== 'inconclusive' && decision.verdict === 'inconclusive') demotedByCorrection++;
+    // ⚠️ THE GAMES-TO-SETTLE ESTIMATE IS RECOMPUTED AGAINST THE CORRECTED BAR.
+    // `summarizePairedSwap` computed it against the raw alpha, but inside a
+    // family this row must clear HOLM's bar, which is stricter — printing the
+    // raw number beside a Holm-corrected verdict would understate the cost of
+    // settling it, and an estimate that is quietly too small is worse than none.
+    // Holm scales a p-value by a rank multiplier, so requiring `adjustedP <
+    // alpha` is requiring `rawP < alpha · rawP/adjustedP`: that ratio IS the
+    // effective bar. (The multiplier can change as the row's rank moves, which
+    // is one of several reasons this is an estimate and is labelled as one.)
+    const rawP = outcome.evaluation.pValue;
+    const effectiveAlpha = adjustedP > 0 && rawP > 0 ? input.stats.alpha * (rawP / adjustedP) : input.stats.alpha;
+    const settle = SWAP_VERDICT_REASON_BY_KEY[decision.reason].moreGamesCouldSettle
+      ? gamesToSettle(outcome.evaluation.paired, outcome.evaluation.nGames, input.stats, effectiveAlpha)
+      : undefined;
+    const evaluation: SwapEvaluation = {
+      ...outcome.evaluation,
+      verdict: decision.verdict,
+      verdictReason: decision.reason,
+      // Spread first, then override: a stale raw estimate must not survive when
+      // the corrected bar says there is none.
+      ...(settle ? { gamesToSettle: settle } : { gamesToSettle: undefined }),
+    };
     byEvaluation.set(evaluation, { outcome, adjustedP });
     return evaluation;
   });
