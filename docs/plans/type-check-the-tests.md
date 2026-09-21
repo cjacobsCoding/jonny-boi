@@ -131,9 +131,13 @@ GitHub's **30-minute** ceiling. Measured on a green `main` run (35556387556):
 | **tests (2/3)** | **20m36s** |
 | tests (3/3) | 2m05s |
 
-The split is by file, and `packages/core` is one enormous shard — ~17,700 of the suite's ~30,200
-tests land in shard 2. So the ceiling was not really raised: **shard 2 is at 20 of 30 minutes with
-two idle runners beside it.** As the core suite grows it hits the ceiling again, and CI then fails
+What is **measured** from the run logs: shard 2 collected **17,738 tests** and shard 3 collected
+**2,437**, out of a suite of ~30,200. What is **inferred and NOT measured**: that `packages/core` is
+the bulk of shard 2 — the failures observed there were all in `packages/core`, which is suggestive
+and not proof, and a lane should read the actual file partition before restructuring anything. Note
+also that test COUNT does not track duration here (shard 3 runs 2,437 tests in the same two minutes
+shard 1 needs for its own load), so balance by **timing**, not by count. Either way the ceiling was
+not really raised: **shard 2 is at 20 of 30 minutes with two idle runners beside it.** As the core suite grows it hits the ceiling again, and CI then fails
 for an infrastructure reason rather than a code one — a red that means nothing, which is the worst
 kind of gate.
 
