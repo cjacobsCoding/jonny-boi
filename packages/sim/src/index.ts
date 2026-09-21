@@ -341,6 +341,76 @@ export {
   planManabaseRun,
   runManabaseSweep,
 } from './manabase-run.js';
+
+/**
+ * §3.177 — THE JOINT MANABASE + SPELL SEARCH: the land count, the land types and
+ * the spell slots optimised TOGETHER by alternating descent, because in a
+ * fixed-size deck each one changes the denominator of the others. Exported whole
+ * so the Lab panel, a CLI and the tests all drive the same search.
+ */
+export type {
+  JointMoveFamilyId,
+  JointPartnerRuleId,
+  JointPhaseId,
+  JointStopReasonId,
+} from './joint-config.js';
+export {
+  DEFAULT_JOINT_BUDGET,
+  DEFAULT_JOINT_PARTNER_RULE,
+  JOINT_COLOR_MIX_RADIUS,
+  JOINT_CONFOUND_NOTE,
+  JOINT_COUNT_MIN_BASICS_KEPT,
+  JOINT_HONEST_CLAIM,
+  JOINT_LAND_COUNT_RADIUS,
+  JOINT_MAX_ROUNDS,
+  JOINT_MIN_PHASE_GAMES,
+  JOINT_MOVE_FAMILIES,
+  JOINT_NOT_GATED_ON,
+  JOINT_PARTNERS_PER_COUNT_STEP,
+  JOINT_PARTNER_RULES,
+  JOINT_PHASES,
+  JOINT_SPELL_MOVES_PER_PHASE,
+  JOINT_SPELL_SWAP_SCOPE,
+  JOINT_STOP_REASONS,
+} from './joint-config.js';
+export type { JointMove, JointMoveOptions, JointMoveSet, SkippedJointMove } from './joint-moves.js';
+export { generateJointMoves } from './joint-moves.js';
+export type {
+  FinishJointPhaseInput,
+  JointArmRunner,
+  JointBudget,
+  JointMoveRow,
+  JointPathStep,
+  JointPhasePlan,
+  JointPhaseReport,
+  JointPhaseVerdict,
+  JointProgress,
+  JointSearchOptions,
+  JointSearchState,
+  JointSpend,
+  LandCountRow,
+  PlanJointPhaseOptions,
+  RunJointPhaseOptions,
+} from './joint.js';
+export {
+  advanceJointSearch,
+  applyJointMove,
+  describeJointOutcome,
+  driveJointPhase,
+  finishJointPhase,
+  interruptJointSearch,
+  JOINT_BASE_REF,
+  jointBudgetRemaining,
+  jointCandidateOf,
+  jointStopReasonOf,
+  moveForCandidateKey,
+  nextJointPhase,
+  planJointPhase,
+  rollUpLandCounts,
+  runJointPhase,
+  runJointSearch,
+  startJointSearch,
+} from './joint.js';
 export {
   HERO_SEAT,
   LIBRARY_READING_PRIMITIVES,

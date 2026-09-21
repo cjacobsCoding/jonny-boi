@@ -20,6 +20,7 @@ import {
 } from '@jonny-boi/sim';
 import type {
   GauntletRequest,
+  JointPhaseRequest,
   ManabaseRequest,
   MatchRequest,
   SimProgress,
@@ -34,6 +35,7 @@ import {
   variantForCandidateKey,
   type PairedGameObservation,
 } from '@jonny-boi/sim';
+import { JOINT_PHASES, finishJointPhase, moveForCandidateKey } from '@jonny-boi/sim';
 import {
   DEFAULT_ADAPTIVE_CONFIG,
   DEFAULT_EXPLORATION_WEIGHTS,
@@ -66,6 +68,7 @@ import type {
   BaseSlotShardResult,
   GauntletShardResult,
   ManabaseBaseSlotShardResult,
+  JointPlanResult,
   ManabasePlanResult,
   ManabaseVariantSliceShardResult,
   MatchJobResult,
@@ -1068,9 +1071,242 @@ export async function runMatchRequest(
 
 // --- dispatch ------------------------------------------------------------------
 
+
+// --- §3.177 the joint manabase + spell search -----------------------------------------
+
+/**
+ * THE POOLED DRIVER OF ONE JOINT PHASE — `runManabase`'s round loop, over a
+ * joint phase's family instead of a manabase sweep's.
+ *
+ * Only the PLAN differs: the family is enumerated by `planJointPhase` on a
+ * worker, and from there the work is identical — the shared base games for the
+ * new slots under the reliability watch, then every surviving move's games over
+ * those slots — so it runs on the SAME two shard kinds (`shard-protocol.ts` says
+ * why that reuse is right rather than merely convenient). `finishJointPhase`
+ * then does what the inline driver does: Holm over the phase's family, verdicts
+ * re-decided, the readings joined, and each land count rolled up to its best
+ * partner.
+ *
+ * A PHASE at a time, never a whole descent: the panel owns the search state, so
+ * the budget is spent where a person can see it and the run can be stopped or
+ * resumed between any two phases.
+ */
+export async function runJointPhaseRun(
+  request: JointPhaseRequest,
+  runner: ShardRunner,
+  sink: ProgressSink,
+  progressIntervalSeconds: number,
+): Promise<SimResultPayload> {
+  const opponentNames = opponentsFor(request);
+  const context = contextFor(request, opponentNames);
+  const startedAt = nowSeconds();
+  runner.warmUp?.();
+
+  const phaseLabel = JOINT_PHASES.find((p) => p.id === request.phase)?.label ?? request.phase;
+  const lower = phaseLabel.toLowerCase();
+  sink({ type: 'progress', done: 0, total: 0, gamesRun: 0, elapsedSeconds: 0, label: `enumerating ${lower} moves…` });
+  const planned = (await runner.submit(
+    {
+      kind: 'joint-plan',
+      context,
+      phase: request.phase,
+      round: request.round,
+      gamesPerMove: request.gamesPerMove,
+      partnerRule: request.partnerRule,
+      countRadius: request.radius,
+      partnersPerCountStep: request.partnersPerCountStep,
+      ...(request.families ? { families: request.families } : {}),
+    },
+    () => {},
+  )) as JointPlanResult;
+  const plan = planned.plan;
+  if (plan.roster.length === 0) {
+    throw new Error(
+      plan.joint.skipped.length > 0
+        ? `no ${lower} move can be built for this deck: ${plan.joint.skipped.map((sk) => `${sk.label} — ${sk.reason}`).join('; ')}`
+        : `no ${lower} move to try for this deck.`,
+    );
+  }
+
+  const tally = new ProgressTally(estimatePlannedGames(plan), sink, progressIntervalSeconds);
+  const baseRecords = new Map<number, PairedBaseRecord>();
+  let armTables: ReadonlyMap<string, PairedTable> = new Map();
+  const armSlots = new Map<string, boolean[]>();
+  const armObserved = new Map<string, (PairedGameObservation | null)[]>();
+  const failures = new Map<string, string>();
+  let variantGamesPlayed = 0;
+  let variantGamesSkipped = 0;
+
+  const driver = driveAdaptiveSearch(plan);
+  let step = driver.next();
+  let label = `${phaseLabel} · round 1 of ${plan.waves.length} · ${workersLabel(runner.workerCount)}`;
+  tally.emit(label, true);
+
+  while (!step.done) {
+    const round = step.value;
+    const live = round.arms.filter((arm) => !failures.has(arm.candidate.key));
+    label =
+      `${phaseLabel} · round ${round.wave} of ${plan.waves.length} · ${live.length} ` +
+      `${live.length === 1 ? 'move' : 'moves'} · ${round.cumulativeGames} games each · ` +
+      workersLabel(runner.workerCount);
+    tally.emit(label, true);
+
+    const baseJobs = planManabaseBaseSlotShards(context, plan.runSeed, round.baseSlotStart, round.baseSlotEnd, runner.workerCount);
+    const baseResults = (await Promise.all(
+      baseJobs.map(async (job) => {
+        const result = await runner.submit(job, (games) => {
+          tally.add(games);
+          tally.emit(label);
+        });
+        tally.emit(label);
+        return result as ManabaseBaseSlotShardResult;
+      }),
+    )) as ManabaseBaseSlotShardResult[];
+    for (const result of baseResults) {
+      result.records.forEach((record, i) => baseRecords.set(result.slotStart + i, record));
+    }
+
+    // --- barrier --- every move's slice needs the base records above.
+    const sliceJobs = planManabaseVariantSliceShards(
+      context,
+      plan.runSeed,
+      live.map((arm) => {
+        const move = moveForCandidateKey(arm.candidate.key, plan.joint.moves);
+        if (!move) throw new Error(`the plan names no joint move for candidate "${arm.candidate.key}"`);
+        return { candidateKey: arm.candidate.key, variant: move, fromSlot: arm.fromGames, toSlot: arm.toGames };
+      }),
+      runner.workerCount,
+      (slot) => baseRecords.get(slot) as PairedBaseRecord,
+    );
+
+    const settled = await Promise.all(
+      sliceJobs.map(async (job) => {
+        try {
+          const result = (await runner.submit(job, (games) => {
+            tally.add(games);
+            tally.emit(label);
+          })) as ManabaseVariantSliceShardResult;
+          tally.emit(label);
+          return result;
+        } catch (err) {
+          if (isCancellation(err)) throw err;
+          // One unbuildable move drops that ARM, never the phase.
+          if (!failures.has(job.candidateKey)) {
+            failures.set(job.candidateKey, err instanceof Error ? err.message : String(err));
+          }
+          return null;
+        }
+      }),
+    );
+
+    const usable = settled.filter(
+      (result): result is ManabaseVariantSliceShardResult => result !== null && !failures.has(result.candidateKey),
+    );
+    for (const slice of usable) {
+      variantGamesPlayed += slice.variantGamesPlayed;
+      variantGamesSkipped += slice.variantGamesSkipped;
+      let slots = armSlots.get(slice.candidateKey);
+      if (!slots) {
+        slots = [];
+        armSlots.set(slice.candidateKey, slots);
+      }
+      let observed = armObserved.get(slice.candidateKey);
+      if (!observed) {
+        observed = [];
+        armObserved.set(slice.candidateKey, observed);
+      }
+      // Sparse writes BY ABSOLUTE INDEX, so slices in any order compose into the
+      // arrays a locally-played arm would have built.
+      for (let i = 0; i < slice.variantWonBySlot.length; i++) {
+        slots[slice.slotStart + i] = slice.variantWonBySlot[i] as boolean;
+        observed[slice.slotStart + i] = slice.observedBySlot[i] ?? null;
+      }
+    }
+    for (const key of failures.keys()) {
+      armSlots.delete(key);
+      armObserved.delete(key);
+    }
+    armTables = mergeVariantSlices(dropFailed(armTables, failures), usable);
+
+    step = driver.next({
+      arms: round.arms.map((arm) => {
+        const failure = failures.get(arm.candidate.key);
+        if (failure !== undefined) {
+          return { key: arm.candidate.key, gamesPlayed: 0, paired: EMPTY_TABLE, failure };
+        }
+        const slots = armSlots.get(arm.candidate.key);
+        return {
+          key: arm.candidate.key,
+          gamesPlayed: arm.toGames,
+          paired: armTables.get(arm.candidate.key) ?? EMPTY_TABLE,
+          ...(slots ? { variantWonBySlot: slots } : {}),
+        };
+      }),
+    });
+    tally.setTotal(estimatePlannedGames(plan, tally.gamesDone, step.done ? undefined : step.value));
+  }
+
+  const outcome = step.value;
+  const elapsedSeconds = nowSeconds() - startedAt;
+  const baseGamesPlayed = outcome.baseSlotsPlayed;
+  const baseObserved: (PairedGameObservation | null)[] = [];
+  for (let slot = 0; slot < baseGamesPlayed; slot++) baseObserved.push(baseRecords.get(slot)?.observed ?? null);
+
+  const report = finishJointPhase({
+    plan,
+    search: {
+      outcomes: outcome.arms.map((arm) => ({
+        candidate: arm.candidate,
+        evaluation: summarizePairedSwap({
+          baseDeckName: plan.baseDeckName,
+          variantDeckName: arm.candidate.variantDeckName,
+          swap: { out: arm.candidate.outId, in: arm.candidate.inId },
+          outName: arm.candidate.outName,
+          inName: arm.candidate.inName,
+          paired: arm.paired,
+          scope: DEFAULT_SWAP_SCOPE,
+          copiesSwapped: arm.candidate.copiesSwapped,
+        }),
+        gamesPlayed: arm.gamesPlayed,
+        ...(arm.elimination ? { elimination: arm.elimination } : {}),
+      })),
+      waves: outcome.waves,
+      usage: {
+        baseGamesPlayed,
+        variantGamesPlayed,
+        variantGamesSkipped,
+        totalGamesPlayed: baseGamesPlayed + variantGamesPlayed,
+        identicalGameSkipEnabled: planned.identicalGameSkipEnabled,
+        ...(planned.identicalGameSkipDisabledReason
+          ? { identicalGameSkipDisabledReason: planned.identicalGameSkipDisabledReason }
+          : {}),
+      },
+      failures: outcome.failures,
+      fixedSchemeGames: outcome.fixedSchemeGames,
+    },
+    baseObserved,
+    moveObserved: armObserved,
+    elapsedSeconds,
+    workersUsed: runner.workerCount,
+    stats: DEFAULT_STATS_CONFIG,
+  });
+
+  tally.setTotal(tally.gamesDone);
+  tally.emit(`${phaseLabel} · ${report.rows.length} moves · ${workersLabel(runner.workerCount)}`, true);
+  return { kind: 'joint-phase', result: report, pilotId: request.pilotId };
+}
+
+
 /** Run any Lab request on a shard runner. The one entry point the hook calls. */
 export async function runSimRequest(
-  request: GauntletRequest | SwapRequest | SuggestRequest | MatchRequest | TrimRequest | ManabaseRequest,
+  request:
+    | GauntletRequest
+    | SwapRequest
+    | SuggestRequest
+    | MatchRequest
+    | TrimRequest
+    | ManabaseRequest
+    | JointPhaseRequest,
   runner: ShardRunner,
   sink: ProgressSink,
   progressIntervalSeconds: number,
@@ -1088,6 +1324,8 @@ export async function runSimRequest(
       return runTrim(request, runner, sink, progressIntervalSeconds);
     case 'manabase':
       return runManabase(request, runner, sink, progressIntervalSeconds);
+    case 'joint-phase':
+      return runJointPhaseRun(request, runner, sink, progressIntervalSeconds);
   }
 }
 

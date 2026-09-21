@@ -13199,6 +13199,146 @@ reader (`instanceIdsNamedBy`) per EVENT, which is what makes these entries load-
 **This section is §3.31, not §3.30**: `fix/redaction-guarantee` published a §3.30 while this branch
 was out, so the number moved rather than collide. `npm run verify` exit 0, `npm run build` exit 0,
 **5007 passed / 0 failed**, gauntlet at seed 99 still **79/280** with the same seven rows.
+### 3.177 The Lab searches the manabase and the spells TOGETHER — the land-count confound, measured and fixed — ✅ done
+
+> "Some decks may need different ratios. Maybe we need a way to find a best mana ratio for a given
+> deck? The hard part is its not as simple as trying 25 or 23... For 25, you'd need to also take out
+> a non-land card.... Which in turn affects the ratio... And for 23, you have to add in a nonland
+> card... Which affects the ratio. So maybe we need a new functionality that tries to find the
+> perfect mana/land ratio for the deck? And at the same time, tries out removing/adding cards that
+> seem to fit the deck well?"
+
+**The defect he named is real, and it is in §3.175.** The land-COUNT sweep keeps the deck the same
+size by trading against a partner it picks arbitrarily — `mostPlayedBasic` out, *the cheapest
+nonland with room* in (`manabase.ts`, `landCountVariants`). So a variant labelled "23 lands" is
+really *"23 lands AND one more copy of my cheapest spell"*, and the paired verdict measures two
+changes as one. If 23 comes back worse you cannot tell whether the count was wrong or the partner
+was; if 25 is genuinely better it can still read worse because the nonland it happened to cut was
+one of the deck's best cards.
+
+**That is not an argument, it is a measurement.** `JOINT_PARTNER_RULES` keeps the shipped rule as a
+ROW beside the new one, so the same descent can be run under both on the same rigged games and the
+two watched to disagree. On a deck planted at 30 lands whose true optimum is 24, one manabase phase
+under each rule:
+
+| partner rule | the phase's winner | land count | true optimum |
+|---|---|---|---|
+| `cheapest-nonland` (§3.175's) | `32 lands (+2 Forest, −2 Dud)` | **32 — the wrong way** | 24 |
+| `measured` (this section's) | `28 lands (−2 Forest, +2 Ace)` | **28 — toward it** | 24 |
+
+Both verdicts are `better` against the same base on the same slots. The old rule is not NOISY there;
+it is CONFOUNDED — it measured a real improvement (cutting the deck's worst card) and attributed it
+to the land count. Over the whole descent the measured rule reaches 24 and the arbitrary rule never
+does.
+
+**The shape: alternating (coordinate) descent** (`packages/sim/src/joint.ts`). Every move changes
+the denominator of the others, so the two coordinates are optimised in turn — hold the spells fixed
+and search the manabase moves, hold the manabase fixed and search the spell moves, repeat. A move is
+in the MANABASE phase when it touches a land and in the SPELL phase when it does not, which makes
+the two phases a PARTITION of one move shape rather than two mechanisms. Because the deck stays the
+same size, "one fewer land" is literally "one more spell" — the two coordinates are the two ends of
+one slot, which is exactly the confound.
+
+**Every move is a list of steps, and that is what keeps it paired.** A `JointMove` carries the same
+`ManabaseStep[]` a §3.175 variant does and is built by the same fold (`applyManabase`, whose
+parameter is now the STEPS and the LABEL so there is one fold, not two). The web Apply folds the
+same steps through the same `applyManabaseToDeck`. A colour-mix variant, a dual playset, a
+land-count step and a spell-for-spell swap are one type with one apply path.
+
+**The partner is chosen by MEASUREMENT** (`joint-moves.ts`). A count step is enumerated once per
+PARTNER drawn from the suggestion engine's own candidate generator — `generateCandidates` with the
+out side restricted to the deck's lands (going down) or the in side to its basics (going up) — which
+is the ONE answer to "which cards suit this deck", not a second notion of fit. Every pair is played,
+and the count is attributed to its BEST partner, because when you build a 23-land deck you also
+choose the 61st card: "is 23 better?" is answered by the best 23-land deck, not by an arbitrary one.
+The maximum over partners is a SELECTION, and the Holm correction over the whole phase — the same
+correction every family here already gets — is what keeps it honest. Two named constants carry the
+rest: `JOINT_PARTNERS_PER_COUNT_STEP` (4), and `JOINT_COUNT_MIN_BASICS_KEPT` = 0, because Suggest's
+eight-basic floor exists to stop an unrelated swap gutting a manabase and here moving the manabase
+IS the question.
+
+**The reach is not the radius.** `JOINT_LAND_COUNT_RADIUS` is 2 like §3.175's, but a round that
+accepts −2 searches again from the new deck, so the descent reaches −4, −6 … The radius bounds one
+phase's family, not the answer. `JOINT_MAX_MOVES_PER_PHASE` (32) is larger than the suggestion
+engine's cap for a stated reason: a cap that truncated `counts × partners + mix + type` below one
+full partner round would quietly REINSTATE the confound by leaving some counts on a single partner,
+so the generator emits every count's best partner first, then the mix and type families, then the
+deeper partners, and the cap cuts from the end. Partners past the shortlist are reported, in both
+directions, never dropped.
+
+**Nothing statistical is re-implemented.** A phase is a family of paired comparisons against one base
+deck, so it is planned as a `SuggestionRunPlan`, driven by `driveAdaptiveSearch` and closed by
+`finishSuggestionRun`. Common random numbers, McNemar, the adaptive ladder and Holm are reused.
+
+**The budget is the user's, and it is visible.** A search is a sequence of PHASES, each an ordinary
+cancellable run, with the state between them plain data (`JointSearchState`) — which is what makes it
+resumable and interruptible rather than an hour-long black box. The panel shows games spent against
+games allowed, seconds against seconds, phases run and rounds used; `JOINT_MIN_PHASE_GAMES` (200)
+refuses a phase too small to decide anything rather than running one whose verdicts would all come
+back inconclusive and read as "nothing is better".
+
+**What it claims, and what it refuses to claim.** `JOINT_HONEST_CLAIM` is printed verbatim: *the best
+deck this search FOUND, under this budget, along this path — not the perfect ratio and not a proven
+optimum*. A round that accepts nothing stops the search at a LOCAL optimum and
+`JOINT_STOP_REASONS` prints what that means ("a better deck may sit behind two moves that are only
+good together, and this search cannot see it"). A phase with no proved winner is reported as
+INCONCLUSIVE with its on-the-edge row, never as "everything is worse". `JOINT_NOT_GATED_ON` names
+what the accept rule does NOT look at: reliability (measured and shown per manabase move, but the
+rule is the paired win rate alone) and deck SIZE (every joint move is size-preserving; trimming is
+§3.174, a different question).
+
+**Reachability.** Lab → **Joint search** tab: the confound stated, both partner rules offered as a
+choice, five sliders (games per finalist, land-count reach, partners per count, and the two budget
+halves), the deck as built, then Start. After each phase: the LAND COUNTS table — one row per count,
+each with a **PARTNERS TRIED** column and its best partner, which is the fix on a screen — then the
+ranked move table, the on-the-edge row labelled as not accepted, the skips with reasons, and the
+path of accepted moves. Settings in `lab-config.ts` (`JOINT_GAMES`, `JOINT_RADIUS`, `JOINT_PARTNERS`,
+`JOINT_BUDGET_GAMES`, `JOINT_BUDGET_SECONDS`, `JOINT_AUTO_CONTINUE_DEFAULT` — off, so a long search
+is a sequence of steps the user takes rather than an hour that happens to them).
+
+**One phase per request, reusing §3.175's shards.** A joint phase is a family of caller-built variant
+decks played against one base under the reliability watch, which is exactly what
+`manabase-base-slot-shard` and `manabase-variant-slice-shard` already do — so only the PLAN is new
+(`joint-plan`). `VariantSliceSpec` is the type that makes the reuse honest: the shard is typed on
+what it actually reads (`key`, `label`, `steps`, `slotsChanged`), not on one of the two shapes.
+
+**Verification.** `joint.test.ts`, 23 tests: the generator (both halves of every count label, several
+partners per count, the arbitrary rule reproducing `landCountVariants` exactly, a spell move never
+touching a land, every move size-preserving and legal, skips with reasons, the ladder adapter
+round-tripping); the PLANTED ANSWER (a deck flooded at 30 lands is walked to the planted optimum of
+24 with the planted card; a deck screwed at 17 is walked up; every accepted move on the path raised
+the planted win rate); the CONFOUND contrast above, at the phase level and over the whole descent;
+the budget (a budget too small refuses to run a phase; a spent one stops and reports; `shouldStop`
+interrupts between phases); the local optimum; the rollup on rows in ANY order; and one end-to-end
+phase on REAL games against the shipped pool. `joint-panel.test.ts`, 7 tests: the confound, both
+rules, the budget sliders, the PARTNERS TRIED column, the ONE-partner warning, and a claim test that
+COUNTS occurrences so a "perfect ratio: 23 lands" headline would fail it.
+
+⚠️ **Two checks in this lane could not fail and were fixed before they were trusted.** Sabotaging
+the rollup to return the first partner it was handed stayed GREEN, because inside a finished phase
+the rows already arrive ranked — so `rollUpLandCounts` is now exported and tested on shuffled rows,
+and ranks by PROVED verdict before delta. Deleting half the partner-shortlist overflow report also
+stayed green, because only one direction was covered. Red-then-green on five sabotages: the default
+partner rule (3 red), the rollup's ordering (1), the local-optimum stop (1), the budget guard (2),
+and the overflow report (1).
+
+**Throughput** (`packages/sim/scripts/joint-throughput.mjs`, committed so the number is reproducible).
+A joint phase run over the SAME family §3.175 builds — identical decks, identical seeds — is
+**1.048× the manabase sweep's games/sec** (55.5 vs 53.0, median of three): no per-game cost, because
+it is the same watched runner. The measured-partner family reads 0.687× (36.4 games/s), and that is
+the DECKS: those variants bring real spells in, and their games take longer. Planning: **1,065 ms**
+for a manabase phase and **2,046 ms** for a spell phase, against **2,094 ms** for a Suggest plan over
+the same pool — the spell phase's plan costs what a Suggest plan costs because it IS one, and it runs
+once per phase against thousands of games. In the Lab on 11 workers a real manabase phase on Thune's
+Life ran **863 games at 19 games/s**.
+
+**Left out, on purpose.** No CLI command (the tab is the deliverable; `runJointSearch` is exported
+for one). The land side of a count step is still the most-played basic under the shipped rule and the
+generator's ranking under the measured one — WHICH basic to cut is the colour-mix family's question,
+and a round alternates so the two compose. Reliability is read on every manabase-phase move but never
+gates an accept. Panel settings are component state like the other tabs'. A search that is interrupted
+keeps its state only while the tab is mounted — it is resumable within a session, not across a reload.
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

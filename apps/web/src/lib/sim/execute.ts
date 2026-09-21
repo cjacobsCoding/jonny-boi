@@ -56,6 +56,7 @@ import {
 import {
   applyManabase,
   createReliabilityWatch,
+  planJointPhase,
   planManabaseRun,
   type PairedGameWatch,
 } from '@jonny-boi/sim';
@@ -71,6 +72,8 @@ import type {
   ManabasePlanResult,
   ManabaseVariantSliceShardJob,
   ManabaseVariantSliceShardResult,
+  JointPlanJob,
+  JointPlanResult,
   MatchJob,
   MatchJobResult,
   PairedShardJob,
@@ -652,6 +655,39 @@ export function runManabaseVariantSliceShard(
   }
 }
 
+// --- §3.177 the joint manabase + spell search ---------------------------------------
+
+/**
+ * Enumerate ONE joint phase's move family and plan its ladder — the sim's own
+ * `planJointPhase`. The identical-game-skip question is settled here once, as it
+ * is for suggestions and manabases, and on the WATCHED runner every later shard
+ * of this phase is served from (the manabase shards, reused: see
+ * `shard-protocol.ts`).
+ */
+export function runJointPlan(job: JointPlanJob, context: SimContext): JointPlanResult {
+  const base = heroDeck(job.context.hero);
+  const plan = planJointPhase(base, {
+    pool: context.pool,
+    phase: job.phase,
+    round: job.round,
+    opponentCount: job.context.opponentNames.length,
+    baseSeed: job.context.seed,
+    gamesPerMove: job.gamesPerMove,
+    partnerRule: job.partnerRule,
+    countRadius: job.countRadius,
+    mixRadius: job.countRadius,
+    partnersPerCountStep: job.partnersPerCountStep,
+    ...(job.families ? { families: job.families } : {}),
+  });
+  const skip = suggestionRunner(context, job.context, plan.runSeed, RELIABILITY_WATCH).runner.identicalGameSkip;
+  return {
+    kind: 'joint-plan',
+    plan,
+    identicalGameSkipEnabled: skip.enabled,
+    ...(skip.reason ? { identicalGameSkipDisabledReason: skip.reason } : {}),
+  };
+}
+
 // --- single-game replay trace --------------------------------------------------
 
 /** Play ONE game and record its trace for the replay viewer. Never sharded. */
@@ -721,5 +757,7 @@ export function executeShard(
       return runManabaseBaseSlotShard(job, context, onGame);
     case 'manabase-variant-slice-shard':
       return runManabaseVariantSliceShard(job, context, onGame);
+    case 'joint-plan':
+      return runJointPlan(job, context);
   }
 }

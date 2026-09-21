@@ -30,7 +30,7 @@ import {
   type PairedBaseRecord,
   type SwapScope,
 } from '@jonny-boi/sim';
-import type { ManabaseVariant } from '@jonny-boi/sim';
+
 import { MIN_GAMES_PER_SHARD, SHARDS_PER_WORKER } from './pool-config.js';
 import type {
   BaseSlotShardJob,
@@ -38,6 +38,7 @@ import type {
   GauntletShardJob,
   ManabaseBaseSlotShardJob,
   ManabaseVariantSliceShardJob,
+  VariantSliceSpec,
   PairedShardJob,
   ShardContext,
   VariantSliceShardJob,
@@ -340,7 +341,8 @@ export function planManabaseBaseSlotShards(
 /** One manabase arm's outstanding work in a round. */
 export interface ManabaseArmSlice {
   readonly candidateKey: string;
-  readonly variant: ManabaseVariant;
+  /** A §3.175 variant or a §3.177 joint move — both are a list of steps. */
+  readonly variant: VariantSliceSpec;
   readonly fromSlot: number;
   readonly toSlot: number;
 }
