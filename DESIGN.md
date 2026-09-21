@@ -13339,7 +13339,7 @@ and a round alternates so the two compose. Reliability is read on every manabase
 gates an accept. Panel settings are component state like the other tabs'. A search that is interrupted
 keeps its state only while the tab is mounted — it is resumable within a session, not across a reload.
 
-### 3.179 INCONCLUSIVE says which kind, and "keep looking" keeps looking — the verdict reason, the tunable bar, and DEPTH as the lever — 🚧 in progress
+### 3.179 INCONCLUSIVE says which kind, and "keep looking" keeps looking — the verdict reason, the tunable bar, and DEPTH as the lever — ✅ done
 
 > "-tolerances for trim, manabase, and search may be too tight currently... And should be tunable.
 > Testing this, almost every result is showing inconclusive."
@@ -13454,7 +13454,38 @@ Item 2 — the verdict:
 10. Driven for real: a Lab run whose table previously read all-INCONCLUSIVE now reads a reason on
     every row.
 
+#### What the Lab actually did, driven for real
+
+A `keep-looking` session on a 63-card deck, 11 workers, the Lookahead pilot. **Before
+§3.179 this was two rounds and a stop.** It now ran **8 rounds**, deepening
+**60 → 120 → 240 → 480** games per candidate, and stopped with *"Out of budget, still
+unsure — The session hit its game or time budget with rows it still could not read.
+This is NOT 'nothing helps' — raise the budget or the depth to find out which."*
+
+Every row of the table read a reason beside its verdict rather than a bare
+INCONCLUSIVE, with the games-to-settle estimate scaling sensibly with the effect it
+was measuring — `−1× Eternal Witness` at −5.9% wanted **~501 more** paired games,
+`−1× Llanowar Elves` at −1.5% wanted **~7,643**. A smaller effect costs more to
+prove, which is the arithmetic being honest.
+
+⚠️ **That run is also what found the budget bug.** It overran its 40,000-game budget
+to **72,162** before stopping, because `stepAfterRound` tested the budget only on the
+DEEPEN branch while `trimDeck` tests it at the top of every round — so the Lab could
+still widen singles → pairs after the budget was gone. Two loops answering "can I
+afford another round?" differently is exactly the divergence rule 12 warns about.
+`trim-session-parity.test.ts` is the guard, and it enumerates `TRIM_ROUND_KINDS`
+rather than hand-listing them so a third kind cannot ship with a quiet exemption.
+
 #### Left out, on purpose
+
+The Lab's pinned progress bar is **item 4** of the same plan, recorded there with its
+measurement and deliberately not built here — it touches `LabView.tsx` and the Lab's
+stylesheet, and folding it in would mean a failure in either could not be attributed
+to one of them.
+
+The games-to-settle estimate is the RAW one on an evaluation and the Holm-effective
+one inside a family; neither models the roster shrinking as candidates are
+eliminated, so it is an estimate and every surface says so.
 
 Multi-card cuts (`k > 1` in one round) are item 1 of the same plan and a LATER lane — this section
 does not build them and does not make them harder to build. Whether Suggest and the manabase sweep
