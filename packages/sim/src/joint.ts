@@ -93,6 +93,7 @@ import {
   DEFAULT_JOINT_PARTNER_RULE,
   JOINT_CONFOUND_NOTE,
   JOINT_HONEST_CLAIM,
+  JOINT_MAX_MOVES_PER_PHASE,
   JOINT_MAX_ROUNDS,
   JOINT_MIN_PHASE_GAMES,
   JOINT_NOT_GATED_ON,
@@ -115,10 +116,14 @@ export { generateJointMoves } from './joint-moves.js';
  */
 export const JOINT_BASE_REF = 'joint';
 
-/** Deck size is invariant under a joint move — the identity the search rests on. */
-export function deckSizeOf(deck: Deck): number {
-  return deck.cards.reduce((sum, entry) => sum + entry.count, 0);
-}
+/**
+ * Deck size is invariant under a joint move — the identity the whole search
+ * rests on, and the reason the land count and the spell count trade against each
+ * other at all. Re-exported from the trim lane rather than re-derived: one
+ * answer to "how big is this deck".
+ */
+export { deckSizeOf } from './trim.js';
+import { deckSizeOf } from './trim.js';
 
 /**
  * Build the deck a move produces, by the ONE fold that turns a list of
@@ -217,7 +222,7 @@ export function planJointPhase(deck: Deck, options: PlanJointPhaseOptions): Join
     deckRules: rules,
   });
 
-  const cap = Math.max(1, Math.floor(options.maxMoves ?? DEFAULT_SUGGEST_CONFIG.maxCandidates));
+  const cap = Math.max(1, Math.floor(options.maxMoves ?? JOINT_MAX_MOVES_PER_PHASE));
   const moves = generated.moves.slice(0, cap);
   const capped = [...generated.capped, ...generated.moves.slice(cap)];
   const roster = moves.map((move) => jointCandidateOf(move, generated.base, deck.name));
@@ -891,7 +896,9 @@ export function runJointSearch(base: Deck, options: JointSearchOptions): JointSe
     const phase = nextJointPhase(state);
     if (phase === undefined) return state;
     const report = runJointPhase(state.deck, { ...options, phase, round: state.round });
-    if (report.movesEvaluated === 0 && report.rows.length === 0 && state.path.length === 0 && report.capped.length === 0) {
+    // A phase with nothing to evaluate means every family was out of reach for
+    // this deck; the skip list says why, per family.
+    if (report.rows.length === 0 && state.path.length === 0) {
       return { ...advanceJointSearch(state, report, options.pool), stopped: 'no-moves' };
     }
     state = advanceJointSearch(state, report, options.pool);

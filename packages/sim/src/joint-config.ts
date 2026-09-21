@@ -125,6 +125,17 @@ export const JOINT_COUNT_MIN_BASICS_KEPT = 0;
 export const JOINT_SPELL_MOVES_PER_PHASE = 12;
 
 /**
+ * The roster cap for ONE phase. Larger than the suggestion engine's, because a
+ * manabase phase's family is `counts × partners` PLUS the colour-mix and
+ * land-type families, and a cap that truncated it below one full partner round
+ * would quietly restore the confound by leaving some counts with a single
+ * partner. The order the generator emits is what the cap cuts from: every
+ * count's best partner first, then every mix and type variant, then the deeper
+ * partners — so truncation loses the least load-bearing rows and says it did.
+ */
+export const JOINT_MAX_MOVES_PER_PHASE = 32;
+
+/**
  * Copies a spell-slot move swaps. ONE, because a coordinate descent takes small
  * steps: every accepted move is individually attributable, and four rounds
  * convert a playset if the playset is really the improvement.

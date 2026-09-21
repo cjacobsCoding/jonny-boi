@@ -537,10 +537,19 @@ export function generateJointMoves(deck: Deck, pool: CardPool, options: JointMov
           weights,
         });
   const landOnly = landOnlyMoves(deck, pool, options.mixRadius ?? JOINT_COLOR_MIX_RADIUS, options.families);
+  // ORDER, because the roster cap cuts from the end: every count's BEST partner
+  // first (so no count is ever left with fewer partners than another), then the
+  // mix and type families, then the deeper partners. A cap that removed whole
+  // counts, or left one count on a single partner, would quietly reinstate the
+  // confound this family exists to remove.
+  const firstPartners = count.moves.filter((move) => (move.partner?.fitRank ?? 1) <= 1);
+  const deeperPartners = count.moves
+    .filter((move) => (move.partner?.fitRank ?? 1) > 1)
+    .sort((a, b) => (a.partner?.fitRank ?? 0) - (b.partner?.fitRank ?? 0));
   return {
     phase: options.phase,
     base: summary,
-    moves: [...count.moves, ...landOnly.moves],
+    moves: [...firstPartners, ...landOnly.moves, ...deeperPartners],
     capped: [],
     skipped: [...count.skipped, ...landOnly.skipped],
     partnerRule,
