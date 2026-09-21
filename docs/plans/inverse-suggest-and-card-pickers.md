@@ -145,9 +145,25 @@ every distinct card in the deck — around 35 rows — with **no filter whatsoev
 control a user reaches for when they want to focus a trim. Whether it should become a multi-select
 `CardPicker` or keep checkboxes plus a filter is a design call; make it explicitly, and say which.
 
-⚠️ Still **NOT CHECKED**: whether `lib/lab/cardPicker.ts`'s matching is substring or fuzzy. The other
-two are known fuzzy (Scryfall's, and `matchCardName`). Read it before deciding what "optionally
-allows for fuzzy search" has to add.
+### ✅ And the matching question, also measured — it is SUBSTRING, not fuzzy
+
+`lib/lab/cardPicker.ts`'s `rankForTerm` is substring matching in rank tiers: `startsWith(t)` ranks 1,
+`includes(' ' + t)` (a word start) ranks 2, and so on. **No edit distance, no fuzzy.** So a typo or a
+half-remembered name finds nothing there.
+
+That produces an asymmetry worth stating plainly: **the Lab's picker is the least capable of the
+three at finding a card by approximate name.** The deck builder has Scryfall's fuzzy match and the
+scan dialog has `matchCardName`, and only the Lab — the surface a user is most likely to be hunting
+a specific card in — is exact-substring. Caleb's *"optionally allows for fuzzy search if there are
+more than 10 options"* is therefore a genuine addition to `CardPicker`, not a toggle over something
+already there.
+
+⚠️ Which also means there is a **cheaper answer than writing a fourth matcher**: one of the two
+existing fuzzy implementations becomes the shared one and `CardPicker` reads it, which serves rule 12
+and Caleb's request in the same edit. **Measure both before choosing** — `matchCardName` works over a
+name index and may or may not suit a 7,812-row pool; Scryfall's runs over the network at call time
+and therefore cannot be the one the Lab uses (the project forbids `fetch` at call time in the pure
+units). Say which you picked and why.
 
 A partial sweep found nine `<select>` elements in `apps/web/src`
 (`LabView`, `OnlinePlay`, `SwapPanel`, `SuggestPanel`, `SetupScreen`, `ProxiesView`, `PilotControls`,
