@@ -68,6 +68,8 @@ export function JointPanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   onApplyJointMove,
   gamesConfig,
@@ -139,6 +141,10 @@ export function JointPanel({
     if (phase === undefined) return;
     sim.run({
       kind: 'joint-phase',
+      // §3.179 — the bar travels WITH the question, so the report comes
+      // back stamped with the bar it was read at.
+      verdictAlpha: verdictBar.alpha,
+      verdictMinGames,
       hero: heroPayload,
       opponentNames: chosenOpponents,
       gamesPerMove: games,

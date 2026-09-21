@@ -124,6 +124,8 @@ export function TrimPanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   gamesConfig,
   targetConfig,
@@ -176,6 +178,10 @@ export function TrimPanel({
     if (!heroPayload) return;
     sim.run({
       kind: 'trim',
+      // §3.179 — the bar travels WITH the question, so the report comes back
+      // stamped with the bar it was read at.
+      verdictAlpha: verdictBar.alpha,
+      verdictMinGames,
       hero: heroPayload,
       opponentNames: chosenOpponents,
       gamesPerCandidate,

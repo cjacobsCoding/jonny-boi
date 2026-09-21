@@ -60,6 +60,8 @@ export function ManabasePanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   onApplyManabase,
   gamesConfig,
@@ -191,6 +193,10 @@ export function ManabasePanel({
             heroPayload &&
             sim.run({
               kind: 'manabase',
+              // §3.179 — the bar travels WITH the question, so the report comes
+              // back stamped with the bar it was read at.
+              verdictAlpha: verdictBar.alpha,
+              verdictMinGames,
               hero: heroPayload,
               opponentNames: chosenOpponents,
               gamesPerVariant: games,

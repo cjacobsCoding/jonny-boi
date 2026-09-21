@@ -13,7 +13,8 @@
  */
 
 import { useState } from 'react';
-import { DEFAULT_LAB_SEED } from './lab-config.js';
+import { VERDICT_BARS, type VerdictBar } from '@jonny-boi/sim';
+import { DEFAULT_LAB_SEED, DEFAULT_VERDICT_BAR, VERDICT_MIN_GAMES } from './lab-config.js';
 import { DEFAULT_PILOT_ID } from './sim/pilots.js';
 
 /** The Lab's sub-tabs — the things you can run against the gauntlet. */
@@ -36,6 +37,16 @@ export interface LabSelection {
    */
   readonly pilotId: string;
   readonly setPilotId: (id: string) => void;
+  /**
+   * How strict a verdict has to be before the Lab will call a swap better or
+   * worse (§3.179). Same kind of thing as the pilot: changing it changes what
+   * the numbers MEAN, so it lives with the question rather than in a panel.
+   */
+  readonly verdictBar: VerdictBar;
+  readonly setVerdictBar: (alpha: number) => void;
+  /** Minimum paired games before a verdict may be anything but inconclusive. */
+  readonly verdictMinGames: number;
+  readonly setVerdictMinGames: (games: number) => void;
   readonly opponentNames: readonly string[];
   readonly setOpponentNames: (update: (current: readonly string[]) => string[]) => void;
   /** Confirmation shown after applying a verdict; cleared on the next apply. */
@@ -52,6 +63,16 @@ export function useLabSelection(initialOpponents: readonly string[]): LabSelecti
   const [heroId, setHeroId] = useState<string | null>(null);
   const [seed, setSeed] = useState(DEFAULT_LAB_SEED);
   const [pilotId, setPilotId] = useState<string>(DEFAULT_PILOT_ID);
+  const [verdictBar, setBar] = useState<VerdictBar>(DEFAULT_VERDICT_BAR);
+  // ⚠️ Set by ALPHA, never by handing in a whole bar: the caller cannot then
+  // assemble an alpha and a z that disagree. The table is the only source of
+  // pairs, and an alpha with no row throws rather than being approximated.
+  const setVerdictBar = (alpha: number): void => {
+    const row = VERDICT_BARS.find((bar) => bar.alpha === alpha);
+    if (!row) throw new Error(`no verdict bar for alpha ${alpha}`);
+    setBar(row);
+  };
+  const [verdictMinGames, setVerdictMinGames] = useState(VERDICT_MIN_GAMES.default);
   const [opponentNames, setNames] = useState<readonly string[]>(initialOpponents);
   const [applyNote, setApplyNote] = useState<string | null>(null);
 
@@ -64,6 +85,10 @@ export function useLabSelection(initialOpponents: readonly string[]): LabSelecti
     setSeed,
     pilotId,
     setPilotId,
+    verdictBar,
+    setVerdictBar,
+    verdictMinGames,
+    setVerdictMinGames,
     opponentNames,
     setOpponentNames: (update) => setNames((current) => update(current)),
     applyNote,

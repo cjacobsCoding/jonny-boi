@@ -26,6 +26,8 @@ export function SwapPanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   onApplySwap,
   gamesConfig,
@@ -182,6 +184,10 @@ export function SwapPanel({
             heroPayload &&
             sim.run({
               kind: 'swap',
+              // §3.179 — the bar travels WITH the question, so the report comes
+              // back stamped with the bar it was read at.
+              verdictAlpha: verdictBar.alpha,
+              verdictMinGames,
               hero: heroPayload,
               opponentNames: chosenOpponents,
               outCardId: outId,

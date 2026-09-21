@@ -59,6 +59,27 @@ export interface PilotedRequest {
   readonly pilotId: string;
 }
 
+/**
+ * THE BAR A RUN IS READ AT (DESIGN §3.179), carried by every request that
+ * decides a verdict.
+ *
+ * ⚠️ REQUIRED, NOT OPTIONAL, for exactly the reason `PilotedRequest` above is:
+ * an optional field is a field a call site can forget, and the one that forgets
+ * it would silently answer a different question than the UI is displaying -- a
+ * panel announcing a 0.10 bar over rows the worker decided at 0.05. Adding a
+ * request kind that reads a verdict means extending this, and the compiler makes
+ * that a decision rather than an omission.
+ *
+ * `z` is NOT carried: it is derived from alpha through `statsConfigFor`, so the
+ * two halves of one confidence level cannot arrive disagreeing.
+ */
+export interface VerdictBarRequest {
+  /** Two-sided significance level; must be a row of `VERDICT_BARS`. */
+  readonly verdictAlpha: number;
+  /** Minimum paired games before any verdict but inconclusive. */
+  readonly verdictMinGames: number;
+}
+
 /** Run the hero against the chosen gauntlet decks (by sample-deck name). */
 export interface GauntletRequest extends PilotedRequest {
   readonly kind: 'gauntlet';
@@ -77,7 +98,7 @@ export interface GauntletRequest extends PilotedRequest {
 }
 
 /** Evaluate a single-card swap (out → in) on the hero against the gauntlet. */
-export interface SwapRequest extends PilotedRequest {
+export interface SwapRequest extends PilotedRequest, VerdictBarRequest {
   readonly kind: 'swap';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -100,7 +121,7 @@ export interface SwapRequest extends PilotedRequest {
 }
 
 /** Rank candidate single-card swaps that improve the hero (the suggestion loop). */
-export interface SuggestRequest extends PilotedRequest {
+export interface SuggestRequest extends PilotedRequest, VerdictBarRequest {
   readonly kind: 'suggest';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -158,7 +179,7 @@ export interface MatchRequest extends PilotedRequest {
  * games; `baseLandRatio` is the deck's ratio when the session began, so the mana
  * prior measures drift from where the user started.
  */
-export interface TrimRequest extends PilotedRequest {
+export interface TrimRequest extends PilotedRequest, VerdictBarRequest {
   readonly kind: 'trim';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -181,7 +202,7 @@ export interface TrimRequest extends PilotedRequest {
  * measured reliability of its draws. The worker enumerates the family from
  * these settings, so the panel's preview and the run agree on the list.
  */
-export interface ManabaseRequest extends PilotedRequest {
+export interface ManabaseRequest extends PilotedRequest, VerdictBarRequest {
   readonly kind: 'manabase';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -208,7 +229,7 @@ export interface ManabaseRequest extends PilotedRequest {
  * the BUDGET is spent visibly, a phase at a time, instead of disappearing into
  * an hour-long run nobody can stop or resume.
  */
-export interface JointPhaseRequest extends PilotedRequest {
+export interface JointPhaseRequest extends PilotedRequest, VerdictBarRequest {
   readonly kind: 'joint-phase';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];

@@ -28,6 +28,7 @@ import type {
   SuggestRequest,
   SwapRequest,
   TrimRequest,
+  VerdictBarRequest,
 } from '../sim-protocol.js';
 import { TRIM_SWAP_SCOPE, finishTrimRound } from '@jonny-boi/sim';
 import {
@@ -39,12 +40,13 @@ import { JOINT_PHASES, finishJointPhase, moveForCandidateKey } from '@jonny-boi/
 import {
   DEFAULT_ADAPTIVE_CONFIG,
   DEFAULT_EXPLORATION_WEIGHTS,
-  DEFAULT_STATS_CONFIG,
   DEFAULT_SWAP_SCOPE,
   GAMES_PER_PAIRED_GAME,
   driveAdaptiveSearch,
   finishSuggestionRun,
+  statsConfigFor,
   summarizePairedSwap,
+  type StatsConfig,
   type AdaptiveRound,
   type AdaptiveSearchOutcome,
   type PairedBaseRecord,
@@ -122,6 +124,23 @@ export interface ShardRunner {
    * a start-up cost worth overlapping. Optional: an in-process runner has none.
    */
   warmUp?(): void;
+}
+
+/**
+ * THE BAR A REQUEST ASKED FOR (DESIGN §3.179), as a `StatsConfig`.
+ *
+ * ⚠️ ONE function, read by every run kind, and `z` is DERIVED here rather than
+ * carried on the wire: two fields that can disagree are a bug waiting to be
+ * filed, and a 90% verdict printed beside a 95% interval is exactly that bug.
+ * `statsConfigFor` refuses an alpha with no row in `VERDICT_BARS` instead of
+ * snapping it to the nearest one.
+ *
+ * These three call sites used to read DEFAULT_STATS_CONFIG directly, which was
+ * invisible while alpha was a constant and became a lie the moment it was a
+ * control.
+ */
+function statsOf(request: VerdictBarRequest): StatsConfig {
+  return statsConfigFor(request.verdictAlpha, request.verdictMinGames);
 }
 
 /** Everything a run reports back as it goes. */
@@ -381,7 +400,7 @@ export async function runSwap(
       results.push(...(await playWindow({ gameStart: from, gameEnd: checkpoint })));
       from = checkpoint;
       looksTaken += 1;
-      if (mergePairedEvaluation(results).pValue < plan.perLookAlpha) break;
+      if (mergePairedEvaluation(results, statsOf(request)).pValue < plan.perLookAlpha) break;
     }
     sequential = {
       gamesPlayed: from,
@@ -394,7 +413,7 @@ export async function runSwap(
   }
 
   const elapsedSeconds = tally.elapsedSeconds;
-  const evaluation = mergePairedEvaluation(results);
+  const evaluation = mergePairedEvaluation(results, statsOf(request));
   tally.emit(label, true);
   return {
     kind: 'swap',
@@ -669,6 +688,7 @@ export async function runSuggest(
           paired: arm.paired,
           scope: DEFAULT_SWAP_SCOPE,
           copiesSwapped: arm.candidate.copiesSwapped,
+          stats: statsOf(request),
         }),
         gamesPlayed: arm.gamesPlayed,
         ...(arm.elimination ? { elimination: arm.elimination } : {}),
@@ -695,7 +715,7 @@ export async function runSuggest(
     ...(plan.historyRejected ? { historyRejected: plan.historyRejected } : {}),
     method: DEFAULT_ADAPTIVE_CONFIG.multipleComparisons,
     exploration: DEFAULT_EXPLORATION_WEIGHTS,
-    stats: DEFAULT_STATS_CONFIG,
+    stats: statsOf(request),
     workersUsed: runner.workerCount,
   });
 
@@ -1016,6 +1036,7 @@ export async function runManabase(
           paired: arm.paired,
           scope: DEFAULT_SWAP_SCOPE,
           copiesSwapped: arm.candidate.copiesSwapped,
+          stats: statsOf(request),
         }),
         gamesPlayed: arm.gamesPlayed,
         ...(arm.elimination ? { elimination: arm.elimination } : {}),
@@ -1038,7 +1059,7 @@ export async function runManabase(
     variantObserved: armObserved,
     elapsedSeconds,
     workersUsed: runner.workerCount,
-    stats: DEFAULT_STATS_CONFIG,
+    stats: statsOf(request),
   });
 
   tally.setTotal(tally.gamesDone);
@@ -1266,6 +1287,7 @@ export async function runJointPhaseRun(
           paired: arm.paired,
           scope: DEFAULT_SWAP_SCOPE,
           copiesSwapped: arm.candidate.copiesSwapped,
+          stats: statsOf(request),
         }),
         gamesPlayed: arm.gamesPlayed,
         ...(arm.elimination ? { elimination: arm.elimination } : {}),
@@ -1288,7 +1310,7 @@ export async function runJointPhaseRun(
     moveObserved: armObserved,
     elapsedSeconds,
     workersUsed: runner.workerCount,
-    stats: DEFAULT_STATS_CONFIG,
+    stats: statsOf(request),
   });
 
   tally.setTotal(tally.gamesDone);
