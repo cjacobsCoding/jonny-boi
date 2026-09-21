@@ -17,7 +17,7 @@ import { DEFAULT_LAB_SEED } from './lab-config.js';
 import { DEFAULT_PILOT_ID } from './sim/pilots.js';
 
 /** The Lab's sub-tabs — the things you can run against the gauntlet. */
-export type LabTabId = 'gauntlet' | 'swap' | 'suggest' | 'trim' | 'manabase';
+export type LabTabId = 'gauntlet' | 'swap' | 'suggest' | 'trim' | 'manabase' | 'joint';
 
 /** Everything the Lab needs to remember between visits. */
 export interface LabSelection {

@@ -21,6 +21,7 @@ import type {
 } from '@jonny-boi/sim';
 import type { LandRatio, TrimRoundKind, TrimRoundReport } from '@jonny-boi/sim';
 import type { DualLandFamilyId, ManabaseReport } from '@jonny-boi/sim';
+import type { JointPartnerRuleId, JointPhaseId, JointPhaseReport } from '@jonny-boi/sim';
 import type { MatchTrace } from './replay-types.js';
 
 /*
@@ -195,6 +196,38 @@ export interface ManabaseRequest extends PilotedRequest {
   readonly families?: readonly DualLandFamilyId[];
 }
 
+/**
+ * §3.177 — ONE PHASE of the JOINT manabase + spell search: hold half the deck
+ * fixed and evaluate every move to the other half, with the same paired
+ * machinery a swap uses.
+ *
+ * A PHASE, not a whole search, for the reason a trim ships a ROUND (§3.174) and
+ * more besides: the panel applies the phase's winner to the deck itself and
+ * issues the next phase on the updated hero, so (a) the deck the Lab re-reads is
+ * the deck that was tested, (b) Cancel is the ordinary one-run cancel, and (c)
+ * the BUDGET is spent visibly, a phase at a time, instead of disappearing into
+ * an hour-long run nobody can stop or resume.
+ */
+export interface JointPhaseRequest extends PilotedRequest {
+  readonly kind: 'joint-phase';
+  readonly hero: SimDeckPayload;
+  readonly opponentNames: readonly string[];
+  /** Paired games per opponent a FINALIST move reaches — the adaptive ladder. */
+  readonly gamesPerMove: number;
+  readonly seed: number;
+  readonly phase: JointPhaseId;
+  /** 0 for the first round of the descent; it offsets the seed. */
+  readonly round: number;
+  /** Which row of `JOINT_PARTNER_RULES` chooses a land count's partner. */
+  readonly partnerRule: JointPartnerRuleId;
+  /** Steps each way for the count and mix families. */
+  readonly radius: number;
+  /** Partner spells each land count is measured against. */
+  readonly partnersPerCountStep: number;
+  /** Dual-land families the type family may draw on; omitted means every family. */
+  readonly families?: readonly DualLandFamilyId[];
+}
+
 /** Anything the UI can ask the worker to run. */
 export type SimRequest =
   | GauntletRequest
@@ -202,7 +235,8 @@ export type SimRequest =
   | SuggestRequest
   | MatchRequest
   | TrimRequest
-  | ManabaseRequest;
+  | ManabaseRequest
+  | JointPhaseRequest;
 
 /**
  * Live progress for the whole run, aggregated across every worker.
@@ -259,5 +293,6 @@ export type SimResultPayload =
   | { readonly kind: 'suggest'; readonly result: SuggestionReport; readonly pilotId: string }
   | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string }
   | { readonly kind: 'trim'; readonly result: TrimRoundReport; readonly pilotId: string }
-  | { readonly kind: 'manabase'; readonly result: ManabaseReport; readonly pilotId: string };
+  | { readonly kind: 'manabase'; readonly result: ManabaseReport; readonly pilotId: string }
+  | { readonly kind: 'joint-phase'; readonly result: JointPhaseReport; readonly pilotId: string };
 

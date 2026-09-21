@@ -11,6 +11,11 @@
  * ALL OR NOTHING. A step that cannot be honoured in full (the deck was edited
  * since the run, a printing the pool does not carry) leaves the deck exactly as
  * it was and says why. A half-applied manabase is a deck nobody tested.
+ *
+ * ⚠️ It takes the STEPS and the LABEL, not a whole variant, because the §3.177
+ * joint search applies its moves through this same path: a joint move is the
+ * same list of steps, and a second apply funnel is exactly how "what was tested"
+ * and "what got applied" come apart.
  */
 
 import type { ManabaseVariant } from '@jonny-boi/sim';
@@ -51,13 +56,16 @@ function entriesNamed(deck: Deck, name: string): readonly { readonly cardId: str
   return deck.cards.filter((entry) => frontFaceName(getCard(entry.cardId)?.name ?? entry.name ?? '') === key);
 }
 
+/** A variant or a joint move, as far as applying it is concerned. */
+export type ApplicableSteps = Pick<ManabaseVariant, 'steps' | 'label'>;
+
 /** The id the deck should add for a variant's in card: the pool's, or the index's by name. */
 function inCardIdFor(step: ManabaseVariant['steps'][number]): string | undefined {
   if (getCard(step.inId)) return step.inId;
   return getCardByName(step.inName)?.id;
 }
 
-export function applyManabaseToDeck(deck: Deck, variant: ManabaseVariant): ApplyManabaseResult {
+export function applyManabaseToDeck(deck: Deck, variant: ApplicableSteps): ApplyManabaseResult {
   let current = deck;
   for (const step of variant.steps) {
     const inId = inCardIdFor(step);

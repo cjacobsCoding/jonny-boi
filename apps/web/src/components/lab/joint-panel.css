@@ -1,0 +1,174 @@
+/*
+ * THE JOINT MANABASE + SPELL SEARCH (§3.177) — the Lab's "Joint" tab.
+ *
+ * The reading order is the argument: the confound first (why a land count
+ * cannot be tested alone), then the rule that fixes it, then the budget with
+ * what has been spent against it, then the PATH — because the claim this panel
+ * makes is "the best deck FOUND under this budget along this path", and a person
+ * cannot audit that claim without seeing all three.
+ */
+
+.joint-confound {
+  margin: var(--space-2, 8px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-left: 3px solid var(--color-accent, #6aa);
+  background: var(--color-bg-subtle, #8881);
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}
+
+.joint-base {
+  margin: var(--space-2, 8px) 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}
+
+.joint-settings {
+  margin: var(--space-3, 12px) 0;
+  border: 1px solid var(--color-border, #8884);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.joint-settings legend {
+  font-weight: 600;
+  padding: 0 var(--space-1, 4px);
+}
+
+.joint-rule {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2, 8px);
+}
+
+.joint-rule > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.joint-rule__note {
+  color: var(--color-fg-muted, inherit);
+  font-size: var(--text-xs, 0.8125rem);
+}
+
+.joint-auto {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  align-self: flex-end;
+}
+
+/* The budget, stated where it is being spent. */
+.joint-spend {
+  margin: var(--space-2, 8px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border: 1px solid var(--color-border, #8884);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+/* The path: one row per accepted move, in the order they were accepted. */
+.joint-path {
+  margin: var(--space-3, 12px) 0;
+}
+
+.joint-path h4 {
+  margin: 0 0 var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.joint-path ol {
+  margin: 0;
+  padding-left: var(--space-4, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.joint-path li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.joint-path__phase,
+.joint-path__delta {
+  color: var(--color-fg-muted, inherit);
+  font-size: var(--text-xs, 0.8125rem);
+}
+
+.joint-outcome {
+  margin: var(--space-3, 12px) 0;
+  padding: var(--space-3, 12px);
+  border: 1px solid var(--color-border, #8884);
+  border-radius: var(--radius-md, 8px);
+}
+
+.joint-outcome h4 {
+  margin: 0 0 var(--space-1, 4px);
+}
+
+.joint-claim,
+.joint-claim-foot {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}
+
+.joint-claim-foot {
+  margin-top: var(--space-3, 12px);
+  font-style: italic;
+}
+
+.joint-counts {
+  margin: var(--space-3, 12px) 0;
+}
+
+.joint-counts h4 {
+  margin: 0 0 var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.joint-counts__base td {
+  font-weight: 600;
+}
+
+.joint-counts__tag {
+  margin-left: var(--space-2, 8px);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: 400;
+  color: var(--color-fg-muted, inherit);
+}
+
+.joint-table__winner td {
+  background: var(--color-bg-subtle, #8881);
+}
+
+.joint-table__note {
+  display: block;
+  font-size: var(--text-xs, 0.8125rem);
+  color: var(--color-fg-muted, inherit);
+  font-weight: 400;
+}
+
+.joint-skipped {
+  margin: var(--space-2, 8px) 0;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.joint-skipped ul {
+  margin: var(--space-2, 8px) 0 0;
+  padding-left: var(--space-4, 20px);
+}
+
+.joint-not-gated span {
+  display: block;
+  margin-bottom: var(--space-1, 4px);
+}
