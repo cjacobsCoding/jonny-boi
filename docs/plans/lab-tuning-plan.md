@@ -230,6 +230,120 @@ without the denominator and watch 3 fail.
 
 ---
 
+---
+
+## Item 4 — the Lab's progress bar is pinned to the bottom while a lab is working
+
+Recorded verbatim, like the other three:
+
+> TODO:
+> -in all the Lab subtabs, make the loading bar get pinned to the bottom of the screen
+> while in that area while its working on a lab, so you can scroll around and still watch
+> the progress.
+
+### What was measured
+
+**The Lab already has ONE progress bar, owned by the shell.** `RunStatus`
+(`apps/web/src/components/RunStatus.tsx`, 45 lines) is rendered once, by
+`LabView.tsx:243`, as `{sim.status === 'running' && <RunStatus progress={sim.progress}
+onCancel={sim.cancel} />}`. It is **not** per-panel and there is nothing to consolidate:
+grepping `sim.progress` across `apps/web/src` returns exactly two call sites, `LabView.tsx:243`
+and `MatchView.tsx:170`. **No Lab panel reads progress at all** — each reads only
+`sim.status === 'running'` into a local `running` boolean to disable its own buttons.
+
+So the shape the brief called for — one bar the shell owns, that every subtab feeds — **already
+exists**. The work is not to build it. The work is that it sits in normal document flow and
+scrolls away.
+
+**One progress shape, already universal.** `SimProgress`
+(`apps/web/src/lib/sim-protocol.ts:250`) carries `done` / `total` / `gamesRun` /
+`elapsedSeconds` / `label`, flows through one `ProgressSink` (`lib/sim/run.ts:128`) into one
+React state slot in one hook (`useSimWorker`). Every run kind builds its own `ProgressTally` and
+passes a label. There is no second progress vocabulary in the Lab.
+
+⚠️ **What `SimProgress` cannot express, and why two panels grew their own text.** It has no
+`phase` and no `round`, and `useSimWorker` resets it to `null` at the start of every run
+(`useSimWorker.ts:84`). A trim session and a joint search are each MANY runs, so neither can be
+described by it — which is why `TrimPanel` has `StatusLine` (L408–440, "round in progress…",
+"N rounds") and `JointPanel` has the `joint-spend` line (L338–353, games/seconds/phases against
+their budgets). Those are SESSION readouts, not job readouts, and they render whether or not a
+run is in flight. Pinning the job bar does not replace them, and this item should not try to.
+
+**The tab registry exists but is private.** `LAB_TABS` is a real `as const` table at
+`LabView.tsx:45` with six rows — but it is `const`, not `export const`, so no test can enumerate
+it today. A parallel hand-written `LabTabId` union at `useLabSelection.ts:20` duplicates the same
+six ids with **nothing pinning the two together**. Exporting `LAB_TABS` is a precondition of the
+brief's "do not hand-list the tabs".
+
+⚠️ **The bottom of the viewport is already contested**, all three mounted in the app shell
+(`App.tsx:223–225`) and therefore live on the Lab screen:
+
+| element | file | position | z-index |
+|---|---|---|---|
+| `.bugreport-launcher` | `components/bug-reporter.css:15` | `fixed; right 12px; bottom 12px` | 900 |
+| `.bugreport-lastlink` | `components/bug-reporter.css:49` | `fixed; right 64px; bottom 18px` | 900 |
+| `.update-pill` | `components/update-pill.css:14` | `fixed; bottom 12px; centred` | 70 |
+
+and `lib/bugreport/capture-policy.ts:86` documents a dependency on the launcher being the last
+bottom-fixed node, with a test at `capture-policy.test.ts:197`. A full-width bar at `bottom: 0`
+collides with all three; the dock must choose a z-index between the pill and the launcher, and
+must not break that capture policy.
+
+⚠️ **THE VERIFICATION CONSTRAINT, and it is the binding one.** *There is no DOM in this suite.*
+Root `vitest.config.ts` sets only `resolve.alias` and `test.include` — **no `environment`, so
+tests run in `node`**; there is no setup file anywhere; and jsdom, happy-dom and
+`@testing-library` are **not dependencies** (confirmed against both `package.json`s — the only
+hits are comments saying so). The idiom is `renderToStaticMarkup` → assert on the HTML **string**
+(35 files). `getComputedStyle` and `getBoundingClientRect` do not exist, and **CSS files are
+never loaded** — `import './x.css'` returns an empty module.
+
+So the brief's acceptance 1 — *"assert the rendered position, not merely that the element
+exists"* — **cannot be met by a unit test**, and saying otherwise would be exactly the
+can't-fail check this project has paid for most. It splits three ways, and the split is the
+honest form of the requirement:
+
+- **markup + ARIA** via the static render;
+- **the `position: fixed; bottom: 0` DECLARATION** via the stylesheet-as-text idiom
+  (`styles-regressions.test.ts:28–62`, which strips comments so a declaration named in prose
+  cannot satisfy an assertion);
+- **real pixel placement** via an out-of-band Puppeteer script under `apps/web/scripts/`
+  (`puppeteer-core` is already a root devDependency and four such `verify-*.mjs` scripts
+  already exist). This is the only check that can actually see a viewport.
+
+### The shape
+
+`RunStatus` stays exactly where it is and keeps its single owner. It gains a **dock**: the shell
+wraps it in a fixed, full-width element at the bottom of the viewport, and gives `.lab` a bottom
+padding of the dock's height while a job is running so the last row of content is still
+reachable. A subtab that has nothing to report renders nothing at all — **the dock is absent, not
+an empty bar** — which falls out of the existing `sim.status === 'running'` guard rather than
+being a new state to maintain.
+
+`LAB_TABS` is exported so the guard can enumerate it, and `LabTabId` is derived FROM it rather
+than hand-written beside it, so the two lists cannot drift.
+
+### Acceptance
+
+1. The dock declares `position: fixed` and `bottom: 0` in the stylesheet, asserted against the
+   parsed CSS text, with the Puppeteer script asserting its real on-screen rectangle after
+   scrolling the panel to the bottom AND to the top.
+2. It is present for EVERY row of `LAB_TABS` while that tab is working — a test that iterates the
+   exported registry, never a hand-written list, so a seventh subtab cannot ship without it.
+3. It is absent when no job is running, and `.lab` carries bottom padding while it is visible so
+   the last row of content stays reachable.
+4. It does not break the bug reporter's capture policy, and sits below the launcher and above the
+   update pill in the stacking order — asserted on the z-index values, which are all named.
+5. Screenshot, scrolled down, with a job actually running.
+
+Red first: unpin the positioning and watch 1 fail; remove the shell's render and watch 2 fail on
+every row; drop the padding and watch 3 fail.
+
+### Ordering
+
+**After items 3 and 2 are green**, as its own commit. It touches `LabView.tsx` and the Lab's
+stylesheet — a wide, contended surface — and folding it into the verdict work would mean a
+failure in either could not be attributed to one of them.
+
 ## Ordering, and why
 
 **Items 3 and 2 ship together, first, as one PR.** They are the same defect — a result that reports
