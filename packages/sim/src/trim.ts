@@ -818,7 +818,20 @@ export function finishTrimRound(input: FinishTrimRoundInput): TrimRoundReport {
   // reasons through the shared table — the same `moreGamesCouldSettle` column
   // `decideVerdict` fills — so the round and the rows can never disagree about
   // whether this question is still open.
-  const unsure = rows.some((row) => SWAP_VERDICT_REASON_BY_KEY[row.evaluation.verdictReason].moreGamesCouldSettle);
+  //
+  // ⚠️ ONLY THE SURVIVORS COUNT, and this is load-bearing. `driveAdaptiveSearch`
+  // is successive halving: it deliberately spends almost nothing on candidates it
+  // has already judged, so an ELIMINATED row is nearly always short of
+  // `minGamesForVerdict` and reads `tooFewGames` by construction. Counting those
+  // made EVERY round unsure — including one where every surviving cut was proved
+  // worse — so the ladder would have deepened forever against a question it had
+  // already answered, which is the exact infinite loop this verdict exists to
+  // prevent. A row the ladder dropped HAS been answered, by the ladder.
+  const unsure = rows.some(
+    (row) =>
+      row.elimination === undefined &&
+      SWAP_VERDICT_REASON_BY_KEY[row.evaluation.verdictReason].moreGamesCouldSettle,
+  );
   // The base arm is shared, so the deepest arm's base rate is the best-measured one.
   const deepest = rows.reduce<TrimRow | undefined>(
     (best, row) => (best === undefined || row.evaluation.nGames > best.evaluation.nGames ? row : best),

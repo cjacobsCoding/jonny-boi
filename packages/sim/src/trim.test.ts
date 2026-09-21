@@ -377,7 +377,10 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
     expect(result.deck).toBe(RIGGED);
     expect(result.rounds.length).toBe(1);
     const round = result.rounds[0]!;
-    expect(round.verdict).toBe('exhausted');
+    // §3.179 — every row here is inconclusive and the best of them SURVIVED the
+    // ladder, so the round has learned nothing rather than learned that nothing
+    // helps. That is `'unsure'`.
+    expect(round.verdict).toBe('unsure');
     expect(round.winner).toBeUndefined();
     expect(round.edgeCandidate?.label).toBe('Craw Wurm');
     expect(round.edgeCandidate?.evaluation.verdict).toBe('inconclusive');
@@ -386,7 +389,7 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
     expect(round.rows.every((row) => row.evaluation.verdict === 'inconclusive')).toBe(true);
   });
 
-  it('"keep looking" widens an exhausted singles round to pairs, then stops — still applying nothing', () => {
+  it('§3.179 — "keep looking" widens to pairs and then DEEPENS, instead of stopping after two rounds', () => {
     const edgeId = pool.getByName('Craw Wurm')?.id ?? '';
     const result = trimDeck(RIGGED, {
       ...sessionOptions,
@@ -394,11 +397,15 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' },
       armRunner: (base) => riggedRunner(base, flatWithEdge(edgeId)),
     });
-    // §3.179 — these rows are CONCLUSIVE (the rig proves every one), so the
-    // search really is over — a different answer from running out of budget
-    // while still unable to read them.
-    expect(result.stopped).toBe('no-improvement-conclusive');
-    expect(result.rounds.map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
+    // ⚠️ THIS IS THE BUG CALEB REPORTED, inverted into a test. This rig leaves
+    // every row inconclusive, so before §3.179 the session ran EXACTLY TWO rounds
+    // — singles, pairs — and stopped saying `'exhausted'`, having cut nothing.
+    // It now widens through the kinds and then DEEPENS, and stops only when it
+    // runs out of road, with a reason that says so.
+    expect(result.stopped).toBe('budget-exhausted');
+    expect(result.rounds.length).toBeGreaterThan(2);
+    expect(result.gamesPerCandidate).toBeGreaterThan(sessionOptions.gamesPerCandidate);
+    expect(result.rounds.slice(0, 2).map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
     expect(result.rounds[1]?.rows.every((row) => row.cuts.length === 2)).toBe(true);
     expect(result.applied).toEqual([]);
     expect(deckSizeOf(result.deck)).toBe(63);

@@ -42,6 +42,7 @@ import {
   type TrimArmRunner,
   type TrimRoundPlan,
 } from './trim.js';
+import { DEFAULT_STATS_CONFIG } from './config.js';
 import { MONO_GREEN_STOMPY, UW_CONTROL } from '../data/decks/index.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
@@ -238,10 +239,22 @@ describe('§3.179 acceptance 1 — an unsure session deepens instead of stopping
 });
 
 describe('§3.179 acceptance 2 — a CONCLUSIVE round stops at once (the infinite-loop bound)', () => {
+  /**
+   * ⚠️ DEEPER THAN THE OTHER SESSIONS, ON PURPOSE. A verdict needs
+   * `minGamesForVerdict` paired games before it can be anything but
+   * inconclusive, and the round's budget is shared across the whole roster, so
+   * at the default depth even the SURVIVOR falls short and reads `tooFewGames`.
+   * That would make this round "unsure" for a reason that has nothing to do with
+   * what the rig is proving, and the test would pass or fail on the ladder's
+   * scheduling rather than on the branch under test. The anti-vacuity assertion
+   * below pins that the survivor really did clear the minimum.
+   */
+  const conclusiveOptions = { ...sessionOptions, gamesPerCandidate: 200 };
+
   it('stops with no-improvement-conclusive after the kinds, and never deepens', () => {
     const depths: number[] = [];
     const result = trimDeck(RIGGED, {
-      ...sessionOptions,
+      ...conclusiveOptions,
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' },
       armRunner: (base: Deck, round: TrimRoundPlan) => {
         depths.push(round.plan.maxPairedGames / TWO_OPPONENTS.length);
@@ -254,18 +267,28 @@ describe('§3.179 acceptance 2 — a CONCLUSIVE round stops at once (the infinit
     // question it had already answered.
     expect(result.rounds.length).toBe(TRIM_ROUND_KINDS.length);
     expect(new Set(depths).size, 'a settled question must not be re-measured deeper').toBe(1);
-    expect(result.gamesPerCandidate).toBe(sessionOptions.gamesPerCandidate);
+    expect(result.gamesPerCandidate).toBe(conclusiveOptions.gamesPerCandidate);
   });
 
-  it('and it really was conclusive — every row proved worse, none merely unread', () => {
+  it('and it really was conclusive — every SURVIVING row proved worse, none merely unread', () => {
     const result = trimDeck(RIGGED, {
-      ...sessionOptions,
+      ...conclusiveOptions,
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' },
       armRunner: (base: Deck) => riggedRunner(base, conclusivelyWorse),
     });
     const first = result.rounds[0];
     expect(first?.verdict).toBe('exhausted');
-    expect(first?.rows.every((row) => row.evaluation.verdictReason === 'significantLoss')).toBe(true);
+
+    // Only the rows the ladder kept are the ones the verdict reasons about; the
+    // eliminated ones are short of games BY DESIGN and say so.
+    const survivors = (first?.rows ?? []).filter((row) => row.elimination === undefined);
+    expect(survivors.length, 'a round with no survivors proves nothing here').toBeGreaterThan(0);
+    // ⚠️ ANTI-VACUITY: if the survivor never reached `minGamesForVerdict` this
+    // test would be asserting the scheduler, not the rig.
+    expect(Math.max(...survivors.map((row) => row.evaluation.nGames))).toBeGreaterThanOrEqual(
+      DEFAULT_STATS_CONFIG.minGamesForVerdict,
+    );
+    expect(survivors.every((row) => row.evaluation.verdictReason === 'significantLoss')).toBe(true);
   });
 
   it('the conclusive stop reason is the one that says the search is over', () => {
