@@ -172,3 +172,10 @@
   display: block;
   margin-bottom: var(--space-1, 4px);
 }
+
+/* The rollup's rule, stated ONCE above the table instead of on every row. */
+.joint-counts__caption {
+  margin: 0 0 var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}

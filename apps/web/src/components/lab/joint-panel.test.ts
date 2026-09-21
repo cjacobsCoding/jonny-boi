@@ -17,7 +17,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import {
   JOINT_CONFOUND_NOTE,
-  JOINT_HONEST_CLAIM,
   JOINT_NOT_GATED_ON,
   JOINT_PARTNER_RULES,
   SAMPLE_DECKS,
@@ -101,7 +100,13 @@ const REPORT: JointPhaseReport = {
   capped: [],
   failures: [],
   waves: [],
-  multipleComparisons: { method: 'holm', familySize: 2, demotedByCorrection: 0, alpha: 0.05, note: 'Holm over the family' } as JointPhaseReport['multipleComparisons'],
+  multipleComparisons: {
+    method: 'holm',
+    familySize: 2,
+    demotedByCorrection: 0,
+    alpha: 0.05,
+    note: 'Holm over the family',
+  } as unknown as JointPhaseReport['multipleComparisons'],
   notes: {
     totalGamesRun: 1200,
     candidatesGenerated: 3,

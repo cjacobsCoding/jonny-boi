@@ -70,6 +70,14 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.177',
+    date: '2026-09-20',
+    kind: 'app',
+    title: 'The Lab finds a land count and the cards that go with it — together',
+    summary:
+      'You were right that a land count cannot be tested on its own: in a 60-card deck one fewer land is one more spell, and the old Manabase tab paired every count with whatever your cheapest spell happened to be — so a good count could read worse because that spell was bad. The new Joint search tab plays each land count against several spells that fit the deck and judges the count by its best one, then alternates: best manabase move, best spell move, repeat, until a round finds nothing better or your budget runs out. It shows the games spent against the games you allowed, every move it accepted, and it says "the best found under this budget" rather than pretending it is the perfect ratio.',
+  },
+  {
     section: '3.176',
     date: '2026-09-19',
     kind: 'fix',

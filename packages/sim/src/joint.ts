@@ -434,8 +434,7 @@ export function rollUpLandCounts(
         partners.length === 1
           ? `judged on ONE partner (${best.move.partner?.name ?? 'unnamed'}) — the count and that ` +
             'one spell moved together, so this row cannot separate them'
-          : `best of ${partners.length} partners (${best.move.partner?.name ?? 'unnamed'}); the count is ` +
-            'attributed to the deck you would actually build at it',
+          : `best of ${partners.length} partners (${best.move.partner?.name ?? 'unnamed'})`,
     });
   }
   return out.sort((a, b) => a.landCount - b.landCount);

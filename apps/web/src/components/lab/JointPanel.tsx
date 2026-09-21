@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   JOINT_CONFOUND_NOTE,
   JOINT_HONEST_CLAIM,
@@ -53,6 +53,7 @@ import './joint-panel.css';
  * is the best there is".
  */
 export function JointPanel({
+  hero,
   heroPayload,
   heroLegal,
   chosenOpponents,
@@ -87,6 +88,8 @@ export function JointPanel({
   /** The phase report already folded in, so one result is never counted twice. */
   const [folded, setFolded] = useState<JointPhaseReport | null>(null);
   const [applyProblem, setApplyProblem] = useState<string | null>(null);
+  /** A phase auto-continue queued; issued once the applied deck has arrived. */
+  const [pending, setPending] = useState<JointSearchState | null>(null);
 
   const running = sim.status === 'running';
   const result = sim.status === 'done' && sim.result?.kind === 'joint-phase' ? sim.result : null;
@@ -145,6 +148,7 @@ export function JointPanel({
     setSearch(state);
     setFolded(null);
     setApplyProblem(null);
+    setPending(null);
     runPhase(state);
   };
 
@@ -157,8 +161,6 @@ export function JointPanel({
   // rewrite the saved deck, and a parent update during a child's render is the
   // bug React warns about. `folded` is the idempotence guard — a re-render with
   // the same report must not accept the same move twice.
-  const runPhaseRef = useRef(runPhase);
-  runPhaseRef.current = runPhase;
   useEffect(() => {
     if (!report || report === folded || !search || search.stopped !== undefined) return;
     const next = advanceJointSearch(search, report, loadCardPool());
@@ -169,12 +171,28 @@ export function JointPanel({
     }
     setFolded(report);
     setSearch(next);
-    if (autoContinue && next.stopped === undefined && winner && onApplyJointMove) runPhaseRef.current(next);
+    // Auto-continue QUEUES the next phase rather than issuing it here. The move
+    // was just handed to the Lab, which rewrites the saved deck; the updated
+    // hero has not reached this component yet, so issuing the request from this
+    // effect would run the next phase against the deck BEFORE the move — the
+    // silent kind of wrong, since it still returns a full report.
+    if (autoContinue && next.stopped === undefined && winner && onApplyJointMove) setPending(next);
     // `search`/`autoContinue` are read, never depended on: the guard is `report`
     // against `folded`, and re-running this on a settings change would fold a
     // phase twice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report, folded]);
+
+  // Issue a QUEUED phase once the applied deck has arrived. `hero` is the
+  // identity that changes when the Lab saves a deck (`heroPayload` is rebuilt
+  // every render and cannot be depended on), so this fires in the commit that
+  // carries the new decklist — and does nothing when there is no queue.
+  useEffect(() => {
+    if (!pending) return;
+    setPending(null);
+    runPhase(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, hero]);
 
   return (
     <div className="lab-section">
@@ -304,7 +322,13 @@ export function JointPanel({
             >
               Stop here
             </button>
-            <button type="button" className="btn" disabled={running} onClick={() => { setSearch(null); setFolded(null); setApplyProblem(null); sim.reset(); }}>
+            <button type="button" className="btn" disabled={running} onClick={() => {
+                setSearch(null);
+                setFolded(null);
+                setApplyProblem(null);
+                setPending(null);
+                sim.reset();
+              }}>
               Start over
             </button>
           </>
@@ -481,6 +505,11 @@ function LandCountTable({ rows }: { readonly rows: readonly LandCountRow[] }): R
   return (
     <div className="joint-counts" data-testid="joint-land-counts">
       <h4>Land counts, each judged by its best partner spell</h4>
+      <p className="joint-counts__caption">
+        A count is attributed to the deck you would actually BUILD at it — the best of the partner spells
+        it was measured against. A row that says ONE partner is the confounded reading: the count and that
+        one spell moved together, so it cannot separate them.
+      </p>
       <table className="lab-table">
         <thead>
           <tr>
