@@ -26,7 +26,16 @@ import {
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { PilotStamp } from './PilotControls.js';
-import { pct, pValueStr, signedPct, verdictDisplay } from '../../lib/sim-format.js';
+import {
+  gamesToSettleText,
+  pct,
+  pValueStr,
+  reasonContextOf,
+  signedPct,
+  verdictDisplay,
+  verdictReasonDisplay,
+} from '../../lib/sim-format.js';
+import { SWAP_VERDICT_REASON_BY_KEY } from '@jonny-boi/sim';
 import { loadCardPool } from '../../lib/sim-pool.js';
 import type { GamesConfig, PanelProps } from './panel-types.js';
 import './joint-panel.css';
@@ -371,6 +380,8 @@ export function JointPanel({
                 <span className={`verdict verdict--${verdictDisplay(step.verdict).tone}`}>
                   {verdictDisplay(step.verdict).label}
                 </span>
+                {/* §3.179 — carried off the accepted move's evaluation, not re-derived. */}
+                <span className="trim-why">{SWAP_VERDICT_REASON_BY_KEY[step.verdictReason].label}</span>
                 <span className="joint-path__delta">
                   {signedPct(step.delta)} · p {pValueStr(step.adjustedPValue)} · {step.gamesPlayed} games · now{' '}
                   {step.landCount} lands in {step.deckSize}
@@ -441,6 +452,20 @@ export function JointPanel({
                     <td>
                       <span className={`verdict verdict--${verdictDisplay(row.evaluation.verdict).tone}`}>
                         {verdictDisplay(row.evaluation.verdict).label}
+                      </span>
+                      {/* §3.179 — the reason the verdict is what it is, from the sim's table. */}
+                      <span
+                        className="trim-why"
+                        title={verdictReasonDisplay(row.evaluation.verdictReason, reasonContextOf(row, report.notes.stats)).detail}
+                      >
+                        {' '}
+                        {verdictReasonDisplay(row.evaluation.verdictReason, reasonContextOf(row, report.notes.stats)).label}
+                        {row.evaluation.gamesToSettle && (
+                          <span className="trim-settle" title={gamesToSettleText(row.evaluation.gamesToSettle)}>
+                            {' '}
+                            (~{row.evaluation.gamesToSettle.additionalPairedGames.toLocaleString()} more)
+                          </span>
+                        )}
                       </span>
                     </td>
                   </tr>
@@ -537,9 +562,20 @@ function LandCountTable({ rows }: { readonly rows: readonly LandCountRow[] }): R
                 {row.isBase ? (
                   <span className="verdict">baseline</span>
                 ) : (
-                  <span className={`verdict verdict--${verdictDisplay(row.verdict as SwapVerdict).tone}`}>
-                    {verdictDisplay(row.verdict as SwapVerdict).label}
-                  </span>
+                  <>
+                    <span className={`verdict verdict--${verdictDisplay(row.verdict as SwapVerdict).tone}`}>
+                      {verdictDisplay(row.verdict as SwapVerdict).label}
+                    </span>
+                    {/*
+                      §3.179 — the land-count rollup summarises its best partner,
+                      so the reason it prints IS that partner's. The base row has
+                      no test and therefore no reason, which is why the field is
+                      optional rather than defaulted to something that reads true.
+                    */}
+                    {row.verdictReason && (
+                      <span className="trim-why"> {SWAP_VERDICT_REASON_BY_KEY[row.verdictReason].label}</span>
+                    )}
+                  </>
                 )}
               </td>
             </tr>

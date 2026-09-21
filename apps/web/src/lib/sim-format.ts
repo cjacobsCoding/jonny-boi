@@ -8,6 +8,8 @@ import type { Deck } from './deck.js';
 import type {
   GamesToSettleEstimate,
   ProportionCI,
+  StatsConfig,
+  SwapEvaluation,
   SwapVerdict,
   SwapVerdictReason,
   VerdictReasonContext,
@@ -91,6 +93,29 @@ export interface VerdictReasonDisplay {
   readonly detail: string;
   /** Whether more games could still change this answer — drives the "what next" line. */
   readonly moreGamesCouldSettle: boolean;
+}
+
+/**
+ * Build the reason's numbers from a ranked row and the bar THE RUN used.
+ *
+ * ⚠️ `stats` comes from the report's own `notes.stats`, never from a panel's
+ * current slider: relabelling an old 0.05 run with today's 0.10 would be the
+ * same class of lie the reason column exists to end.
+ *
+ * ⚠️ The p-value quoted is the CORRECTED one where there is one, because that is
+ * the number the verdict was decided against. Quoting the raw p beside a
+ * Holm-corrected verdict would look like an arithmetic error to anyone checking.
+ */
+export function reasonContextOf(
+  row: { readonly evaluation: Pick<SwapEvaluation, 'nGames' | 'pValue'>; readonly adjustedPValue?: number },
+  stats: StatsConfig,
+): VerdictReasonContext {
+  return {
+    nGames: row.evaluation.nGames,
+    pValue: row.adjustedPValue ?? row.evaluation.pValue,
+    alpha: stats.alpha,
+    minGames: stats.minGamesForVerdict,
+  };
 }
 
 export function verdictReasonDisplay(

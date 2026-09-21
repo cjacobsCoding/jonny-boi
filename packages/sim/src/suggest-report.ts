@@ -159,6 +159,15 @@ export interface SuggestionNotes {
   readonly workersUsed?: number;
   /** The shared fidelity caveat (`FIDELITY_CAVEAT`), carried for the UI/CLI. */
   readonly fidelityCaveat: string;
+  /**
+   * THE BAR THIS RUN WAS READ AT (§3.179). Carried because alpha is a Lab
+   * control now: a panel that printed its CURRENT slider position beside an
+   * OLD run's rows would relabel a 0.05 result as a 0.10 one, which is the same
+   * "reports something other than what happened" defect the reason column
+   * exists to end. Every surface reads the bar from the report, never from its
+   * own state.
+   */
+  readonly stats: StatsConfig;
 }
 
 /** What a search strategy hands back for assembly into the report. */
@@ -309,6 +318,7 @@ export function finishSuggestionRun(input: SuggestionReportInput): SuggestionRep
     ...(input.historyRejected ? { historyRejected: input.historyRejected } : {}),
     ...(input.workersUsed !== undefined ? { workersUsed: input.workersUsed } : {}),
     fidelityCaveat: FIDELITY_CAVEAT,
+    stats: input.stats,
   };
 
   return {
