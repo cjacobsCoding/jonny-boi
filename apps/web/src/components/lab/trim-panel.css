@@ -115,3 +115,26 @@
 .trim-pairing-note {
   max-width: 70ch;
 }
+
+/*
+ * §3.179 — the REASON column and the games-to-settle hint. INCONCLUSIVE used to
+ * be three different answers wearing one word; these two cells are where the
+ * difference is actually readable. Muted on purpose: the verdict tag stays the
+ * headline and the reason explains it, rather than competing with it.
+ */
+.trim-why {
+  color: var(--color-fg-muted, inherit);
+  font-size: var(--text-sm, 0.875rem);
+  white-space: nowrap;
+}
+
+.trim-settle {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.trim-bar-note {
+  margin: var(--space-2, 8px) 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}

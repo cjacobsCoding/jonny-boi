@@ -205,6 +205,73 @@ export const DEFAULT_STATS_CONFIG: StatsConfig = Object.freeze({
 });
 
 /**
+ * THE BARS THE LAB OFFERS (DESIGN §3.179) — a CLOSED table, one row per
+ * confidence level.
+ *
+ * ⚠️ WHY A TABLE AND NOT A SLIDER. `alpha` and `z` are ONE confidence level
+ * wearing two fields, and two fields that can disagree are a bug waiting to be
+ * filed: a run read at alpha 0.10 whose intervals were still drawn at z = 1.96
+ * would be reporting a 95% interval beside a 90% verdict. So a caller picks a
+ * ROW and gets both, and `z` is never entered separately. Adding a bar is a row
+ * here — never a branch, and never an arbitrary number typed into a box.
+ *
+ * The `z` values are the exact two-sided normal quantiles, not approximations;
+ * `config.test.ts` cross-checks every row against `normalCdf` (an independent
+ * function) so a mistyped digit cannot sit here unnoticed.
+ */
+export interface VerdictBar {
+  /** Two-sided significance level. */
+  readonly alpha: number;
+  /** The matching `1 − alpha/2` standard-normal quantile. */
+  readonly z: number;
+  /** What the panel prints, so a result can never be mistaken for another bar's. */
+  readonly label: string;
+  /** One line on what choosing this bar means, for the control's hint. */
+  readonly hint: string;
+}
+
+export const VERDICT_BARS: readonly VerdictBar[] = Object.freeze([
+  Object.freeze({
+    alpha: 0.1,
+    z: 1.6448536269514722,
+    label: '90% confidence (alpha 0.10)',
+    hint: 'Exploration: finds more candidates, and calls more noise a result. Read the reason column.',
+  }),
+  Object.freeze({
+    alpha: 0.05,
+    z: 1.959963984540054,
+    label: '95% confidence (alpha 0.05)',
+    hint: 'The default. A swap is only "better" when the paired test clears 0.05.',
+  }),
+  Object.freeze({
+    alpha: 0.01,
+    z: 2.5758293035489004,
+    label: '99% confidence (alpha 0.01)',
+    hint: 'Strict: almost nothing clears this at Lab depths, but what does is real.',
+  }),
+]);
+
+/**
+ * Build a `StatsConfig` from a bar the table actually offers.
+ *
+ * ⚠️ THE TABLE IS CLOSED AND REFUSES RATHER THAN APPROXIMATES. An alpha with no
+ * row does NOT get snapped to the nearest bar — silent approximation is how a
+ * result read at one confidence level gets reported at another, which is the
+ * exact defect §3.179 exists to end. It throws, naming the alphas that do exist.
+ */
+export function statsConfigFor(alpha: number, minGamesForVerdict: number): StatsConfig {
+  const bar = VERDICT_BARS.find((row) => row.alpha === alpha);
+  if (!bar) {
+    const offered = VERDICT_BARS.map((row) => row.alpha).join(', ');
+    throw new Error(`no verdict bar for alpha ${alpha} — the Lab offers exactly: ${offered}`);
+  }
+  if (!Number.isInteger(minGamesForVerdict) || minGamesForVerdict < 1) {
+    throw new Error(`minGamesForVerdict must be a positive integer, got ${minGamesForVerdict}`);
+  }
+  return Object.freeze({ alpha: bar.alpha, z: bar.z, minGamesForVerdict });
+}
+
+/**
  * The single, shared fidelity note (DESIGN §3.9 — done). Every surface (CLI
  * output, help text, the suggestion report's `notes.fidelityCaveat`, and the web
  * Lab) references THIS constant so there is exactly one wording.

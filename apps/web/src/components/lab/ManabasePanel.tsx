@@ -15,12 +15,24 @@ import {
   type MeanCI,
   type ProportionCI,
   type ReliabilityMetricComparison,
+  type StatsConfig,
   type SwapVerdict,
+  SWAP_VERDICT_REASON_BY_KEY,
 } from '@jonny-boi/sim';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { PilotStamp, RunCostNote } from './PilotControls.js';
-import { ciStr, pct, pValueStr, signedPct, throughputText, verdictDisplay } from '../../lib/sim-format.js';
+import {
+  ciStr,
+  gamesToSettleText,
+  pct,
+  pValueStr,
+  reasonContextOf,
+  signedPct,
+  throughputText,
+  verdictDisplay,
+  verdictReasonDisplay,
+} from '../../lib/sim-format.js';
 import { estimateSuggestionGames } from '../../lib/sim/plan.js';
 import { loadCardPool } from '../../lib/sim-pool.js';
 import type { GamesConfig, PanelProps } from './panel-types.js';
@@ -48,6 +60,8 @@ export function ManabasePanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   onApplyManabase,
   gamesConfig,
@@ -179,6 +193,10 @@ export function ManabasePanel({
             heroPayload &&
             sim.run({
               kind: 'manabase',
+              // §3.179 — the bar travels WITH the question, so the report comes
+              // back stamped with the bar it was read at.
+              verdictAlpha: verdictBar.alpha,
+              verdictMinGames,
               hero: heroPayload,
               opponentNames: chosenOpponents,
               gamesPerVariant: games,
@@ -262,6 +280,7 @@ export function ManabasePanel({
                     <VariantRow
                       key={row.variant.key}
                       row={row}
+                      stats={report.notes.stats}
                       recommended={report.recommended?.variant.key === row.variant.key}
                       applied={applied?.result === result && applied.key === row.variant.key}
                       onApply={
@@ -437,12 +456,21 @@ function ReliabilityCell({
       <span className="manabase-table__pair">
         {fmt(base)} → <strong>{fmt(variant)}</strong>
       </span>
+      {/*
+        §3.179 — the reliability tag keeps its own vocabulary ("more reliable"
+        reads better here than "BETTER"), but the REASON is the shared one and
+        rides in the hover, so "no difference shown" can no longer hide "we did
+        not play enough games to see one".
+      */}
       {metric && (
         <span
           className={`verdict-tag verdict-tag--${tone} manabase-table__tag`}
-          title={`paired p = ${pValueStr(metric.pValue)} over ${metric.nPaired} games`}
+          title={`paired p = ${pValueStr(metric.pValue)} over ${metric.nPaired} games — ${
+            SWAP_VERDICT_REASON_BY_KEY[metric.verdictReason].label
+          }`}
         >
           {RELIABILITY_VERDICT_LABEL[metric.verdict]}
+          <span className="manabase-table__why"> · {SWAP_VERDICT_REASON_BY_KEY[metric.verdictReason].label}</span>
         </span>
       )}
     </td>
@@ -454,11 +482,14 @@ function VariantRow({
   recommended,
   applied,
   onApply,
+  stats,
 }: {
   row: ManabaseVariantResult;
   recommended: boolean;
   applied: boolean;
   onApply: (() => void) | undefined;
+  /** The bar THIS run was read at (§3.179) — never the panel's current slider. */
+  stats: StatsConfig;
 }): ReactElement {
   const ev = row.evaluation;
   const v = verdictDisplay(ev.verdict);
@@ -483,6 +514,16 @@ function VariantRow({
       </td>
       <td>
         <span className={`verdict-tag verdict-tag--${v.tone}`}>{v.label}</span>
+        <span className="trim-why" title={verdictReasonDisplay(ev.verdictReason, reasonContextOf(row, stats)).detail}>
+          {' '}
+          {verdictReasonDisplay(ev.verdictReason, reasonContextOf(row, stats)).label}
+          {ev.gamesToSettle && (
+            <span className="trim-settle" title={gamesToSettleText(ev.gamesToSettle)}>
+              {' '}
+              (~{ev.gamesToSettle.additionalPairedGames.toLocaleString()} more)
+            </span>
+          )}
+        </span>
       </td>
       <ReliabilityCell metric={metric('missedLandDrop')} base={row.reliability.base.missedLandDrop} variant={row.reliability.variant.missedLandDrop} />
       <ReliabilityCell metric={metric('colourScrew')} base={row.reliability.base.colourScrew} variant={row.reliability.variant.colourScrew} />

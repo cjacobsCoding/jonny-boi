@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   DEFAULT_TRIM_CONFIG,
+  TRIM_STOP_REASON_WORDING,
   deckFingerprint,
   type TrimCut,
   type LandRatio,
@@ -10,11 +11,23 @@ import {
   type TrimRoundReport,
   type TrimRow,
   type TrimSettings,
+  type TrimSpend,
+  type TrimStopReason,
 } from '@jonny-boi/sim';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { PilotStamp, RunCostNote } from './PilotControls.js';
-import { ciStr, pct, pValueStr, signedPct, throughputText, verdictDisplay } from '../../lib/sim-format.js';
+import {
+  ciStr,
+  gamesToSettleText,
+  pct,
+  pValueStr,
+  signedPct,
+  throughputText,
+  reasonContextOf,
+  verdictDisplay,
+  verdictReasonDisplay,
+} from '../../lib/sim-format.js';
 import { estimateSuggestionGames } from '../../lib/sim/plan.js';
 import type { GamesConfig, PanelProps } from './panel-types.js';
 import type { ApplyCutResult } from '../../lib/lab/trimApply.js';
@@ -42,8 +55,13 @@ export type SessionStatus =
   | 'running'
   /** Ask mode: a round improved the deck and the winner awaits the user. */
   | 'asking'
-  /** No removal improved the deck and nothing is left to widen to. */
-  | 'exhausted'
+  /**
+   * The search ended on its own terms. WHICH terms is `Session.stopReason` —
+   * §3.179 split the old `'exhausted'` because it meant both "nothing helps" and
+   * "ran out of road while still unsure", and printed the first while meaning
+   * the second.
+   */
+  | 'finished'
   | 'target-reached'
   /** The user stopped, cancelled, or an apply could not be made. */
   | 'stopped';
@@ -57,6 +75,15 @@ interface Session {
   /** Removals applied this session, with the round that found each. */
   readonly applied: readonly { readonly row: TrimRow; readonly round: number; readonly onTheEdge: boolean }[];
   readonly status: SessionStatus;
+  /** Why the search ended, when `status` is `'finished'`. Its words come from the sim's table. */
+  readonly stopReason?: TrimStopReason;
+  /** What the session has spent, so the budget stop can print its own arithmetic. */
+  readonly spend: TrimSpend;
+  /**
+   * The per-candidate depth the NEXT round will ask for. Grows when a round ends
+   * unsure with the kinds spent — this is the "keep looking" lever (§3.179).
+   */
+  readonly gamesPerCandidate: number;
   /**
    * Set after an apply while the hero has not yet shrunk to the expected size:
    * the next round must be issued on the UPDATED deck, which arrives on a later
@@ -67,12 +94,14 @@ interface Session {
   readonly stopNote?: string;
 }
 
-const IDLE_SESSION = (deckId: string): Session => ({
+const IDLE_SESSION = (deckId: string, gamesPerCandidate: number): Session => ({
   deckId,
   base: null,
   rounds: [],
   applied: [],
   status: 'idle',
+  spend: { games: 0, seconds: 0, rounds: 0 },
+  gamesPerCandidate,
 });
 
 /**
@@ -95,6 +124,8 @@ export function TrimPanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   gamesConfig,
   targetConfig,
@@ -114,11 +145,11 @@ export function TrimPanel({
   const settings: TrimSettings = { targetSize, onImprovement, onNoImprovement };
 
   const heroId = hero?.id ?? '';
-  const [session, setSession] = useState<Session>(() => IDLE_SESSION(heroId));
+  const [session, setSession] = useState<Session>(() => IDLE_SESSION(heroId, games));
   // A different hero is a different session — never carry rounds across decks.
   // Adjusted DURING render (React's pattern for state that follows a prop), so
   // no frame ever shows one deck's rounds under another deck's name.
-  if (session.deckId !== heroId) setSession(IDLE_SESSION(heroId));
+  if (session.deckId !== heroId) setSession(IDLE_SESSION(heroId, games));
 
   const deckSize = hero ? hero.cards.reduce((sum, entry) => sum + entry.count, 0) : 0;
   const ratio = useMemo(() => (hero ? landRatioOfWebDeck(hero) : null), [hero]);
@@ -130,14 +161,30 @@ export function TrimPanel({
   const canStart =
     heroLegal && heroPayload !== null && chosenOpponents.length > 0 && !busy && problem === null;
 
-  /** Issue one round on the CURRENT hero. */
-  const issueRound = (round: number, roundKind: TrimRoundKind, base: LandRatio | null): void => {
+  /**
+   * Issue one round on the CURRENT hero, at a NAMED depth.
+   *
+   * ⚠️ `gamesPerCandidate` is a parameter and no longer the slider's value
+   * directly: a deepening round (§3.179) asks for more than the user typed, and
+   * reading the slider here would silently undo the deepening — the round would
+   * be re-run at exactly the depth that already failed to answer it.
+   */
+  const issueRound = (
+    round: number,
+    roundKind: TrimRoundKind,
+    base: LandRatio | null,
+    gamesPerCandidate: number,
+  ): void => {
     if (!heroPayload) return;
     sim.run({
       kind: 'trim',
+      // §3.179 — the bar travels WITH the question, so the report comes back
+      // stamped with the bar it was read at.
+      verdictAlpha: verdictBar.alpha,
+      verdictMinGames,
       hero: heroPayload,
       opponentNames: chosenOpponents,
-      gamesPerCandidate: games,
+      gamesPerCandidate,
       seed,
       round,
       roundKind,
@@ -173,8 +220,16 @@ export function TrimPanel({
     const report = result.result;
     if (session.status !== 'running' || report.deckFingerprint !== heroFingerprint) return; // stale: another deck, or an older session
     const base = session.base ?? report.reading.base;
-    const step = stepAfterRound(report, settings);
-    setSession((s) => ({ ...s, base, rounds: [...s.rounds, report] }));
+    // The spend this round added, folded in BEFORE the step is decided — the
+    // budget stop must see the round that just ran, or it would always be one
+    // round out of date and could only ever fire after overspending.
+    const spend: TrimSpend = {
+      games: session.spend.games + report.notes.totalGamesRun,
+      seconds: session.spend.seconds + (report.notes.elapsedSeconds ?? 0),
+      rounds: session.spend.rounds + 1,
+    };
+    const step = stepAfterRound(report, settings, spend, session.gamesPerCandidate);
+    setSession((s) => ({ ...s, base, rounds: [...s.rounds, report], spend }));
     switch (step.kind) {
       case 'apply':
         apply(step.row, report.round, false, 'continue');
@@ -188,10 +243,14 @@ export function TrimPanel({
         );
         break;
       case 'widen':
-        issueRound(step.round, step.roundKind, base);
+        issueRound(step.round, step.roundKind, base, session.gamesPerCandidate);
         break;
-      case 'exhausted':
-        setSession((s) => ({ ...s, status: 'exhausted' }));
+      case 'deepen':
+        setSession((s) => ({ ...s, gamesPerCandidate: step.gamesPerCandidate }));
+        issueRound(step.round, step.roundKind, base, step.gamesPerCandidate);
+        break;
+      case 'stopped':
+        setSession((s) => ({ ...s, status: 'finished', stopReason: step.reason }));
         break;
     }
     // The effect keys on the result's identity; the closures read current props.
@@ -204,8 +263,10 @@ export function TrimPanel({
     if (!pending || deckSize !== pending.expectedSize) return;
     const next = stepAfterApply(deckSize, targetSize, pending.lastRound);
     if (next.kind === 'round') {
-      setSession((s) => ({ ...s, continueAt: undefined }));
-      issueRound(next.round, next.roundKind, session.base);
+      setSession((s) => ({ ...s, continueAt: undefined, gamesPerCandidate: games }));
+      // A smaller deck is a new question: back to the depth the user asked for,
+      // not the deep rate the previous impasse needed. Mirrors `trimDeck`.
+      issueRound(next.round, next.roundKind, session.base, games);
     } else {
       setSession((s) => ({ ...s, continueAt: undefined, status: 'target-reached' }));
     }
@@ -232,8 +293,8 @@ export function TrimPanel({
   const start = (): void => {
     if (!canStart) return;
     handledRef.current = null;
-    setSession({ ...IDLE_SESSION(heroId), status: 'running' });
-    issueRound(0, FIRST_ROUND_KIND, null);
+    setSession({ ...IDLE_SESSION(heroId, games), status: 'running' });
+    issueRound(0, FIRST_ROUND_KIND, null, games);
   };
 
   const stop = (): void => {
@@ -388,7 +449,7 @@ export function TrimPanel({
           isLatest={report === lastReport}
           status={session.status}
           applied={session.applied.find((a) => a.round === report.round)?.row ?? null}
-          canApply={onApplyCut !== undefined && report === lastReport && (session.status === 'asking' || session.status === 'exhausted')}
+          canApply={onApplyCut !== undefined && report === lastReport && (session.status === 'asking' || session.status === 'finished')}
           onApply={(row, onTheEdge, then) => apply(row, report.round, onTheEdge, then)}
           onStop={() => setSession((s) => ({ ...s, status: 'stopped', stopNote: 'Stopped without applying.' }))}
         />
@@ -416,16 +477,21 @@ function SessionSummary({
   targetSize: number;
 }): ReactElement {
   const cuts = session.applied.map((a) => a.row.label);
+  // ⚠️ THE STOP REASON'S WORDS COME FROM THE SIM'S TABLE, not from a switch here.
+  // A second wording table in the panel is how "exhausted" came to be printed for
+  // two opposite situations (§3.179); `trim-panel.test.ts` enumerates
+  // TRIM_STOP_REASONS and fails if any reason renders without its words.
+  const stopRow = session.stopReason ? TRIM_STOP_REASON_WORDING[session.stopReason] : undefined;
   const status = ((): string => {
     switch (session.status) {
       case 'running':
         return session.continueAt ? 'applying…' : 'round in progress…';
       case 'asking':
         return 'an improving removal is waiting for you';
-      case 'exhausted':
-        return 'no removal proved better — see the last round';
+      case 'finished':
+        return stopRow ? `${stopRow.label} — ${stopRow.detail}` : 'the search ended';
       case 'target-reached':
-        return 'target reached';
+        return TRIM_STOP_REASON_WORDING['target-reached'].label;
       case 'stopped':
         return session.stopNote ?? 'stopped';
       case 'idle':
@@ -433,12 +499,21 @@ function SessionSummary({
     }
   })();
   return (
-    <p className={`trim-summary trim-summary--${session.status}`} role="status">
+    <p className={`trim-summary trim-summary--${session.status}`} role="status" data-testid="trim-summary">
       <strong>
         {session.rounds.length} round{session.rounds.length === 1 ? '' : 's'}
       </strong>
       {cuts.length > 0 ? <> · cut {cuts.join(', ')}</> : <> · nothing cut yet</>} · now {deckSize} cards
       (target {targetSize}) · {status}
+      {session.spend.rounds > 0 && (
+        <>
+          {' · '}
+          <span data-testid="trim-spend">
+            {session.spend.games.toLocaleString()} games · {session.spend.seconds.toFixed(1)}s · depth{' '}
+            {session.gamesPerCandidate}/candidate
+          </span>
+        </>
+      )}
     </p>
   );
 }
@@ -504,19 +579,33 @@ export function RoundCard({
           )}
         </div>
       ) : (
-        <div className="verdict-banner verdict-banner--inconclusive">
-          <span className="verdict-banner__label">Nothing proved better</span>
+        <div className="verdict-banner verdict-banner--inconclusive" data-testid="trim-no-winner">
+          {/*
+            ⚠️ TWO DIFFERENT HEADLINES, because the round verdict now says which
+            happened (§3.179). "Nothing proved better" was printed for both, and
+            with almost every row inconclusive it was ALWAYS the wrong one — the
+            deck had not been shown to resist trimming, it had not been measured
+            deeply enough to say anything at all.
+          */}
+          <span className="verdict-banner__label">
+            {report.verdict === 'unsure' ? 'Not measured deeply enough to tell' : 'Nothing proved better'}
+          </span>
           <span className="verdict-banner__detail">
             {report.rows.length === 0
               ? 'No removal could be evaluated.'
-              : edge
-                ? `Most likely improving removal: −1× ${edge.label} · ${signedPct(edge.evaluation.delta)} · p ${pValueStr(edge.adjustedPValue)} — inconclusive, on the edge.`
-                : 'Every removal was proven worse — this deck does not want to be smaller by any of these cuts.'}
+              : report.verdict === 'unsure'
+                ? `No removal cleared the bar, and some rows are still unreadable at ${report.rows[0]?.gamesPlayed ?? 0} paired games — this is NOT "nothing helps". Keep looking will run the ladder again deeper.`
+                : 'Every removal was measured deeply enough to call, and none improved the deck — more games would not change that.'}
           </span>
+          {edge && (
+            <span className="verdict-banner__detail" data-testid="trim-edge-line">
+              {`Most likely improving removal: −1× ${edge.label} · ${signedPct(edge.evaluation.delta)} · p ${pValueStr(edge.adjustedPValue)} — ${verdictReasonDisplay(edge.evaluation.verdictReason, reasonContextOf(edge, report.notes.stats)).label}, on the edge.`}
+            </span>
+          )}
           {edge && applied && applied.key === edge.key && (
             <span className="verdict-banner__apply verdict-banner__apply--done">✓ Applied on the edge</span>
           )}
-          {edge && canApply && status === 'exhausted' && !applied && (
+          {edge && canApply && status === 'finished' && !applied && (
             <span className="trim-actions">
               <button
                 type="button"
@@ -551,12 +640,15 @@ export function RoundCard({
               <th>p-value</th>
               <th>Games</th>
               <th>Verdict</th>
+              {/* §3.179 — INCONCLUSIVE was three different answers wearing one word. */}
+              <th>Why</th>
             </tr>
           </thead>
           <tbody>
             {report.rows.map((row) => {
               const ev = row.evaluation;
               const v = verdictDisplay(ev.verdict);
+              const why = verdictReasonDisplay(ev.verdictReason, reasonContextOf(row, report.notes.stats));
               return (
                 <tr key={row.key} className={row === winner ? 'trim-row--winner' : row === edge ? 'trim-row--edge' : undefined}>
                   <td className="lab-table__num">{row.rank}</td>
@@ -580,12 +672,26 @@ export function RoundCard({
                   <td>
                     <span className={`verdict-tag verdict-tag--${v.tone}`}>{v.label}</span>
                   </td>
+                  <td className="trim-why" title={why.detail}>
+                    {why.label}
+                    {ev.gamesToSettle && (
+                      <span className="trim-settle" title={gamesToSettleText(ev.gamesToSettle)}>
+                        {' '}
+                        (~{ev.gamesToSettle.additionalPairedGames.toLocaleString()} more)
+                      </span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
+      <p className="trim-bar-note" data-testid="trim-bar-note">
+        Read at <strong>{report.notes.stats.alpha}</strong> (alpha), with at least{' '}
+        <strong>{report.notes.stats.minGamesForVerdict}</strong> paired games required before any verdict but
+        inconclusive. A “~N more” figure is an <em>estimate</em> from the observed discordant split, not a promise.
+      </p>
 
       <p className="lab-coverage">
         Evaluated {report.candidatesEvaluated} of {report.notes.candidatesGenerated} removals

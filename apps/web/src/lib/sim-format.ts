@@ -5,7 +5,16 @@
  * packages/sim; here we only test the glue: conversion + formatting).
  */
 import type { Deck } from './deck.js';
-import type { ProportionCI, SwapVerdict } from '@jonny-boi/sim';
+import type {
+  GamesToSettleEstimate,
+  ProportionCI,
+  StatsConfig,
+  SwapEvaluation,
+  SwapVerdict,
+  SwapVerdictReason,
+  VerdictReasonContext,
+} from '@jonny-boi/sim';
+import { SWAP_VERDICT_REASON_BY_KEY, explainVerdictReason } from '@jonny-boi/sim';
 import type { SimDeckPayload } from './sim-protocol.js';
 
 /**
@@ -67,6 +76,67 @@ export function verdictDisplay(verdict: SwapVerdict): VerdictDisplay {
     default:
       return { label: 'INCONCLUSIVE', tone: 'inconclusive' };
   }
+}
+
+/**
+ * The REASON beside the verdict (DESIGN §3.179) — the short label, and the full
+ * sentence for a `title`.
+ *
+ * ⚠️ IT READS THE SIM'S TABLE. The words live in `SWAP_VERDICT_REASON_ROWS`
+ * next to the function that decides, so the Lab, the CLI and any later surface
+ * print the same sentence. A second wording table here is exactly how the
+ * manabase panel ended up with its own private verdict labels, and how a result
+ * read at one bar gets described in another's words.
+ */
+export interface VerdictReasonDisplay {
+  readonly label: string;
+  readonly detail: string;
+  /** Whether more games could still change this answer — drives the "what next" line. */
+  readonly moreGamesCouldSettle: boolean;
+}
+
+/**
+ * Build the reason's numbers from a ranked row and the bar THE RUN used.
+ *
+ * ⚠️ `stats` comes from the report's own `notes.stats`, never from a panel's
+ * current slider: relabelling an old 0.05 run with today's 0.10 would be the
+ * same class of lie the reason column exists to end.
+ *
+ * ⚠️ The p-value quoted is the CORRECTED one where there is one, because that is
+ * the number the verdict was decided against. Quoting the raw p beside a
+ * Holm-corrected verdict would look like an arithmetic error to anyone checking.
+ */
+export function reasonContextOf(
+  row: { readonly evaluation: Pick<SwapEvaluation, 'nGames' | 'pValue'>; readonly adjustedPValue?: number },
+  stats: StatsConfig,
+): VerdictReasonContext {
+  return {
+    nGames: row.evaluation.nGames,
+    pValue: row.adjustedPValue ?? row.evaluation.pValue,
+    alpha: stats.alpha,
+    minGames: stats.minGamesForVerdict,
+  };
+}
+
+export function verdictReasonDisplay(
+  reason: SwapVerdictReason,
+  context: VerdictReasonContext,
+): VerdictReasonDisplay {
+  const row = SWAP_VERDICT_REASON_BY_KEY[reason];
+  return {
+    label: row.label,
+    detail: explainVerdictReason(reason, context),
+    moreGamesCouldSettle: row.moreGamesCouldSettle,
+  };
+}
+
+/**
+ * The one wording of a games-to-settle estimate. Always hedged, never a promise
+ * — and there is NO wording for "absent", because an absent estimate renders
+ * nothing at all rather than a zero that would read as "already settled".
+ */
+export function gamesToSettleText(estimate: GamesToSettleEstimate): string {
+  return `~${estimate.additionalPairedGames.toLocaleString()} more paired games at this observed split would be expected to clear alpha = ${estimate.alpha} (an estimate, not a promise)`;
 }
 
 /** Games per second, guarding divide-by-zero (returns 0 when no time elapsed). */

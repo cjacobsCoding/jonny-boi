@@ -11,7 +11,8 @@
  *    state is component state a static render cannot press, so its markup is
  *    pinned by the button's own class and label contract instead.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_STATS_CONFIG } from '@jonny-boi/sim';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { SwapPanel } from './SwapPanel.js';
@@ -29,6 +30,10 @@ const IN: readonly CardOption[] = [
 
 const RESULT = {
   kind: 'swap' as const,
+  // §3.179 — a bare SwapEvaluation has no `notes` to carry the bar it was read
+  // at, so the result payload echoes it and the panel renders THAT, never its
+  // own current control.
+  stats: DEFAULT_STATS_CONFIG,
   pilotId: 'lookahead',
   gamesPerSecond: 100,
   result: {
@@ -45,6 +50,7 @@ const RESULT = {
     paired: { bothWin: 30, baseOnly: 5, variantOnly: 15, bothLose: 50 },
     mcNemar: { statistic: 5, pValue: 0.01 },
     verdict: 'better',
+    verdictReason: 'significantGain',
     nGames: 100,
     scope: 'playset',
     copiesSwapped: 4,

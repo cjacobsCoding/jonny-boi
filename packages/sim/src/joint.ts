@@ -62,7 +62,7 @@ import {
   type StatsConfig,
 } from './config.js';
 import type { ProportionCI } from './stats.js';
-import type { SwapEvaluation, SwapVerdict } from './swap.js';
+import type { SwapEvaluation, SwapVerdict, SwapVerdictReason } from './swap.js';
 import { summarizePairedSwap } from './swap.js';
 import type { SkippedCandidate, SwapCandidate } from './suggest-candidates.js';
 import {
@@ -300,6 +300,13 @@ export interface LandCountRow {
   readonly partners: readonly JointMoveRow[];
   /** `better` / `worse` / `inconclusive` from the best partner; `base` for the base row. */
   readonly verdict: SwapVerdict | 'base';
+  /**
+   * WHY that verdict (DESIGN §3.179), carried straight off the best partner's
+   * evaluation. Absent on the base row, which has no test and therefore no
+   * reason. Nothing re-derives it — a second answer here would disagree with the
+   * partners table it summarises.
+   */
+  readonly verdictReason?: SwapVerdictReason;
   /** variant − base win rate of the best partner, in proportion. 0 for the base. */
   readonly delta: number;
   readonly note: string;
@@ -429,6 +436,7 @@ export function rollUpLandCounts(
       best,
       partners,
       verdict: best.evaluation.verdict,
+      verdictReason: best.evaluation.verdictReason,
       delta: best.evaluation.delta,
       note:
         partners.length === 1
@@ -543,6 +551,8 @@ export interface JointPathStep {
   /** variant − base win rate, in proportion, as measured in that phase. */
   readonly delta: number;
   readonly verdict: SwapVerdict;
+  /** WHY that verdict (§3.179) — read off the accepted move's own evaluation. */
+  readonly verdictReason: SwapVerdictReason;
   readonly adjustedPValue: number;
   readonly gamesPlayed: number;
   /** Deck size and land count AFTER the move — the denominators it changed. */
@@ -639,6 +649,7 @@ export function advanceJointSearch(
       move: winner.move,
       delta: winner.evaluation.delta,
       verdict: winner.evaluation.verdict,
+      verdictReason: winner.evaluation.verdictReason,
       adjustedPValue: winner.adjustedPValue,
       gamesPlayed: winner.gamesPlayed,
       deckSize: deckSizeOf(deck),

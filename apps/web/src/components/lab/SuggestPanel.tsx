@@ -2,7 +2,17 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from 're
 import { FidelityNote } from '../FidelityNote.js';
 import { CardHover } from '../CardHover.js';
 import { RunSlider } from './RunSlider.js';
-import { ciStr, pct, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
+import {
+  ciStr,
+  gamesToSettleText,
+  pct,
+  signedPct,
+  pValueStr,
+  reasonContextOf,
+  throughputText,
+  verdictDisplay,
+  verdictReasonDisplay,
+} from '../../lib/sim-format.js';
 import {
   clearSuggestionHistory,
   historyRejectionText,
@@ -69,6 +79,8 @@ export function SuggestPanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   onApplySwap,
   gamesConfig,
@@ -172,6 +184,10 @@ export function SuggestPanel({
             heroPayload &&
             sim.run({
               kind: 'suggest',
+              // §3.179 — the bar travels WITH the question, so the report comes
+              // back stamped with the bar it was read at.
+              verdictAlpha: verdictBar.alpha,
+              verdictMinGames,
               hero: heroPayload,
               opponentNames: chosenOpponents,
               gamesPerCandidate: games,
@@ -295,6 +311,8 @@ export function SuggestPanel({
                   <th>p-value</th>
                   <th>Games</th>
                   <th>Verdict</th>
+                  {/* §3.179 — INCONCLUSIVE was three different answers wearing one word. */}
+                  <th>Why</th>
                   {/* Acting on the ranking is the point of producing it. */}
                   <th aria-label="Apply this swap" />
                 </tr>
@@ -334,6 +352,15 @@ export function SuggestPanel({
                       </td>
                       <td>
                         <span className={`verdict-tag verdict-tag--${v.tone}`}>{v.label}</span>
+                      </td>
+                      <td className="trim-why" title={verdictReasonDisplay(ev.verdictReason, reasonContextOf(s, report.notes.stats)).detail}>
+                        {verdictReasonDisplay(ev.verdictReason, reasonContextOf(s, report.notes.stats)).label}
+                        {ev.gamesToSettle && (
+                          <span className="trim-settle" title={gamesToSettleText(ev.gamesToSettle)}>
+                            {' '}
+                            (~{ev.gamesToSettle.additionalPairedGames.toLocaleString()} more)
+                          </span>
+                        )}
                       </td>
                       <td>
                         {onApplySwap && (

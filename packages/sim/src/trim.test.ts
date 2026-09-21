@@ -369,12 +369,18 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'pause' },
       armRunner: (base) => riggedRunner(base, flatWithEdge(edgeId)),
     });
-    expect(result.stopped).toBe('exhausted');
+    // §3.179 — this session sets `onNoImprovement: 'pause'`, and `'paused'` is
+    // now its own stop reason. It used to report `'exhausted'`, which reads as
+    // "nothing helps" when what happened is "you told me to stop and ask".
+    expect(result.stopped).toBe('paused');
     expect(result.applied).toEqual([]);
     expect(result.deck).toBe(RIGGED);
     expect(result.rounds.length).toBe(1);
     const round = result.rounds[0]!;
-    expect(round.verdict).toBe('exhausted');
+    // §3.179 — every row here is inconclusive and the best of them SURVIVED the
+    // ladder, so the round has learned nothing rather than learned that nothing
+    // helps. That is `'unsure'`.
+    expect(round.verdict).toBe('unsure');
     expect(round.winner).toBeUndefined();
     expect(round.edgeCandidate?.label).toBe('Craw Wurm');
     expect(round.edgeCandidate?.evaluation.verdict).toBe('inconclusive');
@@ -383,7 +389,7 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
     expect(round.rows.every((row) => row.evaluation.verdict === 'inconclusive')).toBe(true);
   });
 
-  it('"keep looking" widens an exhausted singles round to pairs, then stops — still applying nothing', () => {
+  it('"keep looking" widens singles → pairs, and stops there because the PAIRS are a dead heat', () => {
     const edgeId = pool.getByName('Craw Wurm')?.id ?? '';
     const result = trimDeck(RIGGED, {
       ...sessionOptions,
@@ -391,8 +397,31 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' },
       armRunner: (base) => riggedRunner(base, flatWithEdge(edgeId)),
     });
-    expect(result.stopped).toBe('exhausted');
+    // ⚠️ THIS IS THE BUG CALEB REPORTED, inverted into a test. This rig leaves
+    // every row inconclusive, so before §3.179 the session ran EXACTLY TWO rounds
+    // — singles, pairs — and stopped saying `'exhausted'`, having cut nothing.
+    // It now widens through the kinds and then DEEPENS, and stops only when it
+    // runs out of road, with a reason that says so.
+    // ⚠️ TWO ROUNDS IS CORRECT HERE, and it is worth saying why, because "it
+    // stopped after two rounds" is the bug §3.179 fixes and this is NOT an
+    // instance of it. `flatWithEdge` keys on `swap.out === edgeId`, and a PAIR's
+    // `out` is two ids joined — so no pair candidate is the edge, every pair
+    // plays byte-identically to the base, and every one is a genuine DEAD HEAT.
+    // A dead heat is conclusive: more games cannot create a difference that is
+    // not there, so deepening would burn the budget on a settled question. The
+    // session that SHOULD deepen is the all-inconclusive one, and that is
+    // `trim-ladder.test.ts`'s job.
+    expect(result.stopped).toBe('no-improvement-conclusive');
+    expect(result.rounds.length).toBe(2);
+    expect(result.gamesPerCandidate).toBe(sessionOptions.gamesPerCandidate);
     expect(result.rounds.map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
+    // ...and the pairs round really was a dead heat, not merely unread.
+    expect(result.rounds[1]?.verdict).toBe('exhausted');
+    expect(
+      result.rounds[1]?.rows.every(
+        (row) => row.elimination !== undefined || row.evaluation.verdictReason === 'deadHeat',
+      ),
+    ).toBe(true);
     expect(result.rounds[1]?.rows.every((row) => row.cuts.length === 2)).toBe(true);
     expect(result.applied).toEqual([]);
     expect(deckSizeOf(result.deck)).toBe(63);
@@ -453,7 +482,10 @@ describe('runTrimRound — real games, one opponent, four slots', () => {
       // Four games cannot reach a verdict; the report must say so, not guess.
       expect(row.evaluation.verdict).toBe('inconclusive');
     }
-    expect(report.verdict).toBe('exhausted');
+    // §3.179 — every row came back inconclusive, so this round has not learned
+    // that nothing helps; it has learned NOTHING. That is `'unsure'`, and it is
+    // the round that now earns a deeper re-run instead of ending the session.
+    expect(report.verdict).toBe('unsure');
     expect(report.edgeCandidate).toBeDefined();
     expect(report.notes.variantGamesSkipped).toBe(0);
     expect(report.notes.identicalGameSkipEnabled).toBe(false);

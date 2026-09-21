@@ -22,11 +22,14 @@ import {
   DEFAULT_STATS_CONFIG,
   decideVerdict,
   gameSeedFor,
+  gamesToSettle,
   mcNemarTest,
+  SWAP_VERDICT_REASON_BY_KEY,
   wilsonInterval,
   type GauntletResult,
   type MatchupResult,
   type PairedTable,
+  type StatsConfig,
   type SwapEvaluation,
 } from '@jonny-boi/sim';
 import type {
@@ -118,7 +121,10 @@ export function mergeGauntlet(shards: readonly GauntletShardResult[]): GauntletR
  * Fold the paired shards of ONE swap into a `SwapEvaluation` — the same verdict
  * `evaluateSwap` produces, assembled from parts.
  */
-export function mergePairedEvaluation(shards: readonly PairedShardResult[]): SwapEvaluation {
+export function mergePairedEvaluation(
+  shards: readonly PairedShardResult[],
+  stats: StatsConfig = DEFAULT_STATS_CONFIG,
+): SwapEvaluation {
   const ordered = [...shards].sort(byPairedPosition);
   const head = ordered[0];
   if (!head) throw new Error('no paired games were played.');
@@ -142,9 +148,18 @@ export function mergePairedEvaluation(shards: readonly PairedShardResult[]): Swa
 
   const paired: PairedTable = { bothWon, baseOnly, variantOnly, neither };
   const mcNemar = mcNemarTest(paired);
-  const baseWinRate = wilsonInterval(baseWins, n, DEFAULT_STATS_CONFIG.z);
-  const variantWinRate = wilsonInterval(variantWins, n, DEFAULT_STATS_CONFIG.z);
+  const baseWinRate = wilsonInterval(baseWins, n, stats.z);
+  const variantWinRate = wilsonInterval(variantWins, n, stats.z);
   const delta = variantWinRate.p - baseWinRate.p;
+  // ⚠️ `stats` is THREADED, not read from the default. It used to be hardcoded
+  // to DEFAULT_STATS_CONFIG here, which was invisible while alpha was a
+  // constant and becomes a lie the moment it is a Lab control (DESIGN §3.179):
+  // the panel would announce a 0.10 bar while this merge quietly decided at
+  // 0.05, and the two would disagree about the same run.
+  const decision = decideVerdict(delta, mcNemar.pValue, n, stats.alpha, stats.minGamesForVerdict);
+  const settle = SWAP_VERDICT_REASON_BY_KEY[decision.reason].moreGamesCouldSettle
+    ? gamesToSettle(paired, n, stats)
+    : undefined;
 
   return {
     baseDeck: head.baseDeckName,
@@ -159,13 +174,9 @@ export function mergePairedEvaluation(shards: readonly PairedShardResult[]): Swa
     pValue: mcNemar.pValue,
     paired,
     mcNemar,
-    verdict: decideVerdict(
-      delta,
-      mcNemar.pValue,
-      n,
-      DEFAULT_STATS_CONFIG.alpha,
-      DEFAULT_STATS_CONFIG.minGamesForVerdict,
-    ),
+    verdict: decision.verdict,
+    verdictReason: decision.reason,
+    ...(settle ? { gamesToSettle: settle } : {}),
     nGames: n,
     // Every shard of a swap plays the same scope (the plan stamps it), so the
     // canonical-first shard speaks for all of them.

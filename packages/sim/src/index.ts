@@ -25,13 +25,17 @@
 export const PACKAGE_NAME = 'sim';
 
 // Config / named constants.
-export type { DeckRules, SimConfig, StatsConfig } from './config.js';
+export type { DeckRules, SimConfig, StatsConfig, VerdictBar } from './config.js';
 export {
   DEFAULT_DECK_RULES,
   DEFAULT_SIM_CONFIG,
   DEFAULT_STATS_CONFIG,
   BASIC_LAND_NAMES,
   FIDELITY_CAVEAT,
+  // §3.179 — the closed table of confidence bars the Lab offers, and the one
+  // builder that turns a bar into a StatsConfig so alpha and z cannot disagree.
+  VERDICT_BARS,
+  statsConfigFor,
 } from './config.js';
 
 // Deck model + loader.
@@ -122,6 +126,26 @@ export {
   copiesSwappedBy,
   GAMES_PER_PAIRED_GAME,
 } from './swap.js';
+// §3.179 — the verdict now arrives with the REASON it is that verdict, out of a
+// closed table, plus the games-to-settle estimate that turns a dead end into an
+// action. Every A/B surface renders these; none re-derives them.
+export type {
+  SwapVerdictReason,
+  SwapVerdictReasonRow,
+  VerdictDecision,
+  VerdictReasonContext,
+  GamesToSettleEstimate,
+} from './swap.js';
+export {
+  SWAP_VERDICT_REASONS,
+  SWAP_VERDICT_REASON_ROWS,
+  SWAP_VERDICT_REASON_BY_KEY,
+  explainVerdictReason,
+  formatPValue,
+  gamesToSettle,
+  SMALLEST_PRINTED_P_VALUE,
+  P_VALUE_DECIMALS,
+} from './swap.js';
 // §3.174 — a CUT is a swap whose in-card is nothing; `applySwap` builds it.
 export { SWAP_IN_NOTHING, CUT_OUT_SEPARATOR, isCut, cutOutRefs } from './swap.js';
 
@@ -154,6 +178,9 @@ export type {
   TrimProgress,
   RunTrimRoundOptions,
   TrimStopReason,
+  TrimStopReasonRow,
+  TrimBudget,
+  TrimSpend,
   TrimSessionResult,
   TrimSessionOptions,
 } from './trim.js';
@@ -182,6 +209,14 @@ export {
   driveTrimRound,
   runTrimRound,
   trimDeck,
+  // §3.179 — "keep looking" keeps looking: DEPTH is the lever after the kinds
+  // run out, the stop reasons say which of two opposite things happened, and a
+  // budget bounds the whole thing.
+  TRIM_DEEPEN,
+  DEFAULT_TRIM_BUDGET,
+  TRIM_STOP_REASONS,
+  TRIM_STOP_REASON_WORDING,
+  deeperGamesPerCandidate,
 } from './trim.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE, copiesForScope, describeScope } from './config.js';

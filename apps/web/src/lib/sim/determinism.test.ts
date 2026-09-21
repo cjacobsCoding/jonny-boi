@@ -42,6 +42,7 @@ import {
   type SuggestionReport,
   type SwapEvaluation,
   type SwapScope,
+  DEFAULT_STATS_CONFIG,
 } from '@jonny-boi/sim';
 import { createSimContext, executeShard, pilotsFor, type SimContext } from './execute.js';
 import { DEFAULT_PILOT_ID } from './pilots.js';
@@ -264,6 +265,9 @@ describe('a parallel A/B swap test', () => {
   function requestFor(scope?: SwapScope): SwapRequest {
     return {
       kind: 'swap',
+    // §3.179 — every A/B request carries the bar it is read at.
+    verdictAlpha: DEFAULT_STATS_CONFIG.alpha,
+    verdictMinGames: DEFAULT_STATS_CONFIG.minGamesForVerdict,
       hero: HERO,
       opponentNames: [...TWO_OPPONENTS],
       outCardId: candidate!.outId,
@@ -391,6 +395,8 @@ describe('a parallel A/B swap test', () => {
 describe('a parallel suggestions search', () => {
   const request: SuggestRequest = {
     kind: 'suggest',
+      verdictAlpha: DEFAULT_STATS_CONFIG.alpha,
+      verdictMinGames: DEFAULT_STATS_CONFIG.minGamesForVerdict,
     hero: HERO,
     opponentNames: [...ONE_OPPONENT],
     gamesPerCandidate: SUGGEST_GAMES,
@@ -471,6 +477,8 @@ describe('a parallel suggestions search', () => {
      */
     const settleRequest: SuggestRequest = {
       kind: 'suggest',
+      verdictAlpha: DEFAULT_STATS_CONFIG.alpha,
+      verdictMinGames: DEFAULT_STATS_CONFIG.minGamesForVerdict,
       hero: HERO,
       opponentNames: [...ALL_OPPONENTS],
       gamesPerCandidate: SETTLE_GAMES,

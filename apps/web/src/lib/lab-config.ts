@@ -14,6 +14,9 @@ import {
   DEFAULT_JOINT_BUDGET,
   JOINT_LAND_COUNT_RADIUS,
   JOINT_PARTNERS_PER_COUNT_STEP,
+  DEFAULT_TRIM_BUDGET,
+  VERDICT_BARS,
+  type VerdictBar,
 } from '@jonny-boi/sim';
 import { DEFAULT_DECK_RULES, type TrimSettings } from '@jonny-boi/sim';
 
@@ -161,6 +164,38 @@ export const JOINT_AUTO_CONTINUE_DEFAULT = false;
 
 /** The significance level the verdict uses (surfaced so the UI never invents it). */
 export const VERDICT_ALPHA = DEFAULT_STATS_CONFIG.alpha;
+
+/**
+ * THE BAR THE LAB STARTS AT (DESIGN §3.179) — the row of `VERDICT_BARS` whose
+ * alpha is the sim's default, looked up rather than restated. Restating it is
+ * how alpha and z come to disagree, and `lab-config.test.ts` fails if the lookup
+ * ever misses.
+ */
+export const DEFAULT_VERDICT_BAR: VerdictBar = (() => {
+  const row = VERDICT_BARS.find((bar) => bar.alpha === DEFAULT_STATS_CONFIG.alpha);
+  if (!row) throw new Error(`VERDICT_BARS has no row for the sim default alpha ${DEFAULT_STATS_CONFIG.alpha}`);
+  return row;
+})();
+
+/**
+ * The minimum paired games before the Lab will call a swap anything but
+ * inconclusive. Tunable alongside alpha because they are the two halves of one
+ * question -- "how sure is sure enough?" -- and answering only half of it was
+ * what made every Lab result read INCONCLUSIVE.
+ */
+export const VERDICT_MIN_GAMES = {
+  default: DEFAULT_STATS_CONFIG.minGamesForVerdict,
+  min: 10,
+  max: 400,
+  step: 10,
+} as const;
+
+/**
+ * The trim session's boundary (§3.179). "Keep looking" now DEEPENS rather than
+ * giving up after two rounds, so something has to stop it, and that something is
+ * reported rather than silent.
+ */
+export const TRIM_BUDGET = DEFAULT_TRIM_BUDGET;
 
 /**
  * The fidelity caveat surfaced near every verdict. Re-exported verbatim from the
