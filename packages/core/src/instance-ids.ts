@@ -250,6 +250,11 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
     sourceName: 'none',
   },
   choiceAbandoned: { sourceInstanceId: 'id', reason: 'none' },
+  // §3.178 — the loop's cards live in the window on the STATE; the events
+  // carry a seat, counts and a sentence, and never an id.
+  comboWindowOpened: { player: 'none', cycleLength: 'none', summary: 'none' },
+  comboRepeated: { player: 'none', requested: 'none', completed: 'none', stoppedBecause: 'none' },
+  comboDismissed: { player: 'none' },
 };
 
 /** The one answer member with this `kind` tag. */

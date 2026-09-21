@@ -458,6 +458,17 @@ export function cloneState(state: GameState): GameState {
   // (A pile window's `pile` rides the `{ ...madnessWindow }` spread above; it
   // is never mutated in place, so sharing the array is safe.)
   if (state.spellsCastThisTurn !== undefined) next.spellsCastThisTurn = state.spellsCastThisTurn;
+  // §3.178 — the combo detector's three fields, written only for a session that
+  // asked for detection (every sim state takes three `!== undefined` reads and
+  // nothing else). The ARRAYS are copied and their ENTRIES shared: a history
+  // entry, a window and a dismissed key are each written once and never edited,
+  // so an alias cannot be written through, while copying the arrays keeps one
+  // state's recordings out of the other's — the same asymmetry `delayedTriggers`
+  // above explains. Dropping any of these would forget the loop being stepped
+  // through at the very next action boundary, and the window with it.
+  if (state.comboHistory !== undefined) next.comboHistory = state.comboHistory.slice();
+  if (state.comboWindow !== undefined) next.comboWindow = state.comboWindow ? { ...state.comboWindow } : null;
+  if (state.comboDismissed !== undefined) next.comboDismissed = state.comboDismissed.slice();
   return next;
 }
 

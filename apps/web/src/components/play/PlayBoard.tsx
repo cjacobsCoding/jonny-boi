@@ -57,6 +57,9 @@ import { PlayCard } from './PlayCard.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
+// §3.178 — the infinite-combo prompt and its view model.
+import { ComboPrompt } from './ComboPrompt.js';
+import { comboCycleInstanceIds, comboPromptView } from '../../lib/play/combo-view.js';
 import { ZonePanel } from './ZonePanel.js';
 import {
   AbilityMenuPrompt,
@@ -152,6 +155,9 @@ function castOptionKey(option: CastOption): string {
 
 /** A shared empty cost, so the no-picker render allocates nothing per frame. */
 const EMPTY_COST: ManaCost = Object.freeze({});
+
+/** §3.178 — the marker on every board tile the found loop runs through. */
+const COMBO_PIECE_MARKER = '∞ loop';
 
 /**
  * The hand badge for a card the player can cast: how many WAYS, counted from the
@@ -542,8 +548,18 @@ export function PlayBoard({
   const parkedQuestion: PendingChoice | null =
     announcingQuestion?.choice ??
     (pendingChoice && isChoiceForViewer(pendingChoice, viewer) ? pendingChoice : null);
+  /**
+   * §3.178 — an open COMBO WINDOW is the engine's other parked question: "you
+   * have been stepping through a loop; run it N more times?" It comes from
+   * STATE for the same reason `parkedQuestion` does, and it is rendered only
+   * for its owner — the other seat sees the board wait. While it stands the
+   * engine offers the owner nothing else, so the board goes quiet exactly as
+   * it does for a parked choice.
+   */
+  const comboWindow = session.comboWindow;
+  const viewersCombo = comboWindow !== null && comboWindow.owner === viewer ? comboWindow : null;
   const isViewersPriority =
-    session.priorityPlayer === viewer && !pendingChoice && announcingQuestion === null;
+    session.priorityPlayer === viewer && !pendingChoice && announcingQuestion === null && comboWindow === null;
   const playableLands = isViewersPriority ? session.playableLands() : [];
   const castOptions = isViewersPriority ? session.castOptions() : [];
   // Flashback: cards castable OUT OF the viewer's graveyard, same option shape as
@@ -1358,6 +1374,23 @@ export function PlayBoard({
   const opponentInteraction = buildOpponentInteraction();
 
   function buildSelfInteraction(): PermInteraction | undefined {
+    // §3.178 — THE LOOP LIGHTS UP while its prompt stands: the pieces the found
+    // cycle runs through are drawn selected AND pulsing (the same two marks a
+    // targeting question uses, so "which cards is it talking about?" is
+    // answered by looking) with a marker naming what they are. Nothing is
+    // clickable: the engine offers the owner only the prompt's two answers.
+    if (viewersCombo !== null) {
+      const pieces = new Set(comboCycleInstanceIds(viewersCombo.loop));
+      const markers = new Map<InstanceId, string>();
+      for (const id of pieces) markers.set(id, COMBO_PIECE_MARKER);
+      return {
+        selectableIds: new Set(),
+        selectedIds: pieces,
+        targetableIds: pieces,
+        markers,
+        onClick: () => {},
+      };
+    }
     // THE PICKER OWNS THE BOARD while it stands: the only thing to do is choose
     // sources, so nothing else may steal a click. Spent sources stay marked so
     // the player can see the payment they are assembling.
@@ -1970,7 +2003,11 @@ export function PlayBoard({
             ? waitingForChoiceText(pendingChoice, names)
             : pendingChoice
               ? 'Answer the question above to continue.'
-              : undefined
+              : comboWindow !== null
+                ? viewersCombo !== null
+                  ? 'Answer the loop prompt above to continue.'
+                  : `${names[comboWindow.owner]} has found a loop and is deciding how many times to run it.`
+                : undefined
         }
         isViewersPriority={isViewersPriority}
         inBlockStep={inBlockStep}
@@ -2034,6 +2071,21 @@ export function PlayBoard({
           sourceDef={choiceSourceDef ?? null}
           cardIdOf={announcingQuestion ? questionFaceOf : faceOfInstance}
           {...(announcingQuestion ? {} : { onFoldedMay: answerFoldedMay })}
+        />
+      )}
+
+      {/* §3.178 — THE LOOP THE ENGINE FOUND, for its owner only: the pieces, the
+          net change per cycle, a count, and the two answers the engine offers
+          (`repeatCombo` / `dismissCombo`). Read off the session's state, exactly
+          as `parkedQuestion` is, so a resumed game waiting on it shows it. */}
+      {viewersCombo !== null && (
+        <ComboPrompt
+          // Keyed by the loop, so a different loop found later starts its count afresh.
+          key={viewersCombo.loop.key}
+          view={comboPromptView(viewersCombo, session.nameOf)}
+          faces={promptFaces}
+          onRepeat={(times) => run(() => session.repeatCombo(times))}
+          onDismiss={() => run(() => session.dismissCombo())}
         />
       )}
 

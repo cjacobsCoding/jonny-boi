@@ -25,6 +25,7 @@ import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetSpec } from './targeting.js';
 // §3.111 — the closed exit table every graveyard cast leaves the stack by.
 import { GRAVEYARD_CAST_EXIT } from './graveyard-casting.js';
+import type { ComboHistoryEntry, ComboWindow } from './combo.js';
 
 /** Opaque, stable identity for a player. */
 export type PlayerId = 'A' | 'B';
@@ -1054,6 +1055,36 @@ export interface GameState {
    * zero. Read through `spellsCastThisTurn`, never indexed directly.
    */
   spellsCastThisTurn?: number;
+  // --- infinite combos (DESIGN §3.178) ------------------------------------------
+  /**
+   * The recent actions and the signatures behind them, oldest first — what
+   * `findComboLoop` reads. A bounded ring of `COMBO_HISTORY_LENGTH` entries,
+   * reset as each turn begins (a loop is a thing within a turn).
+   *
+   * ABSENT — and never written — unless `RulesConfig.comboDetectionSeats` names
+   * a seat, which no simulation does: the sim's states carry no key here, clone
+   * nothing for it, and play byte-identically. Written only by the detection
+   * tail of `applyAction` and by `repeatCombo` (which resets it so the loop it
+   * just ran is not found again at once). Anyone adding a field here must also
+   * edit `internal/clone.ts`.
+   */
+  comboHistory?: ComboHistoryEntry[];
+  /**
+   * An open COMBO WINDOW (see {@link ComboWindow}) — a loop has been found and
+   * its owner is being asked how many times to run it. While set, the ONLY
+   * legal actions are the owner's `repeatCombo` and `dismissCombo`.
+   *
+   * Optional and normally absent, exactly like `madnessWindow`: absent means
+   * "never opened", `null` means "closed", and a state written before this
+   * existed reads as the former.
+   */
+  comboWindow?: ComboWindow | null;
+  /**
+   * `ComboLoop.key`s the owner DISMISSED this turn — the cycle is not offered
+   * again while they keep stepping through it by hand. Reset as the turn
+   * begins, so the same loop is offered afresh next turn.
+   */
+  comboDismissed?: string[];
 }
 
 /** Build a fresh, empty player. */

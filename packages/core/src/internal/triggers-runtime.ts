@@ -91,6 +91,13 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   cardRevealed: false,
   cardsMilled: false,
   choiceAbandoned: false,
+  // §3.178 — the combo window opening and closing move nothing on the board;
+  // a REPEAT is the summary emitted AFTER the replayed actions, each of which
+  // already rescanned through its own collector, so the safe direction costs
+  // one more rescan per shortcut.
+  comboWindowOpened: false,
+  comboRepeated: true,
+  comboDismissed: false,
   choiceAnswered: false,
   choiceAsked: false,
   choiceAutoAnswered: false,

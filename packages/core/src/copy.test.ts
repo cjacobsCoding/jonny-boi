@@ -38,6 +38,7 @@ import {
   copyResultDef,
   createEffectRegistry,
   createGame,
+  DEFAULT_RULES,
   effectivePower,
   effectiveToughness,
   isCopy,
@@ -159,6 +160,14 @@ function effectiveStats(state: GameState, inst: CardInstance): [number, number] 
  * whole state at every boundary) rather than calling the copy helper directly:
  * the clone is where a dropped field bites, and it bites one action LATER, so a
  * test that skips the pipeline cannot see it.
+ *
+ * ⚠️ `applyAction` is POSITIONAL — (state, action, config, registry). Every call
+ * in this file used to pass `{ registry, config: undefined }` in the CONFIG
+ * slot, a spelling that reads as if the function took an options bag. It does
+ * not, so the rules config was an object with none of its fields and the
+ * registry never reached the engine. Nothing noticed for as long as the engine
+ * read no required config field on this path, because every package's tsconfig
+ * excludes its test files — a test file in `packages` is never type-checked.
  */
 function castAndCopy(
   state: GameState,
@@ -174,14 +183,15 @@ function castAndCopy(
   const cast = applyAction(
     next,
     { kind: 'castSpell', player: 'A', instanceId: cardId },
-    { registry, config: undefined },
+    DEFAULT_RULES,
+    registry,
   );
   next = cast.state;
   events.push(...cast.events);
 
   // Both players pass, which resolves the spell — and stops on the copy question.
   for (const player of ['A', 'B'] as const) {
-    const pass = applyAction(next, { kind: 'passPriority', player }, { registry, config: undefined });
+    const pass = applyAction(next, { kind: 'passPriority', player }, DEFAULT_RULES, registry);
     next = pass.state;
     events.push(...pass.events);
   }
@@ -196,7 +206,8 @@ function castAndCopy(
       choiceId: (choice as NonNullable<typeof choice>).id,
       answer: { kind: 'selectCards', instanceIds: pick === null ? [] : [pick] },
     },
-    { registry, config: undefined },
+    DEFAULT_RULES,
+    registry,
   );
   next = answered.state;
   events.push(...answered.events);
@@ -416,7 +427,7 @@ describe('the as-enters question, driven through the real action pipeline', () =
     // reverts. One boundary is not enough to catch it.
     const registry = createEffectRegistry();
     for (const player of ['A', 'B'] as const) {
-      state = applyAction(state, { kind: 'passPriority', player }, { registry, config: undefined }).state;
+      state = applyAction(state, { kind: 'passPriority', player }, DEFAULT_RULES, registry).state;
     }
     const still = onBattlefield(state, result.permanent.instanceId);
     expect(still?.def.name).toBe('Test Bear');
@@ -444,10 +455,10 @@ describe('the as-enters question, driven through the real action pipeline', () =
     const registry = createEffectRegistry();
     const [card] = giveHand(state, 'A', [CLONE]);
     const id = (card as CardInstance).instanceId;
-    let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: id }, { registry, config: undefined })
+    let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: id }, DEFAULT_RULES, registry)
       .state;
     for (const player of ['A', 'B'] as const) {
-      next = applyAction(next, { kind: 'passPriority', player }, { registry, config: undefined }).state;
+      next = applyAction(next, { kind: 'passPriority', player }, DEFAULT_RULES, registry).state;
     }
     // Nothing to copy ⇒ the printed "you may" has one outcome, so the game must
     // not stop to ask it.

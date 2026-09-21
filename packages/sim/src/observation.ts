@@ -462,6 +462,11 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   tokenCeasedToExist: 'public',
   // `reason` here is engine-authored from the choice KIND, never from card text.
   choiceAbandoned: 'public',
+  // §3.178 — a shortcut is proposed, taken or declined AT THE TABLE (CR 732.2a);
+  // the events name a seat, counts and a sentence, never a hidden card.
+  comboWindowOpened: 'public',
+  comboRepeated: 'public',
+  comboDismissed: 'public',
 };
 
 /**
