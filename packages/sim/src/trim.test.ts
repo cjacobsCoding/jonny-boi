@@ -402,8 +402,12 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
     // — singles, pairs — and stopped saying `'exhausted'`, having cut nothing.
     // It now widens through the kinds and then DEEPENS, and stops only when it
     // runs out of road, with a reason that says so.
-    expect(result.stopped).toBe('budget-exhausted');
-    expect(result.rounds.length).toBeGreaterThan(2);
+    // The claim is that it no longer STOPS AFTER TWO ROUNDS — that is the whole
+    // bug. Which of the two honest terminal reasons it lands on depends on when
+    // the ladder finally drops the one on-the-edge row, so the test pins the
+    // behaviour rather than that incidental detail.
+    expect(['no-improvement-conclusive', 'budget-exhausted']).toContain(result.stopped);
+    expect(result.rounds.length, 'the two-round ceiling is the bug').toBeGreaterThan(2);
     expect(result.gamesPerCandidate).toBeGreaterThan(sessionOptions.gamesPerCandidate);
     expect(result.rounds.slice(0, 2).map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
     expect(result.rounds[1]?.rows.every((row) => row.cuts.length === 2)).toBe(true);

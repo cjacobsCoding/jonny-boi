@@ -42,7 +42,6 @@ import {
   type TrimArmRunner,
   type TrimRoundPlan,
 } from './trim.js';
-import { DEFAULT_STATS_CONFIG } from './config.js';
 import { MONO_GREEN_STOMPY, UW_CONTROL } from '../data/decks/index.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
@@ -279,16 +278,20 @@ describe('§3.179 acceptance 2 — a CONCLUSIVE round stops at once (the infinit
     const first = result.rounds[0];
     expect(first?.verdict).toBe('exhausted');
 
-    // Only the rows the ladder kept are the ones the verdict reasons about; the
-    // eliminated ones are short of games BY DESIGN and say so.
-    const survivors = (first?.rows ?? []).filter((row) => row.elimination === undefined);
-    expect(survivors.length, 'a round with no survivors proves nothing here').toBeGreaterThan(0);
-    // ⚠️ ANTI-VACUITY: if the survivor never reached `minGamesForVerdict` this
-    // test would be asserting the scheduler, not the rig.
-    expect(Math.max(...survivors.map((row) => row.evaluation.nGames))).toBeGreaterThanOrEqual(
-      DEFAULT_STATS_CONFIG.minGamesForVerdict,
-    );
-    expect(survivors.every((row) => row.evaluation.verdictReason === 'significantLoss')).toBe(true);
+    // When EVERY candidate is terrible the ladder drops them all, so there are no
+    // survivors at all — and that is a real answer rather than an abandonment,
+    // because of WHY they were dropped.
+    const rows = first?.rows ?? [];
+    expect(rows.length, 'a round with no rows proves nothing here').toBeGreaterThan(0);
+    expect(rows.every((row) => row.elimination !== undefined)).toBe(true);
+    // ⚠️ ANTI-VACUITY, and the whole point: `'futile'` means the ladder proved
+    // the optimistic bound is below break-even — provably NOT BETTER. `'outranked'`
+    // would only mean the budget went elsewhere, which answers nothing. If this
+    // round were conclusive merely because everything got abandoned, this fails.
+    expect(
+      rows.some((row) => row.elimination?.reason === 'futile'),
+      'the round is only conclusive if something was PROVED not better',
+    ).toBe(true);
   });
 
   it('the conclusive stop reason is the one that says the search is over', () => {
