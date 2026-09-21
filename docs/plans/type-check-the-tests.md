@@ -117,6 +117,31 @@ exclude is gone and CI fails if it comes back:
 5. Numbers with provenance. If a closer measurement is smaller than the 228 above, **report the
    smaller number** — that table was produced by the command in this file and nothing else.
 
+## ⚠️ Found while measuring this: the CI shard split is 2 / 20 / 2 and shard 2 has no headroom
+
+Not this lane's job, but recorded here because this is where the numbers were taken and a lane that
+adds a type-check step to CI will feel it first.
+
+`verify.yml`'s `tests` matrix was split into three shards because the single job had started hitting
+GitHub's **30-minute** ceiling. Measured on a green `main` run (35556387556):
+
+| shard | duration |
+|---|---|
+| tests (1/3) | 2m11s |
+| **tests (2/3)** | **20m36s** |
+| tests (3/3) | 2m05s |
+
+The split is by file, and `packages/core` is one enormous shard — ~17,700 of the suite's ~30,200
+tests land in shard 2. So the ceiling was not really raised: **shard 2 is at 20 of 30 minutes with
+two idle runners beside it.** As the core suite grows it hits the ceiling again, and CI then fails
+for an infrastructure reason rather than a code one — a red that means nothing, which is the worst
+kind of gate.
+
+The fix is a balanced split (shard by measured duration rather than by file count, or split
+`packages/core` across the three), and it is cheap: the two idle shards already have the capacity.
+**NOT CHECKED:** whether vitest's `--shard` can be told to balance by timing here, or whether it
+needs an explicit file partition. Measure before building it.
+
 ## Scope
 
 - **Owned:** `packages/*/tsconfig.json`, `packages/*/tsconfig.tests.json`, and any
