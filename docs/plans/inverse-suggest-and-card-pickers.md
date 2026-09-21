@@ -115,6 +115,40 @@ That last row is the real work, and it must not be guessed. `CardPicker`'s own d
 this repo a doc-comment has already sent an agent to work a headline defect that did not exist, so
 **the claim gets verified, not trusted.**
 
+### ✅ MEASURED 2026-09-20 — the denominator, so the lane starts from the answer
+
+`<CardPicker` appears in **exactly one** component, `components/lab/SwapPanel.tsx`. There is no
+`datalist`, no `role="combobox"` and no `role="listbox"` anywhere in `apps/web/src` outside
+`CardPicker` itself. The card-from-a-list surfaces are:
+
+| surface | how a card is picked | `CardPicker`? | typable filter | hover preview |
+|---|---|---|---|---|
+| Lab → Swap (cut / add) | the `CardPicker` combobox | **yes** | yes — `lib/lab/cardPicker.ts` | **no** |
+| Lab → Suggest (cut focus) | `cutOptions.map` → checkbox per card (`SuggestPanel.tsx:241`) | no | **none at all** | **no** |
+| Deck Builder → **+ Add card** | free text + Scryfall fuzzy, `result.suggestions` as a `<ul>` (`AddCardDialog.tsx:98`) | no | yes — its **own** | **no** |
+| Scan dialog → fix a misread card | `matchCardName(text, scanner.nameIndex, 6)` → suggestion buttons (`ScanDeckDialog.tsx:157`) | no | yes — a **third** | **no** |
+
+Card GRIDS (the Cards view, the builder's grid) are out of scope: they are a filtered grid of tiles,
+not a list you pick one option out of. Say so in the DESIGN section rather than leaving it implied.
+
+**So the doc-comment is false of the app, while being defensible on its own terms** — the other
+three are a multi-select, a free-text fuzzy, and a scan fixer, none of which is "picks ONE card from
+a list". That is exactly the stale-comment hazard this repo has already been bitten by, and fixing
+the comment is part of the work.
+
+**Three implementations of "find me the card I mean"** — `lib/lab/cardPicker.ts`, Scryfall's fuzzy
+via `addSingleCard.ts`, and `matchCardName` in the scan flow — is the rule-12 violation Caleb's
+request is really about. **Zero of the four surfaces have the dwell preview.**
+
+⚠️ **The Suggest cut-focus list is the worst one and should go first.** It is a checkbox list of
+every distinct card in the deck — around 35 rows — with **no filter whatsoever**, and it is the
+control a user reaches for when they want to focus a trim. Whether it should become a multi-select
+`CardPicker` or keep checkboxes plus a filter is a design call; make it explicitly, and say which.
+
+⚠️ Still **NOT CHECKED**: whether `lib/lab/cardPicker.ts`'s matching is substring or fuzzy. The other
+two are known fuzzy (Scryfall's, and `matchCardName`). Read it before deciding what "optionally
+allows for fuzzy search" has to add.
+
 A partial sweep found nine `<select>` elements in `apps/web/src`
 (`LabView`, `OnlinePlay`, `SwapPanel`, `SuggestPanel`, `SetupScreen`, `ProxiesView`, `PilotControls`,
 `MatchView`, `CardToolbar`); the ones spot-checked list **decks, page sizes, scopes and opponents —
