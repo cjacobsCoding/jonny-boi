@@ -70,12 +70,20 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
-    section: '3.177',
-    date: '2026-09-19',
+    section: '3.178',
+    date: '2026-09-20',
     kind: 'app',
     title: 'Infinite combos, stage 1 — the game notices your loop and offers to run it',
     summary:
       'Step through a loop twice in Solo or pass-and-play — tap for life, untap, tap again — and the board stops you: here are the pieces, here is what one time round changes (+1 life, +1 Saproling), how many more times? Up to 1,000, every trigger and state-based action as if you had clicked. A loop that changes nothing (tap one artifact to untap the other) is left alone, and so is one that would run out of something. "Repeat forever" is drawn but waits for the next stage.',
+  },
+  {
+    section: '3.177',
+    date: '2026-09-20',
+    kind: 'app',
+    title: 'The Lab finds a land count and the cards that go with it — together',
+    summary:
+      'You were right that a land count cannot be tested on its own: in a 60-card deck one fewer land is one more spell, and the old Manabase tab paired every count with whatever your cheapest spell happened to be — so a good count could read worse because that spell was bad. The new Joint search tab plays each land count against several spells that fit the deck and judges the count by its best one, then alternates: best manabase move, best spell move, repeat, until a round finds nothing better or your budget runs out. It shows the games spent against the games you allowed, every move it accepted, and it says "the best found under this budget" rather than pretending it is the perfect ratio.',
   },
   {
     section: '3.176',
@@ -92,6 +100,14 @@ export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
     title: 'The Lab tries other manabases — and measures reliability, not just wins',
     summary:
       'A new Manabase tab in the Lab: it builds land-only variants of your deck — a land or two more or fewer, the basics shifted between colours, a playset of each dual from the pool that fits your colours — plays each one against your deck on the same games, and shows the win rate beside how often it missed a land drop, got colour-screwed, or had its lands by turn four. Two axes, side by side, with the rule that picks a recommendation printed; Apply swaps the lands in.',
+  },
+  {
+    section: '3.174',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'The Lab trims a deck toward a target size',
+    summary:
+      'Lab → Trim: set a target (60, or your own), and each round tests removing one copy of every card with the same paired A/B test as the other tabs. A removal that proves better is applied — or shown for you to apply — and the next round runs on the smaller deck, until the target. It takes mana into account (after enough nonland cuts a land cut is due, and the arithmetic is printed), and when nothing proves better it shows every row and the most likely improving removal as an on-the-edge Apply.',
   },
   {
     section: '3.173',

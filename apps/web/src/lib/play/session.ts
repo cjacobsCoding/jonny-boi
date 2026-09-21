@@ -348,7 +348,7 @@ export class GameSession {
      */
     readonly actions: readonly GameAction[],
     /**
-     * §3.177 — the rules every action of this game is applied and offered
+     * §3.178 — the rules every action of this game is applied and offered
      * under. The engine default for every session but the Play board's, whose
      * `playRulesFor` names the human seats the engine may open a combo window
      * for. Fixed for the life of the game, because the recorded action log
@@ -466,7 +466,7 @@ export class GameSession {
     return this.submit({ kind: 'passPriority', player: this.priorityPlayer });
   }
 
-  // --- infinite combos (§3.177) -------------------------------------------------
+  // --- infinite combos (§3.178) -------------------------------------------------
 
   /**
    * The open combo window, or null: the engine has found a loop the priority-
@@ -684,7 +684,7 @@ export class GameSession {
     // A parked question is ALWAYS a real decision — and the only legal action is
     // answering it, so auto-advance must stop here rather than try to pass.
     if (this.pendingChoice) return true;
-    // So is an open combo window (§3.177): the engine refuses a pass while it
+    // So is an open combo window (§3.178): the engine refuses a pass while it
     // stands, and "run your loop N times?" is a decision only the owner makes.
     if (this.comboWindow) return true;
     for (const action of this.legalActions()) {

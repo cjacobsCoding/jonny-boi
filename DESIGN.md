@@ -11087,6 +11087,111 @@ B 28, C 25, D 28, E 31, F 20, and a handful the rows reached through the pre-pas
 place — Ground Rift's *"target creature WITHOUT FLYING can't block"* through the target-bound
 strip, Fleeting Effigy's end-step *"return this creature to its owner's hand"* as a trigger body.
 
+### 3.174 The Lab trims a deck toward a target — removals through the paired A/B, a mana-aware prior, and an on-the-edge Apply — ✅ done
+
+> "make it so there is a way in the lab to reduce a deck down towards 60 (but this should be tunable so
+> you can set your own custom limit if you want) where it basically tries removing certain cards, sees
+> if the deck does better or worse with the removed cards, then if the removal made it better, it shows
+> you that result and you can click apply. If it made it worse, it should either try again, or pause and
+> tell you - based on what you set it to … a setting for it to auto-make improving removals, and keep
+> looking for more … if every single combination of removals did not result in an improvement … tell
+> them the results and the most likely improving removal in case they want to apply those on-the-edge
+> removals anyways. The removals should take mana into account."
+
+**A removal is a swap whose in-card is nothing.** That one sentence is the whole design: the paired
+A/B machinery — the incremental arm runner, the base arm played once, the successive-halving ladder,
+the Holm correction over the family, `decideVerdict` — is written over `CardSwap`, and every consumer
+treats `in` as an opaque string (candidate keys, arm caches, the slice shards). So instead of widening
+those types, `SWAP_IN_NOTHING` is one NAMED in-card value and `applySwap` — already the one place a
+variant deck is built — is the one place it is interpreted: `isCut(swap)` → `applyCut`, which shortens
+the named line (or lines: a nonland+land PAIR travels as one `out` joined by `CUT_OUT_SEPARATOR`) and
+adds nothing. `copiesSwappedBy` learned the same branch, so a pair reports two copies moved. The arm
+runner, `playSlice`, `driveAdaptiveSearch` and `finishSuggestionRun` were not touched, and the web
+Lab's `variant-slice-shard` plays a cut exactly as it plays a swap. **What a cut cannot have, said
+plainly:** the identical-game skip turns itself off by construction (`swappedInstanceIdsFor` returns
+`undefined` for libraries of different length), and — because the engine shuffles a 62-card library
+into a different permutation than a 63-card one under the same seed, one fewer Fisher–Yates draw with
+the opponent's shuffle shifting behind it — a removal arm keeps the unbiased pairing (same opponent,
+same seed, same player on the play) but not a swap's matched-shuffle variance reduction. McNemar
+remains valid (it tests the marginal win rates); it needs more games. `TRIM_PAIRING_NOTE` is the one
+wording, carried in every report and printed under every round.
+
+**The module (`packages/sim/src/trim.ts`), pure and driver-agnostic.** A ROUND is one adaptive search
+whose roster is the current deck's distinct cards, each cutting ONE copy (`TRIM_SWAP_SCOPE = 'one'`;
+`'playset'` would ask Suggest's question, "does this card belong at all?"). `prepareTrimRound` reads
+the land ratio, enumerates the candidates in prior order and lays `planWaves` over them — a
+`SuggestionRunPlan` with no reserves (offspring selection reasons over in-card traits, and every
+removal shares one in-card) and its own family per round (each round is a new deck). `finishTrimRound`
+hands each arm's cumulative table to `summarizePairedSwap` and the lot to `finishSuggestionRun`, then
+reads the result back as removals: the **winner** is the top row proved better (`verdict:
+'improved'`); with no winner the round is **`exhausted`** and the **`edgeCandidate`** — "the most
+likely improving removal" — is the best-delta INCONCLUSIVE row, offered and never applied by the
+engine. `trimDeck` is the auto loop: round, apply the winner through `applyTrimCut` (the same
+`applySwap` funnel, so the deck you keep is byte-for-byte the deck that was tested), shrink by one,
+round again; under `ask` it returns after the first improving round with the winner unapplied. The
+rules are closed tables: `TRIM_ROUND_KINDS = ['singles', 'pairs']` with `CARDS_PER_CUT`, the two
+settings vocabularies, `DEFAULT_TRIM_CONFIG` (a 64-candidate ceiling that covers any deck of
+singletons, a 24-pair cap, the prior weights), and `nextWideningStep` — what "keep looking" does when
+a round finds nothing: widen from singles to nonland+land pairs while a pair still fits above the
+target, and after pairs there is nothing left, so exhaustion is final. Adding a third step is a row.
+
+**The mana prior is arithmetic, and it is printed.** `landCutDue(baseLands, baseSize, currentLands,
+currentSize)`: the deck the SESSION began with fixes the ratio; at the current size that ratio wants
+`ratioLands` lands; the deck carries `excessLands` more; once the excess reaches
+`LAND_RATIO_TOLERANCE_LANDS` (one whole land) the next cut is due to be a land. From 24/60 three
+nonland cuts leave 24/57 → 22.8 wanted → 1.2 over → due; two leave 0.8 over → not yet. The reading's
+`explanation` is one line the panel prints verbatim — *"lands 24/63 at the start (38.1%) → 24/60 now
+(40.0%) → 22.9 lands would keep that ratio → 1.1 over (a land cut is due at 1 over) → a land cut is
+due"* — never a hidden rule. What it moves: the class the ratio favours is scouted FIRST (a
+`favouredType` bonus that dominates the only other term, copies-in-deck capped at the 4-of limit so a
+24-of basic cannot outrank it), and under "keep looking" the widening step is exactly the pair that
+restores the ratio in one cut. It never decides a verdict; the sim does. There is deliberately NO
+basic-land floor here, unlike Suggest's cut set: cutting the dead basic — three Swamps in a mono-green
+deck — is a trim's whole job, and the ratio prior is what keeps the manabase honest instead.
+
+**The Lab (`Lab → Trim`).** One request kind, `TrimRequest`, carries the hero, the target, the games
+per finalist (the Suggest slider, reused), the round index (offsetting the seed so consecutive rounds
+play different games) and the session's base ratio; one shard kind, `trim-plan`, runs
+`prepareTrimRound` on a worker where the pool lives, and `runTrim` then drives **the same pooled
+ladder Suggest drives** — `runSuggest`'s round loop was extracted verbatim into `drivePooledSearch`
+rather than copied — and finishes with the sim's `finishTrimRound`. The panel is thin and drives the
+pool ONE ROUND AT A TIME: each round is an ordinary sim request, so the progress bar and Cancel are
+the Lab's own. Between rounds `lib/lab/trimSession.ts` decides from the settings (`stepAfterRound`,
+`stepAfterApply` — the closed table, tested branch by branch): `auto` applies the winner through
+`applyCutToDeck` (a fold over the deck module's own `removeCard`, the one place a web deck loses a
+copy) and, once the hero has actually shrunk to the expected size, issues the next round on the
+updated deck; `ask` shows the winner with *Apply and keep trimming / Apply and stop / Stop without
+applying*; an exhausted round under `pause` shows every row and the edge candidate with a DASHED,
+never-primary *Apply on-the-edge*; under `keep-looking` it widens to pairs first. The target input is
+bounded by `TRIM_TARGET_SIZE` (never below `DEFAULT_DECK_RULES.minDeckSize`), the standing line says
+how far the deck is from it and its land ratio, and a stale result (another deck, an older session)
+is ignored by fingerprint rather than applied.
+
+**Verification.** `packages/sim/src/trim.test.ts` — 26 tests: the cut through `applySwap` (in
+place, the last copy drops its line, a pair moves two, an absent card throws, the skip is off by
+construction); `landCutDue` nominates a land after the third nonland cut from 24/60 and not after the
+first two, prints its arithmetic, resets after a land cut, takes its tolerance as a parameter; the
+candidate set (every distinct card once, the Swamp included, nonlands first when no land is due and
+lands first when one is, pairs = nonlands × lands with the cap reported, a sub-minimum cut reported
+illegal); the plan (the ladder, per-round seeds, the three refusals); and **the loop under a rigged
+arm runner** — (1) the 63-card mono-green deck carrying three Swamps is trimmed to 60 by cutting
+exactly those three, in three rounds, under auto mode, every other line untouched; (2) a round in
+which nothing improves is `exhausted`, names the edge candidate, and applies nothing — under
+`keep-looking` it widens to pairs, still applying nothing; `ask` stops with the winner unapplied.
+The rig is honest about being one: the favoured arm wins 40% of slots outright (16 of 40, 0
+against) and nothing else moves, which is what lets the flow be proved without a one-card-in-63
+effect having to clear Holm in forty real games. Then **real games**: a round of 11 removals against
+UW Control at four slots plays 4 base games and 44 variant games, every row on a 62-card variant,
+`variantGamesSkipped` 0, the skip reported off with the trim's reason, every verdict honestly
+inconclusive at n = 4 — and the same seed reproduces the same tables. `apps/web`:
+`lib/lab/trimApply.test.ts` (Apply removes one copy and leaves the rest, a pair, an absent card
+reported), `lib/lab/trimSession.test.ts` (every branch of the step table), `components/lab/
+trim-panel.test.ts` (a static render: the target input, both settings, the standing line, a live
+Start; a target refused in words with Start dead; an improving round's banner, rows and ask buttons;
+an exhausted round's on-the-edge candidate offered dashed and never primary). Red before green, six sabotages in one run (17 of 40 red, every one attributable by test name): the cut removing the WHOLE line (`expected 60 to be 62`, and the acceptance loop `expected 1 to be 3` rounds); the loop applying the edge candidate silently (`expected [ { rank: 1, …(9) } ] to deeply equal []`); `landCutDue` calling any drift due (`expected true to be false` after one nonland cut); the web apply removing two copies (`expected 29 to be 30`); the on-the-edge button styled primary; Start never live. Restored: 40 of 40 green, and the wider gate — `suggest.test.ts`, `swap-scope.test.ts`, `lab-config`, `lab-pools`, the changelog guard and `determinism.test.ts` (20, the proof that `runSuggest` plays the same games through `drivePooledSearch`) — green with it.
+
+
+**Measured, and stated rather than hoped.** The dead Swamp under REAL games at a realistic budget — 30 games per finalist against UW Control and Mono-Red Aggro (60 slots), heuristic pilots, headless: **405 games in 10 s (42 g/s single-threaded), verdict `exhausted`**, every removal inconclusive, the Swamp on the edge at +1.7% with 9-vs-10 discordant games. That is the pairing loss in numbers: about a third of paired games are discordant under independent shuffles (a swap with matched shuffles disagrees only in the games the swapped card touched), so a one-card-in-63 effect does not clear Holm over eleven candidates at sixty slots. A real trim will therefore often end a round on the edge rather than on a proof; the panel says so under every round, the on-the-edge Apply exists for exactly that case, and "keep looking" widens to the nonland+land pair whose effect is twice the size. Raising games per finalist is the honest lever, and the cost note says what it costs before the run.
 ### 3.175 The Lab experiments with manabases — land-only variants, judged by win rate AND measured reliability — ✅ done
 
 > "make it so the lab can experiment with different manabases - both amounts and types of lands - to
@@ -11264,7 +11369,7 @@ full face), `graveyard-both-seats.test.ts`, `auto-advance.test.ts` (the forced d
 a real block still stops), `right-overlay-inset.test.ts` (the feed pins to nothing). Live checks are
 the table's own column.
 
-### 3.177 Infinite combos, stage 1 — the loop is found and can be repeated — ✅ done
+### 3.178 Infinite combos, stage 1 — the loop is found and can be repeated — ✅ done
 
 > "if it detects that you have been stepping through what results as an infinite combo, it should do a
 > pop up that highlights the infinite combo, and lets you agree to trigger it infinitely or not — it should
@@ -13187,6 +13292,146 @@ reader (`instanceIdsNamedBy`) per EVENT, which is what makes these entries load-
 **This section is §3.31, not §3.30**: `fix/redaction-guarantee` published a §3.30 while this branch
 was out, so the number moved rather than collide. `npm run verify` exit 0, `npm run build` exit 0,
 **5007 passed / 0 failed**, gauntlet at seed 99 still **79/280** with the same seven rows.
+### 3.177 The Lab searches the manabase and the spells TOGETHER — the land-count confound, measured and fixed — ✅ done
+
+> "Some decks may need different ratios. Maybe we need a way to find a best mana ratio for a given
+> deck? The hard part is its not as simple as trying 25 or 23... For 25, you'd need to also take out
+> a non-land card.... Which in turn affects the ratio... And for 23, you have to add in a nonland
+> card... Which affects the ratio. So maybe we need a new functionality that tries to find the
+> perfect mana/land ratio for the deck? And at the same time, tries out removing/adding cards that
+> seem to fit the deck well?"
+
+**The defect he named is real, and it is in §3.175.** The land-COUNT sweep keeps the deck the same
+size by trading against a partner it picks arbitrarily — `mostPlayedBasic` out, *the cheapest
+nonland with room* in (`manabase.ts`, `landCountVariants`). So a variant labelled "23 lands" is
+really *"23 lands AND one more copy of my cheapest spell"*, and the paired verdict measures two
+changes as one. If 23 comes back worse you cannot tell whether the count was wrong or the partner
+was; if 25 is genuinely better it can still read worse because the nonland it happened to cut was
+one of the deck's best cards.
+
+**That is not an argument, it is a measurement.** `JOINT_PARTNER_RULES` keeps the shipped rule as a
+ROW beside the new one, so the same descent can be run under both on the same rigged games and the
+two watched to disagree. On a deck planted at 30 lands whose true optimum is 24, one manabase phase
+under each rule:
+
+| partner rule | the phase's winner | land count | true optimum |
+|---|---|---|---|
+| `cheapest-nonland` (§3.175's) | `32 lands (+2 Forest, −2 Dud)` | **32 — the wrong way** | 24 |
+| `measured` (this section's) | `28 lands (−2 Forest, +2 Ace)` | **28 — toward it** | 24 |
+
+Both verdicts are `better` against the same base on the same slots. The old rule is not NOISY there;
+it is CONFOUNDED — it measured a real improvement (cutting the deck's worst card) and attributed it
+to the land count. Over the whole descent the measured rule reaches 24 and the arbitrary rule never
+does.
+
+**The shape: alternating (coordinate) descent** (`packages/sim/src/joint.ts`). Every move changes
+the denominator of the others, so the two coordinates are optimised in turn — hold the spells fixed
+and search the manabase moves, hold the manabase fixed and search the spell moves, repeat. A move is
+in the MANABASE phase when it touches a land and in the SPELL phase when it does not, which makes
+the two phases a PARTITION of one move shape rather than two mechanisms. Because the deck stays the
+same size, "one fewer land" is literally "one more spell" — the two coordinates are the two ends of
+one slot, which is exactly the confound.
+
+**Every move is a list of steps, and that is what keeps it paired.** A `JointMove` carries the same
+`ManabaseStep[]` a §3.175 variant does and is built by the same fold (`applyManabase`, whose
+parameter is now the STEPS and the LABEL so there is one fold, not two). The web Apply folds the
+same steps through the same `applyManabaseToDeck`. A colour-mix variant, a dual playset, a
+land-count step and a spell-for-spell swap are one type with one apply path.
+
+**The partner is chosen by MEASUREMENT** (`joint-moves.ts`). A count step is enumerated once per
+PARTNER drawn from the suggestion engine's own candidate generator — `generateCandidates` with the
+out side restricted to the deck's lands (going down) or the in side to its basics (going up) — which
+is the ONE answer to "which cards suit this deck", not a second notion of fit. Every pair is played,
+and the count is attributed to its BEST partner, because when you build a 23-land deck you also
+choose the 61st card: "is 23 better?" is answered by the best 23-land deck, not by an arbitrary one.
+The maximum over partners is a SELECTION, and the Holm correction over the whole phase — the same
+correction every family here already gets — is what keeps it honest. Two named constants carry the
+rest: `JOINT_PARTNERS_PER_COUNT_STEP` (4), and `JOINT_COUNT_MIN_BASICS_KEPT` = 0, because Suggest's
+eight-basic floor exists to stop an unrelated swap gutting a manabase and here moving the manabase
+IS the question.
+
+**The reach is not the radius.** `JOINT_LAND_COUNT_RADIUS` is 2 like §3.175's, but a round that
+accepts −2 searches again from the new deck, so the descent reaches −4, −6 … The radius bounds one
+phase's family, not the answer. `JOINT_MAX_MOVES_PER_PHASE` (32) is larger than the suggestion
+engine's cap for a stated reason: a cap that truncated `counts × partners + mix + type` below one
+full partner round would quietly REINSTATE the confound by leaving some counts on a single partner,
+so the generator emits every count's best partner first, then the mix and type families, then the
+deeper partners, and the cap cuts from the end. Partners past the shortlist are reported, in both
+directions, never dropped.
+
+**Nothing statistical is re-implemented.** A phase is a family of paired comparisons against one base
+deck, so it is planned as a `SuggestionRunPlan`, driven by `driveAdaptiveSearch` and closed by
+`finishSuggestionRun`. Common random numbers, McNemar, the adaptive ladder and Holm are reused.
+
+**The budget is the user's, and it is visible.** A search is a sequence of PHASES, each an ordinary
+cancellable run, with the state between them plain data (`JointSearchState`) — which is what makes it
+resumable and interruptible rather than an hour-long black box. The panel shows games spent against
+games allowed, seconds against seconds, phases run and rounds used; `JOINT_MIN_PHASE_GAMES` (200)
+refuses a phase too small to decide anything rather than running one whose verdicts would all come
+back inconclusive and read as "nothing is better".
+
+**What it claims, and what it refuses to claim.** `JOINT_HONEST_CLAIM` is printed verbatim: *the best
+deck this search FOUND, under this budget, along this path — not the perfect ratio and not a proven
+optimum*. A round that accepts nothing stops the search at a LOCAL optimum and
+`JOINT_STOP_REASONS` prints what that means ("a better deck may sit behind two moves that are only
+good together, and this search cannot see it"). A phase with no proved winner is reported as
+INCONCLUSIVE with its on-the-edge row, never as "everything is worse". `JOINT_NOT_GATED_ON` names
+what the accept rule does NOT look at: reliability (measured and shown per manabase move, but the
+rule is the paired win rate alone) and deck SIZE (every joint move is size-preserving; trimming is
+§3.174, a different question).
+
+**Reachability.** Lab → **Joint search** tab: the confound stated, both partner rules offered as a
+choice, five sliders (games per finalist, land-count reach, partners per count, and the two budget
+halves), the deck as built, then Start. After each phase: the LAND COUNTS table — one row per count,
+each with a **PARTNERS TRIED** column and its best partner, which is the fix on a screen — then the
+ranked move table, the on-the-edge row labelled as not accepted, the skips with reasons, and the
+path of accepted moves. Settings in `lab-config.ts` (`JOINT_GAMES`, `JOINT_RADIUS`, `JOINT_PARTNERS`,
+`JOINT_BUDGET_GAMES`, `JOINT_BUDGET_SECONDS`, `JOINT_AUTO_CONTINUE_DEFAULT` — off, so a long search
+is a sequence of steps the user takes rather than an hour that happens to them).
+
+**One phase per request, reusing §3.175's shards.** A joint phase is a family of caller-built variant
+decks played against one base under the reliability watch, which is exactly what
+`manabase-base-slot-shard` and `manabase-variant-slice-shard` already do — so only the PLAN is new
+(`joint-plan`). `VariantSliceSpec` is the type that makes the reuse honest: the shard is typed on
+what it actually reads (`key`, `label`, `steps`, `slotsChanged`), not on one of the two shapes.
+
+**Verification.** `joint.test.ts`, 23 tests: the generator (both halves of every count label, several
+partners per count, the arbitrary rule reproducing `landCountVariants` exactly, a spell move never
+touching a land, every move size-preserving and legal, skips with reasons, the ladder adapter
+round-tripping); the PLANTED ANSWER (a deck flooded at 30 lands is walked to the planted optimum of
+24 with the planted card; a deck screwed at 17 is walked up; every accepted move on the path raised
+the planted win rate); the CONFOUND contrast above, at the phase level and over the whole descent;
+the budget (a budget too small refuses to run a phase; a spent one stops and reports; `shouldStop`
+interrupts between phases); the local optimum; the rollup on rows in ANY order; and one end-to-end
+phase on REAL games against the shipped pool. `joint-panel.test.ts`, 7 tests: the confound, both
+rules, the budget sliders, the PARTNERS TRIED column, the ONE-partner warning, and a claim test that
+COUNTS occurrences so a "perfect ratio: 23 lands" headline would fail it.
+
+⚠️ **Two checks in this lane could not fail and were fixed before they were trusted.** Sabotaging
+the rollup to return the first partner it was handed stayed GREEN, because inside a finished phase
+the rows already arrive ranked — so `rollUpLandCounts` is now exported and tested on shuffled rows,
+and ranks by PROVED verdict before delta. Deleting half the partner-shortlist overflow report also
+stayed green, because only one direction was covered. Red-then-green on five sabotages: the default
+partner rule (3 red), the rollup's ordering (1), the local-optimum stop (1), the budget guard (2),
+and the overflow report (1).
+
+**Throughput** (`packages/sim/scripts/joint-throughput.mjs`, committed so the number is reproducible).
+A joint phase run over the SAME family §3.175 builds — identical decks, identical seeds — is
+**1.048× the manabase sweep's games/sec** (55.5 vs 53.0, median of three): no per-game cost, because
+it is the same watched runner. The measured-partner family reads 0.687× (36.4 games/s), and that is
+the DECKS: those variants bring real spells in, and their games take longer. Planning: **1,065 ms**
+for a manabase phase and **2,046 ms** for a spell phase, against **2,094 ms** for a Suggest plan over
+the same pool — the spell phase's plan costs what a Suggest plan costs because it IS one, and it runs
+once per phase against thousands of games. In the Lab on 11 workers a real manabase phase on Thune's
+Life ran **863 games at 19 games/s**.
+
+**Left out, on purpose.** No CLI command (the tab is the deliverable; `runJointSearch` is exported
+for one). The land side of a count step is still the most-played basic under the shipped rule and the
+generator's ranking under the measured one — WHICH basic to cut is the colour-mix family's question,
+and a round alternates so the two compose. Reliability is read on every manabase-phase move but never
+gates an accept. Panel settings are component state like the other tabs'. A search that is interrupted
+keeps its state only while the tab is mounted — it is resumable within a session, not across a reload.
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

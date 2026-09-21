@@ -5,7 +5,7 @@ import { PromptFace, type AbilityPromptFaces } from './AbilityPrompts.js';
 import './combo-prompt.css';
 
 /**
- * THE INFINITE-COMBO PROMPT (DESIGN §3.177, stage 1).
+ * THE INFINITE-COMBO PROMPT (DESIGN §3.178, stage 1).
  *
  * > "it should do a pop up that highlights the infinite combo, and lets you
  * > agree to trigger it infinitely or not — it should also have options to only

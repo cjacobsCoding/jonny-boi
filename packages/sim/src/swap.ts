@@ -54,6 +54,49 @@ export interface CardSwap {
   readonly in: string;
 }
 
+/**
+ * THE "IN" OF A CUT — a swap that adds NOTHING (DESIGN §3.174, the Lab's trim).
+ *
+ * A removal is a swap whose in-card does not exist, and the whole paired A/B
+ * machinery — the arm runner, the slice shards, the wave ladder, the Holm
+ * correction — is written over `CardSwap`. Rather than widen every one of those
+ * types to `in: string | null`, the in-card of a cut is this one NAMED value,
+ * and `applySwap` (the one place a variant deck is built) is the one place it
+ * is interpreted. Every other consumer keeps treating `in` as an opaque string:
+ * candidate keys stay `out>in`, arm caches stay keyed the same way, and nothing
+ * resolves it against the pool (no card is named this, and no Scryfall id is).
+ *
+ * The identical-game skip switches itself off for a cut by construction — the
+ * variant library is shorter, so `swappedInstanceIdsFor` returns `undefined`
+ * and every variant game is replayed. Which is also the honest cost of the
+ * question: the engine shuffles a 62-card library into a different permutation
+ * than a 63-card one under the same seed (one fewer Fisher–Yates draw, and the
+ * opponent's shuffle shifts with it), so a cut arm keeps the unbiased pairing
+ * (same opponent, same seed, same player on the play) but not the matched-shuffle
+ * variance reduction a swap enjoys. McNemar remains valid — it tests the
+ * marginal win rates — it simply needs more games for the same confidence.
+ */
+export const SWAP_IN_NOTHING = '(nothing)';
+
+/**
+ * Separates the ids of a MULTI-CARD cut in `CardSwap.out` — the trim's
+ * nonland+land PAIRS (§3.174). A pair is one arm (one variant deck, one paired
+ * table), so it has to travel as one `CardSwap`; `out` carries every card to
+ * cut, joined by this. Never a character a card name or a Scryfall id contains.
+ * Decoded in exactly one place (`cutOutRefs`), read by the two functions below.
+ */
+export const CUT_OUT_SEPARATOR = '|';
+
+/** Is this swap a CUT — one or more cards out, nothing in? */
+export function isCut(swap: CardSwap): boolean {
+  return swap.in === SWAP_IN_NOTHING;
+}
+
+/** The card refs a cut removes, in the order they were named. */
+export function cutOutRefs(swap: CardSwap): readonly string[] {
+  return swap.out.split(CUT_OUT_SEPARATOR).filter((ref) => ref.length > 0);
+}
+
 /** The 'better' / 'worse' / 'inconclusive' call. */
 export type SwapVerdict = 'better' | 'worse' | 'inconclusive';
 
@@ -119,6 +162,9 @@ export function applySwap(
   pool: CardPool,
   scope: SwapScope = DEFAULT_SWAP_SCOPE,
 ): Deck {
+  // §3.174 — a CUT is a swap whose in-card is nothing. Same funnel, same entry
+  // point, so an arm runner that only knows `applySwap` builds a removal too.
+  if (isCut(swap)) return applyCut(base, swap, pool, scope);
   const outDef = resolve(pool, swap.out);
   const inDef = resolve(pool, swap.in);
   if (!outDef) throw new Error(`swap "out" card not found in pool: "${swap.out}"`);
@@ -164,6 +210,45 @@ export function applySwap(
   };
 }
 
+/**
+ * Build the variant of a CUT: remove `copiesForScope` copies of every card the
+ * swap names, and add nothing (§3.174).
+ *
+ * The line is shortened IN PLACE (and dropped when it reaches zero) so the
+ * decklist stays readable after repeated cuts. Unlike `applySwap`'s replace-in-
+ * place, positioning buys no pairing here — a shorter library shuffles into a
+ * different permutation whatever order its entries are in (see
+ * `SWAP_IN_NOTHING`) — so this is tidiness, not a statistical property.
+ *
+ * Throws, exactly as the swap path does, when a named card is not in the pool or
+ * not in the deck: a cut of a card the deck does not hold is a caller bug, never
+ * a silent no-op that would make base and variant identical.
+ */
+function applyCut(base: Deck, swap: CardSwap, pool: CardPool, scope: SwapScope): Deck {
+  const refs = cutOutRefs(swap);
+  if (refs.length === 0) throw new Error(`cut names no card to remove (out: "${swap.out}")`);
+  const entries = base.cards.map((e) => ({ ...e }));
+  const removed: string[] = [];
+  for (const ref of refs) {
+    const outDef = resolve(pool, ref);
+    if (!outDef) throw new Error(`cut card not found in pool: "${ref}"`);
+    const outIdx = entries.findIndex((e) => entryMatches(e, outDef, pool));
+    if (outIdx < 0) throw new Error(`"${outDef.name}" is not in deck "${base.name}" — nothing to cut`);
+    const outEntry = entries[outIdx] as Deck['cards'][number];
+    const copies = copiesForScope(outEntry.count, scope);
+    if (copies >= outEntry.count) entries.splice(outIdx, 1);
+    else entries[outIdx] = { ...outEntry, count: outEntry.count - copies };
+    removed.push(`−${copies}× ${outDef.name}`);
+  }
+  return {
+    // The name records what left, so a result is never ambiguous about what
+    // was actually tested — the same contract as a swap's name.
+    name: `${base.name} (${removed.join(' ')})`,
+    archetype: base.archetype,
+    cards: entries,
+  };
+}
+
 function resolve(pool: CardPool, ref: string): CardDefinition | undefined {
   return pool.get(ref) ?? pool.getByName(ref);
 }
@@ -190,6 +275,16 @@ export function copiesSwappedBy(
   pool: CardPool,
   scope: SwapScope = DEFAULT_SWAP_SCOPE,
 ): number {
+  // §3.174 — a cut moves `copiesForScope` of EVERY card it names (a pair: two).
+  if (isCut(swap)) {
+    let total = 0;
+    for (const ref of cutOutRefs(swap)) {
+      const def = resolve(pool, ref);
+      const line = def ? base.cards.find((entry) => entryMatches(entry, def, pool)) : undefined;
+      total += copiesForScope(line?.count ?? 1, scope);
+    }
+    return Math.max(1, total);
+  }
   const outDef = resolve(pool, swap.out);
   if (!outDef) return 1;
   const line = base.cards.find((entry) => entryMatches(entry, outDef, pool));

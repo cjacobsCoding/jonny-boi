@@ -1,5 +1,5 @@
 /**
- * THE COMBO PROMPT'S VIEW MODEL — pure, DOM-free (DESIGN §3.177).
+ * THE COMBO PROMPT'S VIEW MODEL — pure, DOM-free (DESIGN §3.178).
  *
  * The engine's `ComboWindow` names the loop as actions, deltas and a key; the
  * prompt needs the CARDS the loop runs through (to list, and to light up on

@@ -1055,7 +1055,7 @@ export interface GameState {
    * zero. Read through `spellsCastThisTurn`, never indexed directly.
    */
   spellsCastThisTurn?: number;
-  // --- infinite combos (DESIGN §3.177) ------------------------------------------
+  // --- infinite combos (DESIGN §3.178) ------------------------------------------
   /**
    * The recent actions and the signatures behind them, oldest first — what
    * `findComboLoop` reads. A bounded ring of `COMBO_HISTORY_LENGTH` entries,

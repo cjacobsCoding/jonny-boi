@@ -1239,7 +1239,7 @@ export const RULES_MANIFEST: RulesManifest = {
     suite: 'packages/core/src/combo-engine.test.ts',
     what:
       'CR 732.4 — a loop of optional actions all under one player\'s control is shortcut by that ' +
-      'player choosing a number (DESIGN §3.177): the engine finds the demonstrated loop, offers ' +
+      'player choosing a number (DESIGN §3.178): the engine finds the demonstrated loop, offers ' +
       '`repeatCombo`, applies the recorded cycle that many times through the ordinary action ' +
       'funnel, and stops early — saying so — when an iteration is refused or the game ends.',
     shortfall:
@@ -1417,7 +1417,7 @@ export const ACTION_RULES: ActionRules = {
   declareAttackers: '508.1a',
   declareBlockers: '509.1a',
   answerChoice: '601.2', // the engine's transport for every mid-announcement/resolution choice
-  // §3.177 — CR 732.4: a loop of optional actions under one player's control is
+  // §3.178 — CR 732.4: a loop of optional actions under one player's control is
   // shortcut by that player naming a number; declining to name one is the same rule.
   repeatCombo: '732.4',
   dismissCombo: '732.4',

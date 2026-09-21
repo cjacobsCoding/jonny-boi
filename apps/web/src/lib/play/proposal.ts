@@ -535,7 +535,7 @@ export const PROPOSAL_EVENT_POLICY: { readonly [K in GameEvent['type']]: Proposa
   priorityPassed: (e, ctx) => (e.player === ctx.proposer ? 'rewindable' : 'handsOff'),
   // A choice the engine gave up on is still a choice somebody was holding.
   choiceAbandoned: 'handsOff',
-  // §3.177 — a REPEAT replays the recorded cycle, the other seat's passes
+  // §3.178 — a REPEAT replays the recorded cycle, the other seat's passes
   // included: the floor moved through them, exactly as one live
   // `priorityPassed` by anybody else does above. Unreachable inside an
   // announcement today (the window opens only after an action settles and
@@ -558,7 +558,7 @@ export const PROPOSAL_EVENT_POLICY: { readonly [K in GameEvent['type']]: Proposa
   triggerCopied: 'rewindable',
   madnessDeclined: 'rewindable',
   suspendDeclined: 'rewindable',
-  // §3.177 — see the `comboRepeated` row above for why these two are not blocks.
+  // §3.178 — see the `comboRepeated` row above for why these two are not blocks.
   comboWindowOpened: 'rewindable',
   comboDismissed: 'rewindable',
   stackResolved: 'rewindable',

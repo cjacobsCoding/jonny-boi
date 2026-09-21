@@ -301,7 +301,7 @@ function AbilityCandidate({
  * card aspect off one width variable per variant.
  *
  * Exported for the ONE other prompt that lists cards it did not offer as
- * choices — `ComboPrompt` (§3.177) shows the pieces of a found loop — so a
+ * choices — `ComboPrompt` (§3.178) shows the pieces of a found loop — so a
  * prompt card is drawn one way on this board (rule 12), not re-derived there.
  */
 export function PromptFace({

@@ -44,6 +44,7 @@ import {
   loadDeck,
   makeSeats,
   prepareSuggestionRun,
+  prepareTrimRound,
   runMatchup,
   type Deck,
   type LoadedDeck,
@@ -55,6 +56,7 @@ import {
 import {
   applyManabase,
   createReliabilityWatch,
+  planJointPhase,
   planManabaseRun,
   type PairedGameWatch,
 } from '@jonny-boi/sim';
@@ -70,6 +72,8 @@ import type {
   ManabasePlanResult,
   ManabaseVariantSliceShardJob,
   ManabaseVariantSliceShardResult,
+  JointPlanJob,
+  JointPlanResult,
   MatchJob,
   MatchJobResult,
   PairedShardJob,
@@ -79,6 +83,8 @@ import type {
   ShardResult,
   SuggestPlanJob,
   SuggestPlanResult,
+  TrimPlanJob,
+  TrimPlanResult,
   VariantSliceShardJob,
   VariantSliceShardResult,
 } from './shard-protocol.js';
@@ -355,6 +361,31 @@ export function runSuggestPlan(job: SuggestPlanJob, context: SimContext): Sugges
   };
 }
 
+// --- trim: the planning phase (§3.174) ------------------------------------------
+
+/**
+ * Plan one trim round — the sim's own `prepareTrimRound`, verbatim. The plan's
+ * roster is removal candidates (in-card: nothing), and the base-slot and
+ * variant-slice shards then play them exactly as they play swap candidates,
+ * because `applySwap` builds the cut. `swapScope` on the context is the trim's
+ * ONE-copy scope; the runner below reads it, so the arm built here and the arm
+ * played there are the same deck.
+ */
+export function runTrimPlan(job: TrimPlanJob, context: SimContext): TrimPlanResult {
+  const base = heroDeck(job.context.hero);
+  const round = prepareTrimRound(base, {
+    pool: context.pool,
+    opponentCount: job.context.opponentNames.length,
+    baseSeed: job.context.seed,
+    round: job.round,
+    gamesPerCandidate: job.gamesPerCandidate,
+    roundKind: job.roundKind,
+    targetSize: job.targetSize,
+    ...(job.baseLandRatio ? { baseLandRatio: job.baseLandRatio } : {}),
+  });
+  return { kind: 'trim-plan', round };
+}
+
 // --- suggestions: the base arm and the variant arms ----------------------------
 
 /**
@@ -624,6 +655,39 @@ export function runManabaseVariantSliceShard(
   }
 }
 
+// --- §3.177 the joint manabase + spell search ---------------------------------------
+
+/**
+ * Enumerate ONE joint phase's move family and plan its ladder — the sim's own
+ * `planJointPhase`. The identical-game-skip question is settled here once, as it
+ * is for suggestions and manabases, and on the WATCHED runner every later shard
+ * of this phase is served from (the manabase shards, reused: see
+ * `shard-protocol.ts`).
+ */
+export function runJointPlan(job: JointPlanJob, context: SimContext): JointPlanResult {
+  const base = heroDeck(job.context.hero);
+  const plan = planJointPhase(base, {
+    pool: context.pool,
+    phase: job.phase,
+    round: job.round,
+    opponentCount: job.context.opponentNames.length,
+    baseSeed: job.context.seed,
+    gamesPerMove: job.gamesPerMove,
+    partnerRule: job.partnerRule,
+    countRadius: job.countRadius,
+    mixRadius: job.countRadius,
+    partnersPerCountStep: job.partnersPerCountStep,
+    ...(job.families ? { families: job.families } : {}),
+  });
+  const skip = suggestionRunner(context, job.context, plan.runSeed, RELIABILITY_WATCH).runner.identicalGameSkip;
+  return {
+    kind: 'joint-plan',
+    plan,
+    identicalGameSkipEnabled: skip.enabled,
+    ...(skip.reason ? { identicalGameSkipDisabledReason: skip.reason } : {}),
+  };
+}
+
 // --- single-game replay trace --------------------------------------------------
 
 /** Play ONE game and record its trace for the replay viewer. Never sharded. */
@@ -685,11 +749,15 @@ export function executeShard(
       return runVariantSliceShard(job, context, onGame);
     case 'match':
       return runMatchJob(job, context);
+    case 'trim-plan':
+      return runTrimPlan(job, context);
     case 'manabase-plan':
       return runManabasePlan(job, context);
     case 'manabase-base-slot-shard':
       return runManabaseBaseSlotShard(job, context, onGame);
     case 'manabase-variant-slice-shard':
       return runManabaseVariantSliceShard(job, context, onGame);
+    case 'joint-plan':
+      return runJointPlan(job, context);
   }
 }

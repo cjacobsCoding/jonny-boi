@@ -1,5 +1,5 @@
 /**
- * INFINITE-COMBO DETECTION — the pure half (DESIGN §3.177, stage 1).
+ * INFINITE-COMBO DETECTION — the pure half (DESIGN §3.178, stage 1).
  *
  * > "if it detects that you have been stepping through what results as an
  * > infinite combo, it should do a pop up that highlights the infinite combo,

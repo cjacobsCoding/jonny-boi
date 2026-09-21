@@ -361,7 +361,7 @@ export interface SuspendCardAction {
   readonly instanceId: InstanceId;
 }
 
-// --- infinite combos (DESIGN §3.177) ------------------------------------------------
+// --- infinite combos (DESIGN §3.178) ------------------------------------------------
 
 /**
  * RUN THE LOOP the engine found (`GameState.comboWindow`) `times` more times —

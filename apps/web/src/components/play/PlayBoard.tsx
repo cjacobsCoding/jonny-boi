@@ -57,7 +57,7 @@ import { PlayCard } from './PlayCard.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
-// §3.177 — the infinite-combo prompt and its view model.
+// §3.178 — the infinite-combo prompt and its view model.
 import { ComboPrompt } from './ComboPrompt.js';
 import { comboCycleInstanceIds, comboPromptView } from '../../lib/play/combo-view.js';
 import { ZonePanel } from './ZonePanel.js';
@@ -156,7 +156,7 @@ function castOptionKey(option: CastOption): string {
 /** A shared empty cost, so the no-picker render allocates nothing per frame. */
 const EMPTY_COST: ManaCost = Object.freeze({});
 
-/** §3.177 — the marker on every board tile the found loop runs through. */
+/** §3.178 — the marker on every board tile the found loop runs through. */
 const COMBO_PIECE_MARKER = '∞ loop';
 
 /**
@@ -549,7 +549,7 @@ export function PlayBoard({
     announcingQuestion?.choice ??
     (pendingChoice && isChoiceForViewer(pendingChoice, viewer) ? pendingChoice : null);
   /**
-   * §3.177 — an open COMBO WINDOW is the engine's other parked question: "you
+   * §3.178 — an open COMBO WINDOW is the engine's other parked question: "you
    * have been stepping through a loop; run it N more times?" It comes from
    * STATE for the same reason `parkedQuestion` does, and it is rendered only
    * for its owner — the other seat sees the board wait. While it stands the
@@ -1374,7 +1374,7 @@ export function PlayBoard({
   const opponentInteraction = buildOpponentInteraction();
 
   function buildSelfInteraction(): PermInteraction | undefined {
-    // §3.177 — THE LOOP LIGHTS UP while its prompt stands: the pieces the found
+    // §3.178 — THE LOOP LIGHTS UP while its prompt stands: the pieces the found
     // cycle runs through are drawn selected AND pulsing (the same two marks a
     // targeting question uses, so "which cards is it talking about?" is
     // answered by looking) with a marker naming what they are. Nothing is
@@ -2074,7 +2074,7 @@ export function PlayBoard({
         />
       )}
 
-      {/* §3.177 — THE LOOP THE ENGINE FOUND, for its owner only: the pieces, the
+      {/* §3.178 — THE LOOP THE ENGINE FOUND, for its owner only: the pieces, the
           net change per cycle, a count, and the two answers the engine offers
           (`repeatCombo` / `dismissCombo`). Read off the session's state, exactly
           as `parkedQuestion` is, so a resumed game waiting on it shows it. */}

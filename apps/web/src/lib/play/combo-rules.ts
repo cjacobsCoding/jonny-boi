@@ -1,6 +1,6 @@
 /**
  * THE PLAY SESSION'S RULES — the one place the board tells the engine which
- * seats are human (DESIGN §3.177).
+ * seats are human (DESIGN §3.178).
  *
  * The engine watches for an infinite combo only on the seats named in
  * `RulesConfig.comboDetectionSeats`, and it cannot know who is human: in Solo

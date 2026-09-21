@@ -1,5 +1,5 @@
 /**
- * THE INFINITE-COMBO PROMPT — drawn, and REACHED (DESIGN §3.177).
+ * THE INFINITE-COMBO PROMPT — drawn, and REACHED (DESIGN §3.178).
  *
  * Two halves, for the reason `play-board-mount.test.ts` gives: a component that
  * renders beautifully in isolation and is never mounted is the dominant failure

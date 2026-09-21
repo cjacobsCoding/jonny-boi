@@ -1,5 +1,5 @@
 /**
- * INFINITE COMBOS, END TO END (DESIGN §3.177 stage 1; CR 732.4).
+ * INFINITE COMBOS, END TO END (DESIGN §3.178 stage 1; CR 732.4).
  *
  * A player steps through a real loop twice through `applyAction`; the engine
  * opens a combo window naming the loop and its net change; `repeatCombo` runs

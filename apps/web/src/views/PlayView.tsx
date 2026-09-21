@@ -3,7 +3,7 @@ import { createRng, type InstanceId, type PlayerId } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { DecksApi } from '../lib/useDecks.js';
 import { GameSession, type SubmitResult } from '../lib/play/session.js';
-// §3.177 — the engine watches the HUMAN seats for an infinite combo; this names them.
+// §3.178 — the engine watches the HUMAN seats for an infinite combo; this names them.
 import { playRulesFor } from '../lib/play/combo-rules.js';
 import {
   startHotseatGame,

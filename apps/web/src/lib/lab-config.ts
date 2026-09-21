@@ -11,7 +11,11 @@ import {
   DEFAULT_STATS_CONFIG,
   FIDELITY_CAVEAT,
   LAND_COUNT_SWEEP_RADIUS,
+  DEFAULT_JOINT_BUDGET,
+  JOINT_LAND_COUNT_RADIUS,
+  JOINT_PARTNERS_PER_COUNT_STEP,
 } from '@jonny-boi/sim';
+import { DEFAULT_DECK_RULES, type TrimSettings } from '@jonny-boi/sim';
 
 /**
  * The fixed base seed every Lab run uses by default, so results are reproducible
@@ -56,6 +60,31 @@ export const SUGGEST_MAX_CANDIDATES = {
 } as const;
 
 /**
+ * §3.174 — the Lab TRIM. The target-size input's bounds: never below the
+ * format's minimum (the sim refuses a plan under it), and up to the largest
+ * constructed deck anyone brings to the Lab. Games per candidate REUSES
+ * `SUGGEST_GAMES` — the trim runs Suggest's adaptive ladder, not a second one.
+ */
+export const LARGEST_CONSTRUCTED_DECK_SIZE = 100;
+export const TRIM_TARGET_SIZE = {
+  default: DEFAULT_DECK_RULES.minDeckSize,
+  min: DEFAULT_DECK_RULES.minDeckSize,
+  max: LARGEST_CONSTRUCTED_DECK_SIZE,
+  step: 1,
+} as const;
+
+/**
+ * The trim's opening settings: ASK before applying an improving removal, and
+ * PAUSE when a round finds none — the conservative pair, so nothing changes a
+ * deck until the user says so. Both are one click away in the panel.
+ */
+export const TRIM_DEFAULT_SETTINGS: TrimSettings = Object.freeze({
+  targetSize: TRIM_TARGET_SIZE.default,
+  onImprovement: 'ask',
+  onNoImprovement: 'pause',
+});
+
+/**
  * §3.175 — the manabase experiments: paired games per opponent a FINALIST
  * variant reaches (the ladder is adaptive, like Suggestions, so the default is
  * the same finalist depth), and how far the count/mix sweeps step each way.
@@ -73,6 +102,62 @@ export const MANABASE_SWEEP_RADIUS = {
   max: 3,
   step: 1,
 } as const;
+
+/**
+ * §3.177 — the JOINT manabase + spell search. Games per opponent a FINALIST move
+ * reaches in one phase (the ladder is adaptive, so this is the same finalist
+ * depth Suggest and the manabase sweep use), how far a phase's count and mix
+ * families step, and how many partner spells each land count is measured
+ * against — the slider that IS the fix, so it is on the panel rather than buried
+ * in a constant.
+ */
+export const JOINT_GAMES = {
+  default: DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate,
+  min: 10,
+  max: 200,
+  step: 10,
+} as const;
+
+export const JOINT_RADIUS = {
+  default: JOINT_LAND_COUNT_RADIUS,
+  min: 1,
+  max: 3,
+  step: 1,
+} as const;
+
+export const JOINT_PARTNERS = {
+  default: JOINT_PARTNERS_PER_COUNT_STEP,
+  min: 1,
+  max: 8,
+  step: 1,
+} as const;
+
+/**
+ * THE BUDGET SLIDERS. The search is expensive and the budget is the user's, so
+ * both halves are on the panel with a live "spent so far" beside them — never a
+ * constant the run discovers for itself. The defaults are the sim's.
+ */
+export const JOINT_BUDGET_GAMES = {
+  default: DEFAULT_JOINT_BUDGET.maxGames,
+  min: 1000,
+  max: 60000,
+  step: 1000,
+} as const;
+
+export const JOINT_BUDGET_SECONDS = {
+  default: DEFAULT_JOINT_BUDGET.maxSeconds,
+  min: 60,
+  max: 3600,
+  step: 60,
+} as const;
+
+/**
+ * Whether a phase that improves the deck immediately applies its winner and
+ * starts the next phase. OFF by default: the conservative setting, so a long
+ * search is a sequence of steps the user takes rather than an hour that happens
+ * to them.
+ */
+export const JOINT_AUTO_CONTINUE_DEFAULT = false;
 
 /** The significance level the verdict uses (surfaced so the UI never invents it). */
 export const VERDICT_ALPHA = DEFAULT_STATS_CONFIG.alpha;

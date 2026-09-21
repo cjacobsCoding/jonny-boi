@@ -19,15 +19,26 @@ import {
   SWAP_GAMES,
   SUGGEST_GAMES,
   SUGGEST_MAX_CANDIDATES,
+  JOINT_AUTO_CONTINUE_DEFAULT,
+  JOINT_BUDGET_GAMES,
+  JOINT_BUDGET_SECONDS,
+  JOINT_GAMES,
+  JOINT_PARTNERS,
+  JOINT_RADIUS,
 } from '../lib/lab-config.js';
+import { TRIM_DEFAULT_SETTINGS, TRIM_TARGET_SIZE } from '../lib/lab-config.js';
+import { applyCutToDeck, describeCutApplied } from '../lib/lab/trimApply.js';
+import type { TrimCut } from '@jonny-boi/sim';
 import { RunStatus } from '../components/RunStatus.js';
 import { GauntletPanel } from '../components/lab/GauntletPanel.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
 import { SwapPanel } from '../components/lab/SwapPanel.js';
 import { SuggestPanel } from '../components/lab/SuggestPanel.js';
+import { TrimPanel } from '../components/lab/TrimPanel.js';
 import { ManabasePanel } from '../components/lab/ManabasePanel.js';
+import { JointPanel } from '../components/lab/JointPanel.js';
 import { applyManabaseToDeck } from '../lib/lab/manabaseApply.js';
-import type { ManabaseVariant } from '@jonny-boi/sim';
+import type { JointMove, ManabaseVariant } from '@jonny-boi/sim';
 import type { CardOption } from '../components/lab/panel-types.js';
 
 /** The Lab's sub-tabs — the things you can run against the gauntlet. */
@@ -35,7 +46,9 @@ const LAB_TABS = [
   { id: 'gauntlet', label: 'Gauntlet' },
   { id: 'swap', label: 'A/B Swap Test' },
   { id: 'suggest', label: 'Suggestions' },
+  { id: 'trim', label: 'Trim' },
   { id: 'manabase', label: 'Manabase' },
+  { id: 'joint', label: 'Joint search' },
 ] as const;
 
 /**
@@ -116,12 +129,36 @@ export function LabView({
       }
     : undefined;
 
+  // §3.174 — applying a REMOVAL edits the hero the same way a swap does: through
+  // the deck module's own funnel, with a note that says what left. The result is
+  // returned because the trim panel's auto mode has to know whether the deck
+  // actually shrank before it issues the next round.
+  const onApplyCut = canEditHero
+    ? (cuts: readonly TrimCut[]) => {
+        const result = applyCutToDeck(hero, cuts);
+        if (result.copiesRemoved > 0) decks.updateDeck(result.deck);
+        setApplyNote(describeCutApplied(result, hero.name));
+        return result;
+      }
+    : undefined;
+
   // §3.175 — applying a tested MANABASE: the variant's steps folded over the
   // saved deck in ONE update (several `onApplySwap` calls would each start from
   // the same stale hero and keep only the last), through the same apply path.
   const onApplyManabase = canEditHero
     ? (variant: ManabaseVariant): void => {
         const result = applyManabaseToDeck(hero, variant);
+        if (result.applied) decks.updateDeck(result.deck);
+        setApplyNote(result.note);
+      }
+    : undefined;
+
+  // §3.177 — applying an accepted JOINT move. The SAME fold as a manabase
+  // variant, deliberately: a joint move is the same list of steps, and a second
+  // apply path is how "what was tested" and "what got applied" come apart.
+  const onApplyJointMove = canEditHero
+    ? (move: JointMove): void => {
+        const result = applyManabaseToDeck(hero, move);
         if (result.applied) decks.updateDeck(result.deck);
         setApplyNote(result.note);
       }
@@ -230,12 +267,35 @@ export function LabView({
             cutOptions={hero ? heroOutOptions(hero) : []}
           />
         )}
+        {tab === 'trim' && (
+          <TrimPanel
+            {...sharedProps}
+            // §3.174 — games per finalist REUSES the Suggest slider: the trim runs
+            // the same adaptive ladder, one round per card cut.
+            gamesConfig={SUGGEST_GAMES}
+            targetConfig={TRIM_TARGET_SIZE}
+            defaultSettings={TRIM_DEFAULT_SETTINGS}
+            {...(onApplyCut ? { onApplyCut } : {})}
+          />
+        )}
         {tab === 'manabase' && (
           <ManabasePanel
             {...sharedProps}
             gamesConfig={MANABASE_GAMES}
             radiusConfig={MANABASE_SWEEP_RADIUS}
             onApplyManabase={onApplyManabase}
+          />
+        )}
+        {tab === 'joint' && (
+          <JointPanel
+            {...sharedProps}
+            gamesConfig={JOINT_GAMES}
+            radiusConfig={JOINT_RADIUS}
+            partnersConfig={JOINT_PARTNERS}
+            budgetGamesConfig={JOINT_BUDGET_GAMES}
+            budgetSecondsConfig={JOINT_BUDGET_SECONDS}
+            autoContinueDefault={JOINT_AUTO_CONTINUE_DEFAULT}
+            onApplyJointMove={onApplyJointMove}
           />
         )}
       </div>

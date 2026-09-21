@@ -1,6 +1,6 @@
 /**
  * THE LOOP A PLAYER CAN ACTUALLY BUILD — the detector against the SHIPPED POOL
- * (DESIGN §3.177). `combo-engine.test.ts` proves the mechanism on hand-built
+ * (DESIGN §3.178). `combo-engine.test.ts` proves the mechanism on hand-built
  * pieces; this proves it on two real cards he can put in a deck today:
  *
  *   Kiki-Jiki, Mirror Breaker — {T}: create a token copy of target nonlegendary
@@ -26,7 +26,7 @@ const registry = buildRegistry();
 
 function card(name: string): CardDefinition {
   const def = pool.cards.find((c) => c.name === name);
-  if (!def) throw new Error(`"${name}" is not in the shipped pool — the click path in DESIGN §3.177 names it`);
+  if (!def) throw new Error(`"${name}" is not in the shipped pool — the click path in DESIGN §3.178 names it`);
   return def;
 }
 

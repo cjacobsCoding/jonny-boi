@@ -40,7 +40,7 @@ export interface RulesConfig {
    */
   readonly maximumHandSize: number;
   /**
-   * §3.177 — the seats the engine watches for an INFINITE COMBO and offers the
+   * §3.178 — the seats the engine watches for an INFINITE COMBO and offers the
    * repeat prompt to (`GameState.comboWindow`). EMPTY — the default, and what
    * every simulation runs with — means the detector never runs, records
    * nothing, and the engine plays byte-identically to before it existed.

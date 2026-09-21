@@ -169,7 +169,7 @@ import { ALTERNATIVE_COSTS, alternativeCostKindsOf, definitionCastAs } from './c
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
-// §3.177 — infinite combos: the pure detector and the window's constants.
+// §3.178 — infinite combos: the pure detector and the window's constants.
 import type { ComboHistoryEntry, ComboWindow } from './combo.js';
 import {
   COMBO_HISTORY_LENGTH,
@@ -523,7 +523,7 @@ function beginTurn(state: GameState, config: RulesConfig, emit: (e: GameEvent) =
 
   // Upkeep step (priority window).
   advanceToStepWithPriority(state, 'upkeep', emit);
-  // §3.177 — a loop is a thing within a turn: the detector's memory and the
+  // §3.178 — a loop is a thing within a turn: the detector's memory and the
   // turn's dismissals start over here, with THIS board as the state the first
   // cycle's change is measured against.
   resetComboTracking(state, config);
@@ -1748,7 +1748,7 @@ function applyActionToDraft(
       state.priorityPlayer = state.madnessWindow.controller;
       state.consecutivePasses = 0;
     }
-    // §3.177 — the combo detector, for the seats that asked for it. Last, so the
+    // §3.178 — the combo detector, for the seats that asked for it. Last, so the
     // signature it records is the settled board: state-based actions run,
     // triggers on the stack, the floor handed to whoever holds it.
     if (config.comboDetectionSeats.length > 0) noteComboAction(state, action, config, emit);
@@ -1798,7 +1798,7 @@ function dispatchAction(
       return rejectWith(prevState, 'a madness window is awaiting its controller');
     }
   }
-  // §3.177 — an open COMBO WINDOW narrows the game to its owner's two answers,
+  // §3.178 — an open COMBO WINDOW narrows the game to its owner's two answers,
   // for the same reason the two windows above do: the engine has asked a
   // question, and letting anybody act around it would leave the loop's owner
   // answering a board that has moved on.
@@ -1870,7 +1870,7 @@ function rejectWith(prevState: GameState, reason: string): EngineResult {
   return { state: cloneState(prevState), events: [{ type: 'actionRejected', reason }] };
 }
 
-// --- infinite combos (DESIGN §3.177) ------------------------------------------------
+// --- infinite combos (DESIGN §3.178) ------------------------------------------------
 
 /** The baseline entry: no action, just the board a cycle's change is measured from. */
 function comboBaseline(state: GameState): ComboHistoryEntry {
@@ -6213,7 +6213,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // consumer's imagination, so every seat — a pilot, the hotseat UI, the online
   // client — plays madness by picking from the menu it already reads.
   if (state.madnessWindow) return madnessActionsFor(state);
-  // §3.177 — an open COMBO WINDOW offers its owner exactly two moves: run the
+  // §3.178 — an open COMBO WINDOW offers its owner exactly two moves: run the
   // loop, or decline. Enumerated here for the reason the madness menu is.
   if (state.comboWindow) return comboActionsFor(state.comboWindow);
   const me = state.priorityPlayer;

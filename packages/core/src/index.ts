@@ -737,7 +737,7 @@ export type {
 } from './actions.js';
 export { DEFAULT_MANA_MODE } from './actions.js';
 
-// Infinite combos (DESIGN §3.177): the pure detector, its constants, and the window.
+// Infinite combos (DESIGN §3.178): the pure detector, its constants, and the window.
 export type {
   ComboWindow,
   ComboLoop,

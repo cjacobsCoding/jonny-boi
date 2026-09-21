@@ -1,4 +1,4 @@
-/** The combo prompt's view model and the Play rules (DESIGN §3.177) — pure. */
+/** The combo prompt's view model and the Play rules (DESIGN §3.178) — pure. */
 import { describe, expect, it } from 'vitest';
 import { COMBO_REPEAT_CAP, COMBO_REPEAT_DEFAULT, DEFAULT_RULES, type ComboWindow } from '@jonny-boi/core';
 import { comboCycleInstanceIds, comboPromptView, parseRepeatCount } from './combo-view.js';

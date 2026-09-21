@@ -1,6 +1,6 @@
 /**
  * The infinite-combo detector, on scripted action sequences and hand-built
- * signatures (DESIGN §3.177 stage 1). The engine end-to-end lives in
+ * signatures (DESIGN §3.178 stage 1). The engine end-to-end lives in
  * `combo-engine.test.ts`; this file is the pure rule and nothing else.
  */
 import { describe, expect, it } from 'vitest';

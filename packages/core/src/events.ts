@@ -947,7 +947,7 @@ export type GameEvent =
       readonly sourceInstanceId: InstanceId;
       readonly reason: string;
     }
-  // --- infinite combos (DESIGN §3.177) ------------------------------------------
+  // --- infinite combos (DESIGN §3.178) ------------------------------------------
   /**
    * The engine found a LOOP with a net change (`GameState.comboWindow`) and is
    * asking its owner how many times to run it. `summary` is the per-cycle

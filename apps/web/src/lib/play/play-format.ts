@@ -224,7 +224,7 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
     }
     case 'choiceAbandoned':
       return { text: `${r.name(event.sourceInstanceId)} could not finish — ${event.reason}.`, tone: 'trigger' };
-    // §3.177 — the loop the engine found, and what its owner did with it. The
+    // §3.178 — the loop the engine found, and what its owner did with it. The
     // repeat is the one line standing for a whole burst of replayed actions, so
     // it states the count actually run and why it stopped short, if it did.
     case 'comboWindowOpened':

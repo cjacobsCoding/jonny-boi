@@ -293,7 +293,7 @@ function actionIdentity(a: GameAction): string {
       return `answerChoice|${a.player}|${a.choiceId}`;
     case 'passPriority':
       return `passPriority|${a.player}`;
-    // §3.177 — the combo window's two answers. No soak ever sees them (the
+    // §3.178 — the combo window's two answers. No soak ever sees them (the
     // window opens only for seats the Play board names), and `times` is the
     // part the caller chooses, so it is not identity. Rows because the switch
     // is total.

@@ -122,6 +122,67 @@ export {
   copiesSwappedBy,
   GAMES_PER_PAIRED_GAME,
 } from './swap.js';
+// §3.174 — a CUT is a swap whose in-card is nothing; `applySwap` builds it.
+export { SWAP_IN_NOTHING, CUT_OUT_SEPARATOR, isCut, cutOutRefs } from './swap.js';
+
+/**
+ * THE LAB TRIM (DESIGN §3.174) — reduce a deck toward a target size by
+ * evaluating single-card REMOVALS round by round through the paired A/B
+ * machinery, with a mana-aware prior. Pure; the CLI-less web Lab drives the
+ * same plan over its worker pool and finishes it with the same function.
+ */
+export type {
+  TrimRoundKind,
+  TrimOnImprovement,
+  TrimOnNoImprovement,
+  TrimSettings,
+  TrimPriorWeights,
+  TrimConfig,
+  LandRatio,
+  FavouredCut,
+  LandCutReading,
+  TrimCut,
+  TrimCandidate,
+  TrimCandidateOptions,
+  PrepareTrimRoundOptions,
+  TrimRoundPlan,
+  TrimRow,
+  TrimRoundVerdict,
+  TrimRoundReport,
+  FinishTrimRoundInput,
+  TrimArmRunner,
+  TrimProgress,
+  RunTrimRoundOptions,
+  TrimStopReason,
+  TrimSessionResult,
+  TrimSessionOptions,
+} from './trim.js';
+export {
+  TRIM_SWAP_SCOPE,
+  LAND_RATIO_TOLERANCE_LANDS,
+  TRIM_ROUND_KINDS,
+  CARDS_PER_CUT,
+  TRIM_ON_IMPROVEMENT,
+  TRIM_ON_NO_IMPROVEMENT,
+  DEFAULT_TRIM_CONFIG,
+  TRIM_IN_NAME,
+  TRIM_PAIRING_NOTE,
+  TRIM_SKIP_NOT_APPLICABLE,
+  landCutDue,
+  isLandCard,
+  landRatioOf,
+  deckSizeOf,
+  isTrimCandidate,
+  describeCuts,
+  generateTrimCandidates,
+  prepareTrimRound,
+  finishTrimRound,
+  applyTrimCut,
+  nextWideningStep,
+  driveTrimRound,
+  runTrimRound,
+  trimDeck,
+} from './trim.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE, copiesForScope, describeScope } from './config.js';
 
@@ -280,6 +341,76 @@ export {
   planManabaseRun,
   runManabaseSweep,
 } from './manabase-run.js';
+
+/**
+ * §3.177 — THE JOINT MANABASE + SPELL SEARCH: the land count, the land types and
+ * the spell slots optimised TOGETHER by alternating descent, because in a
+ * fixed-size deck each one changes the denominator of the others. Exported whole
+ * so the Lab panel, a CLI and the tests all drive the same search.
+ */
+export type {
+  JointMoveFamilyId,
+  JointPartnerRuleId,
+  JointPhaseId,
+  JointStopReasonId,
+} from './joint-config.js';
+export {
+  DEFAULT_JOINT_BUDGET,
+  DEFAULT_JOINT_PARTNER_RULE,
+  JOINT_COLOR_MIX_RADIUS,
+  JOINT_CONFOUND_NOTE,
+  JOINT_COUNT_MIN_BASICS_KEPT,
+  JOINT_HONEST_CLAIM,
+  JOINT_LAND_COUNT_RADIUS,
+  JOINT_MAX_ROUNDS,
+  JOINT_MIN_PHASE_GAMES,
+  JOINT_MOVE_FAMILIES,
+  JOINT_NOT_GATED_ON,
+  JOINT_PARTNERS_PER_COUNT_STEP,
+  JOINT_PARTNER_RULES,
+  JOINT_PHASES,
+  JOINT_SPELL_MOVES_PER_PHASE,
+  JOINT_SPELL_SWAP_SCOPE,
+  JOINT_STOP_REASONS,
+} from './joint-config.js';
+export type { JointMove, JointMoveOptions, JointMoveSet, SkippedJointMove } from './joint-moves.js';
+export { generateJointMoves } from './joint-moves.js';
+export type {
+  FinishJointPhaseInput,
+  JointArmRunner,
+  JointBudget,
+  JointMoveRow,
+  JointPathStep,
+  JointPhasePlan,
+  JointPhaseReport,
+  JointPhaseVerdict,
+  JointProgress,
+  JointSearchOptions,
+  JointSearchState,
+  JointSpend,
+  LandCountRow,
+  PlanJointPhaseOptions,
+  RunJointPhaseOptions,
+} from './joint.js';
+export {
+  advanceJointSearch,
+  applyJointMove,
+  describeJointOutcome,
+  driveJointPhase,
+  finishJointPhase,
+  interruptJointSearch,
+  JOINT_BASE_REF,
+  jointBudgetRemaining,
+  jointCandidateOf,
+  jointStopReasonOf,
+  moveForCandidateKey,
+  nextJointPhase,
+  planJointPhase,
+  rollUpLandCounts,
+  runJointPhase,
+  runJointSearch,
+  startJointSearch,
+} from './joint.js';
 export {
   HERO_SEAT,
   LIBRARY_READING_PRIMITIVES,

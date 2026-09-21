@@ -50,7 +50,7 @@ import {
 } from '../persistence/write.js';
 import { GameSession } from './session.js';
 import { startHotseatGame, toSimDeck, type DeckChoice } from './setup.js';
-// §3.177 — the rebuilt session must run under the rules the record was played
+// §3.178 — the rebuilt session must run under the rules the record was played
 // under, or a recorded `repeatCombo` replays into a game with no window open.
 import { playRulesFor } from './combo-rules.js';
 

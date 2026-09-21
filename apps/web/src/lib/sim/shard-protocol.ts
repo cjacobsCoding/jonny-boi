@@ -30,7 +30,9 @@ import type {
   SuggestionRunPlan,
   SwapScope,
 } from '@jonny-boi/sim';
+import type { LandRatio, TrimRoundKind, TrimRoundPlan } from '@jonny-boi/sim';
 import type { DualLandFamilyId, ManabaseRunPlan, ManabaseVariant, PairedGameObservation } from '@jonny-boi/sim';
+import type { JointPartnerRuleId, JointPhaseId, JointPhasePlan } from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import type { MatchTrace } from '../replay-types.js';
 
@@ -258,6 +260,28 @@ export interface VariantSliceShardResult {
   readonly variantWonBySlot: readonly boolean[];
 }
 
+/**
+ * PHASE 1 of a trim round (§3.174): read the land ratio, enumerate the removal
+ * candidates in prior order, and plan the wave ladder — the sim's own
+ * `prepareTrimRound`, on a worker for the same reason `suggest-plan` is (the
+ * card pool lives there). Phases 2a/2b are the base-slot and variant-slice
+ * shards above, unchanged: a removal is a swap whose in-card is nothing.
+ */
+export interface TrimPlanJob {
+  readonly kind: 'trim-plan';
+  readonly context: ShardContext;
+  readonly gamesPerCandidate: number;
+  readonly round: number;
+  readonly roundKind: TrimRoundKind;
+  readonly targetSize: number;
+  readonly baseLandRatio?: LandRatio;
+}
+
+export interface TrimPlanResult {
+  readonly kind: 'trim-plan';
+  readonly round: TrimRoundPlan;
+}
+
 /** Play ONE game and record its full trace (the match-replay viewer). */
 export interface MatchJob {
   readonly kind: 'match';
@@ -319,8 +343,19 @@ export interface ManabaseBaseSlotShardResult {
 }
 
 /**
+ * THE MINIMUM A WORKER NEEDS TO BUILD A CALLER-SUPPLIED VARIANT DECK.
+ *
+ * A §3.175 manabase variant and a §3.177 joint move are the same thing to a
+ * worker: an identity, a label, and a list of `(out, in, copies)` steps that
+ * `applyManabase` folds into a deck. Typing the shard on what it actually reads
+ * — instead of on one of the two shapes — is what lets the joint search REUSE
+ * this shard rather than grow a second copy of it that could drift from it.
+ */
+export type VariantSliceSpec = Pick<ManabaseVariant, 'key' | 'label' | 'steps' | 'slotsChanged'>;
+
+/**
  * PHASE 2b: ONE variant's games over a slot range. The variant travels as its
- * definition (`ManabaseVariant.steps`), and the worker builds the deck through
+ * definition (its `steps`), and the worker builds the deck through
  * `applyManabase` — the same function the Lab's Apply mirrors, so what is
  * played and what gets applied cannot drift.
  */
@@ -330,7 +365,7 @@ export interface ManabaseVariantSliceShardJob {
   readonly runSeed: number;
   /** The ladder's candidate key — how results are folded back. */
   readonly candidateKey: string;
-  readonly variant: ManabaseVariant;
+  readonly variant: VariantSliceSpec;
   readonly slotStart: number;
   readonly slotEnd: number;
   /** Base records for exactly `[slotStart, slotEnd)`, in slot order, readings included. */
@@ -350,6 +385,37 @@ export interface ManabaseVariantSliceShardResult {
   readonly observedBySlot: readonly (PairedGameObservation | null)[];
 }
 
+/**
+ * §3.177 — PHASE 1 of one JOINT-SEARCH phase: enumerate that phase's move family
+ * (land count × measured partners, colour mix, land type — or the spell slots)
+ * and plan its ladder, on a worker because it needs the card pool.
+ *
+ * The other two phases of a joint run REUSE the manabase shards above, and that
+ * is not a shortcut: a joint phase is a family of caller-built variant decks
+ * played against one base under the reliability watch, which is exactly the work
+ * `manabase-base-slot-shard` and `manabase-variant-slice-shard` already do. A
+ * third copy of them would be a third thing to keep in step.
+ */
+export interface JointPlanJob {
+  readonly kind: 'joint-plan';
+  readonly context: ShardContext;
+  readonly phase: JointPhaseId;
+  /** 0-based round of the descent; it offsets the seed so rounds play new games. */
+  readonly round: number;
+  readonly gamesPerMove: number;
+  readonly partnerRule: JointPartnerRuleId;
+  readonly countRadius: number;
+  readonly partnersPerCountStep: number;
+  readonly families?: readonly DualLandFamilyId[];
+}
+
+export interface JointPlanResult {
+  readonly kind: 'joint-plan';
+  readonly plan: JointPhasePlan;
+  readonly identicalGameSkipEnabled: boolean;
+  readonly identicalGameSkipDisabledReason?: string;
+}
+
 /** Anything the pool can hand to a worker. */
 export type ShardJob =
   | GauntletShardJob
@@ -358,9 +424,11 @@ export type ShardJob =
   | BaseSlotShardJob
   | VariantSliceShardJob
   | MatchJob
+  | TrimPlanJob
   | ManabasePlanJob
   | ManabaseBaseSlotShardJob
-  | ManabaseVariantSliceShardJob;
+  | ManabaseVariantSliceShardJob
+  | JointPlanJob;
 
 /** Anything a worker can hand back on success. */
 export type ShardResult =
@@ -370,9 +438,11 @@ export type ShardResult =
   | BaseSlotShardResult
   | VariantSliceShardResult
   | MatchJobResult
+  | TrimPlanResult
   | ManabasePlanResult
   | ManabaseBaseSlotShardResult
-  | ManabaseVariantSliceShardResult;
+  | ManabaseVariantSliceShardResult
+  | JointPlanResult;
 
 /**
  * Main thread → worker, once per worker, before any job.
