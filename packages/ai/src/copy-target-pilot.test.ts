@@ -22,7 +22,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { applyAction, createGame, createRng, type CardDefinition, type GameState } from '@jonny-boi/core';
+import {
+  applyAction,
+  createGame,
+  createRng,
+  DEFAULT_RULES,
+  type CardDefinition,
+  type GameState,
+} from '@jonny-boi/core';
 import { createHeuristicPilot } from './heuristic.js';
 import { copyTargetValue } from './choices.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
@@ -89,9 +96,15 @@ function pilotCopiesInto(state: GameState): string {
   const [card] = giveHand(state, 'A', [CLONE]);
   const cloneId = card!.instanceId;
 
-  let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: cloneId }, { registry }).state;
+  // ⚠️ `applyAction` is POSITIONAL — (state, action, config, registry). These
+  // three calls used to pass `{ registry }` in the CONFIG slot, so the rules
+  // config was a bogus object and the registry never reached the engine at all.
+  // Nothing noticed, because every package's tsconfig excludes `*.test.ts` from
+  // the build, so a test file is never type-checked; it only surfaced when the
+  // engine started reading a required config field on every action.
+  let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: cloneId }, DEFAULT_RULES, registry).state;
   for (const player of ['A', 'B'] as const) {
-    next = applyAction(next, { kind: 'passPriority', player }, { registry }).state;
+    next = applyAction(next, { kind: 'passPriority', player }, DEFAULT_RULES, registry).state;
   }
   const choice = next.pendingChoice;
   expect(choice, 'the pilot should have been asked which permanent to copy').toBeTruthy();
@@ -104,7 +117,7 @@ function pilotCopiesInto(state: GameState): string {
     rng,
     registry,
   });
-  next = applyAction(next, action, { registry }).state;
+  next = applyAction(next, action, DEFAULT_RULES, registry).state;
 
   const resolved =
     next.battlefield.find((c) => c.instanceId === cloneId) ??
