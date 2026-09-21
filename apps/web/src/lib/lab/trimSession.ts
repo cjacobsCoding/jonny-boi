@@ -69,6 +69,17 @@ export function stepAfterRound(
   const edge = report.edgeCandidate ? { edge: report.edgeCandidate } : {};
   if (settings.onNoImprovement === 'pause') return { kind: 'stopped', reason: 'paused', ...edge };
 
+  // ⚠️ THE BUDGET IS CHECKED BEFORE ANY DECISION TO RUN ANOTHER ROUND, which is
+  // where `trimDeck` checks it (the top of its `while`). It used to be tested
+  // only on the DEEPEN branch, so a session could still widen singles → pairs
+  // after the budget was gone — and a real Lab run overran a 40,000-game budget
+  // to 72,162 before stopping. The two loops must answer "can I afford another
+  // round?" the same way or the headless engine and the Lab disagree about what
+  // a budget means; `trim-session-parity.test.ts` is the guard.
+  const budget = settings.budget ?? DEFAULT_TRIM_BUDGET;
+  const spent = spend.games >= budget.maxGames || spend.seconds >= budget.maxSeconds;
+  if (spent) return { kind: 'stopped', reason: 'budget-exhausted', ...edge };
+
   const next = nextWideningStep(report.roundKind, report.deckSize, report.targetSize);
   if (next !== undefined) return { kind: 'widen', round: report.round + 1, roundKind: next };
 
@@ -76,10 +87,6 @@ export function stepAfterRound(
   // one has not, and the lever left is depth.
   if (report.verdict === 'exhausted') return { kind: 'stopped', reason: 'no-improvement-conclusive', ...edge };
 
-  const budget = settings.budget ?? DEFAULT_TRIM_BUDGET;
-  if (spend.games >= budget.maxGames || spend.seconds >= budget.maxSeconds) {
-    return { kind: 'stopped', reason: 'budget-exhausted', ...edge };
-  }
   const deeper = deeperGamesPerCandidate(gamesPerCandidate);
   if (deeper === undefined) return { kind: 'stopped', reason: 'budget-exhausted', ...edge };
   return { kind: 'deepen', round: report.round + 1, roundKind: FIRST_ROUND_KIND, gamesPerCandidate: deeper };
