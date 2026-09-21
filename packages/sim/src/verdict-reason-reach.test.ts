@@ -35,6 +35,17 @@ interface SourceFile {
   readonly path: string;
   /** Comment-free, LF-normalised text. */
   readonly code: string;
+  /**
+   * `code` with the IMPORT statements removed as well.
+   *
+   * ⚠️ THIS GUARD'S SECOND RED, found by watching the A7 sabotage fail to
+   * fail. Deleting the reason from SwapPanel's JSX left `verdictReasonDisplay`
+   * sitting in its import block, and a guard that greps the whole file was
+   * satisfied by the leftover import — green, over a panel that had stopped
+   * rendering the reason. A check that an unused import can satisfy is not a
+   * check, so the reason has to be mentioned in the BODY.
+   */
+  readonly body: string;
 }
 
 /**
@@ -45,6 +56,11 @@ interface SourceFile {
  * `retired-ui-vocabulary.test.ts`'s stripper, verbatim; its `(^|[^:])` guard is
  * what keeps it from eating the `//` inside an `https://` URL.
  */
+/** Everything from `import` to its terminating `;`, including multi-line blocks. */
+function stripImports(text: string): string {
+  return text.replace(/^import\b[^;]*;/gmu, '');
+}
+
 function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//gu, ' ').replace(/(^|[^:])\/\/[^\n]*/gu, '$1');
 }
@@ -62,7 +78,12 @@ function sources(): readonly SourceFile[] {
       // A test may legitimately assert on a verdict without rendering a reason.
       if (/\.test\.tsx?$/u.test(entry.name)) continue;
       const raw = readFileSync(full, 'utf8').replace(/\r\n/gu, '\n');
-      out.push({ path: relative(REPO_ROOT, full).replace(/\\/gu, '/'), code: stripComments(raw) });
+      const code = stripComments(raw);
+      out.push({
+        path: relative(REPO_ROOT, full).replace(/\\/gu, '/'),
+        code,
+        body: stripImports(code),
+      });
     }
   };
   for (const root of SCANNED_ROOTS) walk(join(REPO_ROOT, root));
@@ -77,8 +98,16 @@ const CALL_SITES = FILES.filter((f) => /\bdecideVerdict\s*\(/u.test(f.code));
 /** Files that DRAW a verdict for a human: the web's one display funnel. */
 const RENDER_SITES = FILES.filter((f) => /\bverdictDisplay\s*\(/u.test(f.code));
 
-/** Any mention of the reason vocabulary that is not a comment. */
-const MENTIONS_REASON = /verdictReason|SWAP_VERDICT_REASON|verdictReasonDisplay|\breason\b/u;
+/**
+ * A real use of the reason vocabulary.
+ *
+ * ⚠️ Deliberately NOT a bare `\breason\b`. That alternative was in the first
+ * version and it matched any local called `reason` — a panel with an unrelated
+ * `reason` variable would have satisfied a guard about verdicts. Every genuine
+ * consumer names one of these three, so the loose alternative bought nothing and
+ * cost the guard its teeth.
+ */
+const MENTIONS_REASON = /verdictReason|SWAP_VERDICT_REASON|verdictReasonDisplay/u;
 
 describe('§3.179 — the guard is not vacuous', () => {
   it('actually walked the source tree', () => {
@@ -110,6 +139,17 @@ describe('§3.179 — the guard is not vacuous', () => {
     expect(RENDER_SITES.length, 'no verdict render sites found').toBeGreaterThanOrEqual(4);
   });
 
+  it('an unused IMPORT cannot satisfy an assertion', () => {
+    const onlyImported = stripImports(
+      "import { verdictReasonDisplay } from './x.js';\nconst a = 1;",
+    );
+    expect(onlyImported).not.toMatch(/verdictReasonDisplay/u);
+    // ...but a real use survives the strip.
+    expect(stripImports("import { x } from 'y';\nverdictReasonDisplay(a);")).toMatch(
+      /verdictReasonDisplay/u,
+    );
+  });
+
   it('comments cannot satisfy an assertion', () => {
     const withComment = stripComments('const a = 1; // verdictReason\n/* verdictReason */\nconst b = 2;');
     expect(withComment).not.toMatch(/verdictReason/u);
@@ -120,7 +160,7 @@ describe('§3.179 acceptance 2 — every decideVerdict call site carries the rea
   it.each(CALL_SITES.map((f) => f.path))('%s does not drop the reason on the floor', (path) => {
     const file = CALL_SITES.find((f) => f.path === path) as SourceFile;
     expect(
-      MENTIONS_REASON.test(file.code),
+      MENTIONS_REASON.test(file.body),
       `${path} calls decideVerdict but never mentions the reason. The funnel that decides is the `
         + `funnel that explains — carry \`decision.reason\` through instead of taking only \`.verdict\`.`,
     ).toBe(true);
@@ -143,7 +183,7 @@ describe('§3.179 — every surface that draws a verdict also draws its reason',
   it.each(RENDER_SITES.map((f) => f.path))('%s renders the reason beside the verdict', (path) => {
     const file = RENDER_SITES.find((f) => f.path === path) as SourceFile;
     expect(
-      MENTIONS_REASON.test(file.code),
+      MENTIONS_REASON.test(file.body),
       `${path} renders a verdict through verdictDisplay() but never renders its reason. `
         + `INCONCLUSIVE alone is three different answers wearing one word (DESIGN §3.179) — `
         + `use verdictReasonDisplay(evaluation.verdictReason, reasonContextOf(row, report.notes.stats)).`,
