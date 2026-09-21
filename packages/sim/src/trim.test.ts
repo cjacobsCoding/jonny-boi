@@ -389,7 +389,7 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
     expect(round.rows.every((row) => row.evaluation.verdict === 'inconclusive')).toBe(true);
   });
 
-  it('§3.179 — "keep looking" widens to pairs and then DEEPENS, instead of stopping after two rounds', () => {
+  it('"keep looking" widens singles → pairs, and stops there because the PAIRS are a dead heat', () => {
     const edgeId = pool.getByName('Craw Wurm')?.id ?? '';
     const result = trimDeck(RIGGED, {
       ...sessionOptions,
@@ -402,14 +402,26 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
     // — singles, pairs — and stopped saying `'exhausted'`, having cut nothing.
     // It now widens through the kinds and then DEEPENS, and stops only when it
     // runs out of road, with a reason that says so.
-    // The claim is that it no longer STOPS AFTER TWO ROUNDS — that is the whole
-    // bug. Which of the two honest terminal reasons it lands on depends on when
-    // the ladder finally drops the one on-the-edge row, so the test pins the
-    // behaviour rather than that incidental detail.
-    expect(['no-improvement-conclusive', 'budget-exhausted']).toContain(result.stopped);
-    expect(result.rounds.length, 'the two-round ceiling is the bug').toBeGreaterThan(2);
-    expect(result.gamesPerCandidate).toBeGreaterThan(sessionOptions.gamesPerCandidate);
-    expect(result.rounds.slice(0, 2).map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
+    // ⚠️ TWO ROUNDS IS CORRECT HERE, and it is worth saying why, because "it
+    // stopped after two rounds" is the bug §3.179 fixes and this is NOT an
+    // instance of it. `flatWithEdge` keys on `swap.out === edgeId`, and a PAIR's
+    // `out` is two ids joined — so no pair candidate is the edge, every pair
+    // plays byte-identically to the base, and every one is a genuine DEAD HEAT.
+    // A dead heat is conclusive: more games cannot create a difference that is
+    // not there, so deepening would burn the budget on a settled question. The
+    // session that SHOULD deepen is the all-inconclusive one, and that is
+    // `trim-ladder.test.ts`'s job.
+    expect(result.stopped).toBe('no-improvement-conclusive');
+    expect(result.rounds.length).toBe(2);
+    expect(result.gamesPerCandidate).toBe(sessionOptions.gamesPerCandidate);
+    expect(result.rounds.map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
+    // ...and the pairs round really was a dead heat, not merely unread.
+    expect(result.rounds[1]?.verdict).toBe('exhausted');
+    expect(
+      result.rounds[1]?.rows.every(
+        (row) => row.elimination !== undefined || row.evaluation.verdictReason === 'deadHeat',
+      ),
+    ).toBe(true);
     expect(result.rounds[1]?.rows.every((row) => row.cuts.length === 2)).toBe(true);
     expect(result.applied).toEqual([]);
     expect(deckSizeOf(result.deck)).toBe(63);
