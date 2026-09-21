@@ -37,8 +37,16 @@ interface SourceFile {
   readonly code: string;
 }
 
+/**
+ * ⚠️ THIS GUARD'S OWN FIRST RED. The first version stripped only FULL-LINE
+ * `//` comments, so a TRAILING `// verdictReason` would have satisfied every
+ * assertion below — a guard that can be silenced by a comment is exactly the
+ * can't-fail check this file exists to prevent. This is
+ * `retired-ui-vocabulary.test.ts`'s stripper, verbatim; its `(^|[^:])` guard is
+ * what keeps it from eating the `//` inside an `https://` URL.
+ */
 function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^[ \t]*\/\/.*$/gmu, '');
+  return text.replace(/\/\*[\s\S]*?\*\//gu, ' ').replace(/(^|[^:])\/\/[^\n]*/gu, '$1');
 }
 
 function sources(): readonly SourceFile[] {

@@ -369,7 +369,10 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'pause' },
       armRunner: (base) => riggedRunner(base, flatWithEdge(edgeId)),
     });
-    expect(result.stopped).toBe('exhausted');
+    // §3.179 — this session sets `onNoImprovement: 'pause'`, and `'paused'` is
+    // now its own stop reason. It used to report `'exhausted'`, which reads as
+    // "nothing helps" when what happened is "you told me to stop and ask".
+    expect(result.stopped).toBe('paused');
     expect(result.applied).toEqual([]);
     expect(result.deck).toBe(RIGGED);
     expect(result.rounds.length).toBe(1);
@@ -391,7 +394,10 @@ describe('trimDeck — the auto loop (rigged arms)', () => {
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' },
       armRunner: (base) => riggedRunner(base, flatWithEdge(edgeId)),
     });
-    expect(result.stopped).toBe('exhausted');
+    // §3.179 — these rows are CONCLUSIVE (the rig proves every one), so the
+    // search really is over — a different answer from running out of budget
+    // while still unable to read them.
+    expect(result.stopped).toBe('no-improvement-conclusive');
     expect(result.rounds.map((r) => r.roundKind)).toEqual(['singles', 'pairs']);
     expect(result.rounds[1]?.rows.every((row) => row.cuts.length === 2)).toBe(true);
     expect(result.applied).toEqual([]);
@@ -453,7 +459,10 @@ describe('runTrimRound — real games, one opponent, four slots', () => {
       // Four games cannot reach a verdict; the report must say so, not guess.
       expect(row.evaluation.verdict).toBe('inconclusive');
     }
-    expect(report.verdict).toBe('exhausted');
+    // §3.179 — every row came back inconclusive, so this round has not learned
+    // that nothing helps; it has learned NOTHING. That is `'unsure'`, and it is
+    // the round that now earns a deeper re-run instead of ending the session.
+    expect(report.verdict).toBe('unsure');
     expect(report.edgeCandidate).toBeDefined();
     expect(report.notes.variantGamesSkipped).toBe(0);
     expect(report.notes.identicalGameSkipEnabled).toBe(false);

@@ -115,17 +115,30 @@ function riggedRunner(base: Deck, rig: Rig): TrimArmRunner {
 }
 
 /**
- * THE UNREADABLE RIG. Every arm carries a small, PERSISTENT discordant split —
- * roughly n/10 one way and n/11 the other — so |b − c| grows like n/110 while
- * the discordant total grows like n/5. McNemar's statistic therefore grows like
- * n/2299: it would need several thousand paired games to clear 0.05, which is
- * far beyond anything this ladder will reach. Every row stays `notSignificant`
- * at every depth, which is exactly Caleb's wall of INCONCLUSIVE.
+ * THE UNREADABLE RIG — every row `notSignificant` at EVERY depth.
+ *
+ * ⚠️ THIS RIG'S FIRST VERSION WAS WRONG, and the test caught it. It made the
+ * discordant counts PROPORTIONAL to n (roughly n/10 against n/22, because half
+ * the intended base-only slots landed where the base had also lost). |b − c|
+ * then grew linearly with n, so McNemar's statistic grew with n too: by depth
+ * 640 the rig was CONCLUSIVE and handed the ladder a winner, and the test read
+ * `applied: [2 cuts]` where it expected none. A rig that changes what it is
+ * proving as the thing under test scales is not a rig.
+ *
+ * So the discordant split is now a CONSTANT, not a proportion: the variant
+ * mirrors the base on every slot except three fixed low ones. Whatever depth the
+ * ladder reaches, b = 2 and c = 1 — `|b − c| − 1 = 0`, so the statistic is
+ * exactly 0 and p is exactly 1 — while the delta stays nonzero, so it is
+ * `notSignificant` and never `deadHeat`. That is Caleb's wall of INCONCLUSIVE,
+ * held at every depth by construction rather than by arithmetic luck.
+ *
+ * Base wins the EVEN slots, so slots 1 and 3 are variant-only wins and slot 0 is
+ * a base-only win.
  */
 const alwaysUnsure: Rig = (_swap, slot, baseWon) => {
-  if (slot % 10 === 3) return true; // a variant-only win
-  if (slot % 11 === 4) return false; // a base-only win
-  return baseWon;
+  if (slot === 1 || slot === 3) return true; // base lost, variant won
+  if (slot === 0) return false; // base won, variant lost
+  return baseWon; // concordant: carries no signal at all
 };
 
 /** Every cut is conclusively WORSE: the variant loses every slot the base won. */
