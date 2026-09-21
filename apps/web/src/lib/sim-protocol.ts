@@ -11,7 +11,7 @@
  * Every shape is plain data that survives `postMessage` structured-clone — no
  * class instances, no functions, just the serializable fields the UI renders.
  */
-import type { PrecisionDecision, SequentialOutcome } from '@jonny-boi/sim';
+import type { PrecisionDecision, SequentialOutcome, StatsConfig } from '@jonny-boi/sim';
 import type {
   GauntletResult,
   SuggestionHistory,
@@ -304,6 +304,13 @@ export type SimResultPayload =
       readonly result: SwapEvaluation;
       readonly gamesPerSecond: number;
       readonly pilotId: string;
+      /**
+       * THE BAR THIS RESULT WAS READ AT (§3.179). A bare `SwapEvaluation` has no
+       * `notes` to carry it, and the panel must not print its own current
+       * control beside an older result — echoing it here keeps the result
+       * self-describing, the same way every report's `notes.stats` does.
+       */
+      readonly stats: StatsConfig;
       /**
        * Present only when the run used group-sequential stopping. The UI shows it
        * because 'we played a quarter of the games you asked for' is something the

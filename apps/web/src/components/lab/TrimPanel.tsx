@@ -599,7 +599,7 @@ export function RoundCard({
           </span>
           {edge && (
             <span className="verdict-banner__detail" data-testid="trim-edge-line">
-              {`Most likely improving removal: −1× ${edge.label} · ${signedPct(edge.evaluation.delta)} · p ${pValueStr(edge.adjustedPValue)} — ${verdictReasonDisplay(edge.evaluation.verdictReason, reasonContextOf(edge)).label}, on the edge.`}
+              {`Most likely improving removal: −1× ${edge.label} · ${signedPct(edge.evaluation.delta)} · p ${pValueStr(edge.adjustedPValue)} — ${verdictReasonDisplay(edge.evaluation.verdictReason, reasonContextOf(edge, report.notes.stats)).label}, on the edge.`}
             </span>
           )}
           {edge && applied && applied.key === edge.key && (

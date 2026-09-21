@@ -22,6 +22,7 @@ import {
   SAMPLE_DECKS,
   type JointMove,
   type JointPhaseReport,
+  DEFAULT_STATS_CONFIG,
 } from '@jonny-boi/sim';
 import { JointPanel } from './JointPanel.js';
 import {
@@ -53,6 +54,9 @@ const move = (label: string, partner: string, landCount: number): JointMove => (
 const WINNER = move('23 lands (−1 Forest, +1 Llanowar Elves)', 'Llanowar Elves', 23);
 const RUNNER_UP = move('23 lands (−1 Forest, +1 Grizzly Bears)', 'Grizzly Bears', 23);
 
+/** §3.179 — the reason a verdict of each kind arrives with. */
+const REASON_FOR = { better: 'significantGain', worse: 'significantLoss', inconclusive: 'notSignificant' } as const;
+
 const evaluation = (label: string, delta: number, verdict: 'better' | 'worse' | 'inconclusive') =>
   ({
     baseDeck: 'Selesnya Blink',
@@ -68,6 +72,7 @@ const evaluation = (label: string, delta: number, verdict: 'better' | 'worse' | 
     paired: { bothWon: 40, baseOnly: 10, variantOnly: 16, neither: 34 },
     mcNemar: { statistic: 1, pValue: 0.01, variantOnly: 16, baseOnly: 10, discordant: 26 },
     verdict,
+    verdictReason: REASON_FOR[verdict],
     nGames: 100,
     scope: 'one',
     copiesSwapped: 1,
@@ -90,9 +95,9 @@ const REPORT: JointPhaseReport = {
   rows: ROWS,
   winner: ROWS[0],
   landCounts: [
-    { landCount: 23, isBase: false, partnersTested: 4, best: ROWS[0], partners: ROWS, verdict: 'better', delta: 0.06, note: 'best of 4 partners (Llanowar Elves); the count is attributed to the deck you would actually build at it' },
+    { landCount: 23, isBase: false, partnersTested: 4, best: ROWS[0], partners: ROWS, verdict: 'better', verdictReason: 'significantGain', delta: 0.06, note: 'best of 4 partners (Llanowar Elves); the count is attributed to the deck you would actually build at it' },
     { landCount: 24, isBase: true, partnersTested: 0, partners: [], verdict: 'base', delta: 0, note: 'the deck as built — 50.0% against this gauntlet' },
-    { landCount: 25, isBase: false, partnersTested: 1, best: ROWS[1], partners: [ROWS[1]!], verdict: 'inconclusive', delta: 0.01, note: 'judged on ONE partner (Grizzly Bears) — the count and that one spell moved together, so this row cannot separate them' },
+    { landCount: 25, isBase: false, partnersTested: 1, best: ROWS[1], partners: [ROWS[1]!], verdict: 'inconclusive', verdictReason: 'notSignificant', delta: 0.01, note: 'judged on ONE partner (Grizzly Bears) — the count and that one spell moved together, so this row cannot separate them' },
   ],
   baseWinRate: ci(0.5),
   movesEvaluated: 2,
@@ -118,6 +123,7 @@ const REPORT: JointPhaseReport = {
     identicalGameSkipEnabled: true,
     runIndex: 0,
     fidelityCaveat: 'caveat',
+    stats: DEFAULT_STATS_CONFIG,
   } as JointPhaseReport['notes'],
   gamesPlayed: 1200,
   elapsedSeconds: 12.5,

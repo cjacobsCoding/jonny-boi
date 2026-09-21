@@ -320,12 +320,9 @@ describe('§3.179 acceptance 4, on screen — every stop reason has words in the
   it('the panel reads those words from the sim rather than restating them', () => {
     // The guard for rule 12: a second wording table in the panel is how
     // "exhausted" came to be printed for two opposite situations.
-    const source = readFileSync(
-      fileURLToPath(new URL('./TrimPanel.tsx', import.meta.url)),
-      'utf8',
-    ).replace(/
-/gu, '
-');
+    // No newline normalisation needed: every `detail` is a single line, so a
+    // CRLF checkout cannot change whether it appears verbatim in the source.
+    const source = readFileSync(fileURLToPath(new URL('./TrimPanel.tsx', import.meta.url)), 'utf8');
     expect(source).toContain('TRIM_STOP_REASON_WORDING');
     for (const reason of TRIM_STOP_REASONS) {
       const words = TRIM_STOP_REASON_WORDING[reason];

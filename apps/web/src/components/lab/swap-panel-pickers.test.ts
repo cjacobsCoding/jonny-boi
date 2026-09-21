@@ -45,6 +45,7 @@ const RESULT = {
     paired: { bothWin: 30, baseOnly: 5, variantOnly: 15, bothLose: 50 },
     mcNemar: { statistic: 5, pValue: 0.01 },
     verdict: 'better',
+    verdictReason: 'significantGain',
     nGames: 100,
     scope: 'playset',
     copiesSwapped: 4,

@@ -456,13 +456,13 @@ function ReliabilityCell({
       <span className="manabase-table__pair">
         {fmt(base)} → <strong>{fmt(variant)}</strong>
       </span>
+      {/*
+        §3.179 — the reliability tag keeps its own vocabulary ("more reliable"
+        reads better here than "BETTER"), but the REASON is the shared one and
+        rides in the hover, so "no difference shown" can no longer hide "we did
+        not play enough games to see one".
+      */}
       {metric && (
-        {/*
-          §3.179 — the reliability tag keeps its own vocabulary ("more reliable"
-          reads better here than "BETTER"), but the REASON is the shared one and
-          rides in the hover, so "no difference shown" can no longer hide "we did
-          not play enough games to see one".
-        */}
         <span
           className={`verdict-tag verdict-tag--${tone} manabase-table__tag`}
           title={`paired p = ${pValueStr(metric.pValue)} over ${metric.nPaired} games — ${

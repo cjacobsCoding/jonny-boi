@@ -418,6 +418,7 @@ export async function runSwap(
   return {
     kind: 'swap',
     result: evaluation,
+    stats: statsOf(request),
     gamesPerSecond:
       elapsedSeconds > 0 ? (evaluation.nGames * GAMES_PER_PAIRED_GAME) / elapsedSeconds : 0,
     pilotId: request.pilotId,
