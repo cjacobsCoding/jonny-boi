@@ -236,7 +236,10 @@ describe('§3.179 acceptance 4 — the games-to-settle estimate', () => {
     const b = gamesToSettle(loose, 1000, STATS);
     const scaleA = (a as { totalPairedGames: number }).totalPairedGames / 100;
     const scaleB = (b as { totalPairedGames: number }).totalPairedGames / 1000;
-    expect(scaleA).toBeCloseTo(scaleB, 6);
+    // Within 1%, not exact: the estimate is rounded UP to a whole number of
+    // games, and a ceiling on 100 is a coarser step than a ceiling on 1,000.
+    // Asserting equality here would be asserting the rounding, not the rule.
+    expect(Math.abs(scaleA - scaleB) / scaleB, `${scaleA} vs ${scaleB}`).toBeLessThan(0.01);
   });
 
   it('a looser bar asks for fewer games than a stricter one', () => {

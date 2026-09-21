@@ -181,8 +181,18 @@ describe('§3.179 acceptance 1 — an unsure session deepens instead of stopping
     expect(first).toBe(sessionOptions.gamesPerCandidate);
     expect(deepest, 'the ladder never deepened').toBeGreaterThan(first);
     expect(result.gamesPerCandidate).toBe(deepest);
-    // ...and it deepened by the NAMED factor, not by some accident of arithmetic.
-    expect(deepest).toBe(Math.min(TRIM_DEEPEN.maxGamesPerCandidate, first * TRIM_DEEPEN.factor ** (depths.length - 1 - 1)));
+    // ...and it deepened by the NAMED factor, not by some accident of arithmetic:
+    // the DISTINCT depths, in order, are each `factor` times the one before.
+    const levels = [...new Set(depths)];
+    expect(levels.length, 'only one depth means it never deepened').toBeGreaterThan(1);
+    for (let i = 1; i < levels.length; i++) {
+      const previous = levels[i - 1] as number;
+      const current = levels[i] as number;
+      expect(current, `depth level ${i} did not grow by the named factor`).toBe(
+        Math.min(previous * TRIM_DEEPEN.factor, TRIM_DEEPEN.maxGamesPerCandidate),
+      );
+    }
+    expect(deepest).toBe(TRIM_DEEPEN.maxGamesPerCandidate);
   });
 
   it('every row really was unsure — otherwise this whole rig proves nothing', () => {
