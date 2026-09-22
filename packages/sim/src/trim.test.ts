@@ -45,6 +45,7 @@ import {
   nthCombination,
   prepareTrimRound,
   runTrimRound,
+  trimCoverage,
   trimCutSizeLadder,
   trimDeck,
   trimKindForCutSize,
@@ -578,6 +579,22 @@ describe('§3.180 acceptance 3 — the coverage line prints a denominator with i
     // ...and one out of range REPORTS rather than wrapping round.
     expect(nthCombination(7, 3, binomial(7, 3))).toBeUndefined();
     expect(nthCombination(7, 3, -1)).toBeUndefined();
+  });
+
+  it('a space too big to count REPORTS that, and does not hang trying to sweep it', () => {
+    // ⚠️ THIS TEST EXISTS BECAUSE OF A REAL HAZARD IN THIS FILE, not a
+    // hypothetical one. `binomial` returns Infinity past the safe-integer range
+    // rather than a silently wrong number — and the sweep picks a stride coprime
+    // with the space, which asks for gcd(Infinity, Infinity). `Infinity %
+    // Infinity` is NaN and `while (y !== 0)` never ends, so the generator would
+    // have spun forever on a deck large enough. The guard is that the sweep is
+    // skipped when the space cannot be indexed.
+    expect(binomial(100_000, 4)).toBe(Number.POSITIVE_INFINITY);
+    const coverage = trimCoverage('quads', 3, 100_000);
+    expect(coverage.possible).toBe(Number.POSITIVE_INFINITY);
+    expect(coverage.source, 'an uncountable space must not print a number').toContain(
+      'more than can be counted',
+    );
   });
 });
 
