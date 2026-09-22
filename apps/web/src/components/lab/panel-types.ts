@@ -3,6 +3,7 @@
  * Each panel receives the picked hero, the chosen opponents, the seed, and the
  * one sim-worker handle — so they all drive the SAME worker wrapper (DRY).
  */
+import type { VerdictBar } from '@jonny-boi/sim';
 import type { Deck } from '../../lib/deck.js';
 import type { SimDeckPayload } from '../../lib/sim-protocol.js';
 import type { SimWorkerApi } from '../../lib/useSimWorker.js';
@@ -36,6 +37,22 @@ export interface PanelProps {
    * AS PLAYED BY this pilot, not a property of the deck on its own.
    */
   readonly pilotId: string;
+  /**
+   * THE BAR EVERY VERDICT IN THE LAB IS READ AT (DESIGN §3.179). It sits beside
+   * the pilot and the seed for the same reason they do: it is part of the
+   * QUESTION, not a rendering preference. A result read at 0.10 is a different
+   * measurement from one read at 0.05, so it travels with the request and comes
+   * back stamped on the report.
+   */
+  readonly verdictBar: VerdictBar;
+  /**
+   * The other half of "how sure is sure enough?": the minimum paired games
+   * before any verdict but inconclusive. Separate from the bar because it is a
+   * separate question -- alpha is how unlikely the result must be, this is how
+   * much evidence there must be at all -- and answering only one of them is what
+   * left the Lab printing INCONCLUSIVE at every depth.
+   */
+  readonly verdictMinGames: number;
   readonly sim: SimWorkerApi;
   /**
    * Apply a tested swap to the hero deck, or `undefined` when the hero cannot be

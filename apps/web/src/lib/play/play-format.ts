@@ -224,6 +224,18 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
     }
     case 'choiceAbandoned':
       return { text: `${r.name(event.sourceInstanceId)} could not finish — ${event.reason}.`, tone: 'trigger' };
+    // §3.178 — the loop the engine found, and what its owner did with it. The
+    // repeat is the one line standing for a whole burst of replayed actions, so
+    // it states the count actually run and why it stopped short, if it did.
+    case 'comboWindowOpened':
+      return { text: `${r.playerName(event.player)} has found a loop: ${event.summary}.`, tone: 'trigger' };
+    case 'comboRepeated': {
+      const ran = event.completed === event.requested ? `${event.completed}` : `${event.completed} of ${event.requested}`;
+      const why = event.stoppedBecause === undefined ? '' : ` — stopped early: ${event.stoppedBecause}`;
+      return { text: `${r.playerName(event.player)} runs the loop ${ran} times${why}.`, tone: 'trigger' };
+    }
+    case 'comboDismissed':
+      return { text: `${r.playerName(event.player)} keeps stepping through the loop by hand.`, tone: 'trigger' };
     case 'actionRejected':
       // Surfaced separately in the UI (a toast), not in the running narrative.
       return null;

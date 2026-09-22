@@ -732,8 +732,39 @@ export type {
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,
+  RepeatComboAction,
+  DismissComboAction,
 } from './actions.js';
 export { DEFAULT_MANA_MODE } from './actions.js';
+
+// Infinite combos (DESIGN §3.178): the pure detector, its constants, and the window.
+export type {
+  ComboWindow,
+  ComboLoop,
+  ComboResourceDelta,
+  ComboResourceKind,
+  ComboResourceRule,
+  ComboSubject,
+  ComboSignature,
+  ComboHistoryEntry,
+  ComboRefusal,
+  ComboVerdict,
+} from './combo.js';
+export {
+  COMBO_MAX_CYCLE_ACTIONS,
+  COMBO_HISTORY_LENGTH,
+  COMBO_REPEAT_CAP,
+  COMBO_REPEAT_DEFAULT,
+  COMBO_RESOURCE_KINDS,
+  comboResourceKey,
+  parseComboResourceKey,
+  comboSignatureOf,
+  comboActionKey,
+  comboCycleKey,
+  findComboLoop,
+  describeComboDelta,
+  summarizeComboLoop,
+} from './combo.js';
 
 /**
  * Player-choice seam (DESIGN §3.11 "player choice during resolution"): a resolving

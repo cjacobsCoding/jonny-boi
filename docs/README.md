@@ -19,6 +19,8 @@ a session scratchpad does not survive the session. That is the whole reason this
 | [END-OF-GAME.md](END-OF-GAME.md) | games ending abruptly, negative life, an after-match stats screen | open |
 | [AI-CONDITIONAL-REMOVAL.md](AI-CONDITIONAL-REMOVAL.md) | the pilot aiming Fatal Push where it cannot kill | open |
 | [OFFLINE-AND-DISTRIBUTION.md](OFFLINE-AND-DISTRIBUTION.md) | offline on PC and mobile, Android builds, Fleet, the update button, bug reports to the NAS | open, 3 blocking unknowns |
+| [plans/lab-todo-plan.md](plans/lab-todo-plan.md) | the 2026-09-19 Lab wave — trim, manabase experiments, infinite combos, the gathered feedback | T/M/F shipped (§3.174–§3.177); **C stage 1 in review**, stages 2–3 open |
+| [plans/lab-tuning-plan.md](plans/lab-tuning-plan.md) | the 2026-09-20 follow-up — **"keep looking" stops after two rounds (found)**, INCONCLUSIVE meaning three different things, tunable tolerances, multi-card trim cuts | open, the bug is diagnosed in the plan |
 
 ## What every file in here does
 

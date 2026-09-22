@@ -70,6 +70,30 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.179',
+    date: '2026-09-21',
+    kind: 'fix',
+    title: 'INCONCLUSIVE now tells you which kind — and “keep looking” actually keeps looking',
+    summary:
+      'Two things you reported. First, “keep looking” in the Trim tool did a couple of waves and stopped: it '
+      + 'only knew how to widen from single cards to pairs, and once it ran out of those it gave up and said '
+      + '“exhausted”. It now goes DEEPER instead — same cards, more games each — and only stops when either '
+      + 'nothing can help or it runs out of the budget, and it tells you which of those happened. Second, '
+      + 'almost everything read INCONCLUSIVE, which was three different answers wearing one word: too few games '
+      + 'to say anything, a real effect it could not prove at this depth, or a genuine dead heat. Every row now '
+      + 'says which, and where more games would help it estimates how many. You can also pick the bar it judges '
+      + 'at — 90%, 95% or 99% — and the panel always states the bar a result was read at, so a loose run can '
+      + 'never be mistaken later for a strict one.',
+  },
+  {
+    section: '3.178',
+    date: '2026-09-20',
+    kind: 'app',
+    title: 'Infinite combos, stage 1 — the game notices your loop and offers to run it',
+    summary:
+      'Step through a loop twice in Solo or pass-and-play — tap for life, untap, tap again — and the board stops you: here are the pieces, here is what one time round changes (+1 life, +1 Saproling), how many more times? Up to 1,000, every trigger and state-based action as if you had clicked. A loop that changes nothing (tap one artifact to untap the other) is left alone, and so is one that would run out of something. "Repeat forever" is drawn but waits for the next stage.',
+  },
+  {
     section: '3.177',
     date: '2026-09-20',
     kind: 'app',

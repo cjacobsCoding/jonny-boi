@@ -13,7 +13,13 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { SAMPLE_DECKS, MANABASE_RECOMMENDATION_RULE, RELIABILITY_NOT_MEASURED, type ManabaseReport } from '@jonny-boi/sim';
+import {
+  SAMPLE_DECKS,
+  MANABASE_RECOMMENDATION_RULE,
+  RELIABILITY_NOT_MEASURED,
+  DEFAULT_STATS_CONFIG,
+  type ManabaseReport,
+} from '@jonny-boi/sim';
 
 const SELESNYA_BLINK = SAMPLE_DECKS.find((d) => d.name === 'Selesnya Blink')!;
 import { ManabasePanel } from './ManabasePanel.js';
@@ -60,6 +66,7 @@ const REPORT = {
         paired: { bothWon: 40, baseOnly: 10, variantOnly: 16, neither: 34 },
         mcNemar: { statistic: 1, pValue: 0.01, variantOnly: 16, baseOnly: 10, discordant: 26 },
         verdict: 'better',
+        verdictReason: 'significantGain',
         nGames: 100,
         scope: 'playset',
         copiesSwapped: 4,
@@ -71,9 +78,9 @@ const REPORT = {
         base: { games: 100, missedLandDrop: ci(0.2), heldLandGames: 1, colourScrew: ci(0.1), landsOnTurn4: mean(3.1) },
         variant: { games: 100, missedLandDrop: ci(0.18), heldLandGames: 0, colourScrew: ci(0.04), landsOnTurn4: mean(3.2) },
         metrics: [
-          { id: 'missedLandDrop', label: 'Missed a land drop (turns 2–4)', verdict: 'inconclusive', pValue: 0.5, nPaired: 100 },
-          { id: 'colourScrew', label: 'Colour-screwed (turn 3+)', verdict: 'better', pValue: 0.01, nPaired: 100 },
-          { id: 'landsOnTurn4', label: 'Lands at the start of turn 4', verdict: 'inconclusive', pValue: 0.4, nPaired: 100, meanDifference: mean(0.1) },
+          { id: 'missedLandDrop', label: 'Missed a land drop (turns 2–4)', verdict: 'inconclusive', verdictReason: 'notSignificant', pValue: 0.5, nPaired: 100 },
+          { id: 'colourScrew', label: 'Colour-screwed (turn 3+)', verdict: 'better', verdictReason: 'significantGain', pValue: 0.01, nPaired: 100 },
+          { id: 'landsOnTurn4', label: 'Lands at the start of turn 4', verdict: 'inconclusive', verdictReason: 'notSignificant', pValue: 0.4, nPaired: 100, meanDifference: mean(0.1) },
         ],
         notMeasured: RELIABILITY_NOT_MEASURED,
         notWorse: true,
@@ -100,6 +107,7 @@ const REPORT = {
     identicalGameSkipEnabled: true,
     runIndex: 0,
     fidelityCaveat: 'caveat',
+    stats: DEFAULT_STATS_CONFIG,
   },
   notMeasured: RELIABILITY_NOT_MEASURED,
 } as unknown as ManabaseReport;

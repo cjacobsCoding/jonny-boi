@@ -1235,11 +1235,19 @@ export const RULES_MANIFEST: RulesManifest = {
       'day/night cycle, and ' + noCardHasIt('daybound or nightbound card'),
   },
   '732': {
-    status: 'not-applicable',
-    reason:
-      'Taking shortcuts — a rule about human players agreeing to skip repetitive actions. The ' +
-      'engine\'s equivalent (auto-passing empty priority windows) is a UI affordance, tested in ' +
-      'apps/web/src/lib/play/auto-advance.test.ts, not a rule.',
+    status: 'cited',
+    suite: 'packages/core/src/combo-engine.test.ts',
+    what:
+      'CR 732.4 — a loop of optional actions all under one player\'s control is shortcut by that ' +
+      'player choosing a number (DESIGN §3.178): the engine finds the demonstrated loop, offers ' +
+      '`repeatCombo`, applies the recorded cycle that many times through the ordinary action ' +
+      'funnel, and stops early — saying so — when an iteration is refused or the game ends.',
+    shortfall:
+      'CR 732.2b/732.5 — the OTHER player may interrupt a shortcut at any iteration, and a loop ' +
+      'both players act in is shortcut by a different procedure. Neither is modelled: a loop the ' +
+      'other player did anything but pass in is not offered at all, and the opponent is taken to ' +
+      'keep passing for the whole repeat. Auto-passing empty priority windows remains a UI ' +
+      'affordance (apps/web/src/lib/play/auto-advance.test.ts), not a rule.',
   },
   '733': {
     status: 'cited',
@@ -1409,6 +1417,10 @@ export const ACTION_RULES: ActionRules = {
   declareAttackers: '508.1a',
   declareBlockers: '509.1a',
   answerChoice: '601.2', // the engine's transport for every mid-announcement/resolution choice
+  // §3.178 — CR 732.4: a loop of optional actions under one player's control is
+  // shortcut by that player naming a number; declining to name one is the same rule.
+  repeatCombo: '732.4',
+  dismissCombo: '732.4',
 };
 
 /**

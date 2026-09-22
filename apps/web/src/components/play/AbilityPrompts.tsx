@@ -299,8 +299,12 @@ function AbilityCandidate({
  * ⚠️ The placeholder and the face keep the SAME footprint, or the dialog jumps
  * as a list mixes seats with permanents; `ability-prompts.css` gives both the
  * card aspect off one width variable per variant.
+ *
+ * Exported for the ONE other prompt that lists cards it did not offer as
+ * choices — `ComboPrompt` (§3.178) shows the pieces of a found loop — so a
+ * prompt card is drawn one way on this board (rule 12), not re-derived there.
  */
-function PromptFace({
+export function PromptFace({
   target,
   name,
   faces,

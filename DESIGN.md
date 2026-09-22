@@ -11369,6 +11369,99 @@ full face), `graveyard-both-seats.test.ts`, `auto-advance.test.ts` (the forced d
 a real block still stops), `right-overlay-inset.test.ts` (the feed pins to nothing). Live checks are
 the table's own column.
 
+### 3.178 Infinite combos, stage 1 — the loop is found and can be repeated — ✅ done
+
+> "if it detects that you have been stepping through what results as an infinite combo, it should do a
+> pop up that highlights the infinite combo, and lets you agree to trigger it infinitely or not — it should
+> also have options to only trigger it a specific amount of times — up to some large number limit" …
+> "Some infinite combos dont actually yield an infinite change — like tapping an artifact to untap another,
+> and tapping that one to untap the first — shouldn't be considered an infinite combo worth considering
+> because there's no net infinite change."
+
+Stage 1 of Lane C (`docs/plans/lab-todo-plan.md`): the engine notices the loop a human is stepping through,
+names it, and runs it N more times on request. Infinity as a VALUE (∞ life, an ∞ token cohort) is stage 2;
+the prompt already carries that option, disabled and labelled *coming next*, so the dialog's shape is final.
+
+**The definition, as data.** `packages/core/src/combo.ts` projects a state onto a signature split in two:
+`structure` — what must be IDENTICAL for the same actions to be legal again and do the same thing (every
+non-token permanent by definition, controller, tapped, summoning-sick, marked damage and attachment as a
+sorted multiset; the stack; whose turn and step; the graveyards and exiles as definition multisets; the
+declared combat) — and `resources`, the counts a loop may MOVE: life, poison, mana by colour, cards in hand
+and library per player, tokens per definition per controller, counters per permanent per kind. A
+`ComboLoop` is the last *k* applied actions (k ≤ `COMBO_MAX_CYCLE_ACTIONS` = 30) equalling the *k* before
+them, one structure at all three boundaries, and at least one resource moved by the same non-zero delta over
+both cycles. Refusals are a closed vocabulary (`noRepeat`, `noActor`, `sharedLoop`, `structureMoved`,
+`deltaDiffers`, `noNetChange`, `consumesFuel`); untap ↔ untap is `noNetChange` and stays the CR 104.4b
+matter it is today. `COMBO_RESOURCE_KINDS` is the one table both the fuel rule and the prompt's phrasing
+read: a loop that SPENDS one of its owner's finite resources every cycle — pays {1} from a floating pool,
+discards, sacrifices tokens, draws down the library, pays life — is not offered as infinite, because it ends
+when the resource does. The opponent losing the same resource is the loop's effect, never its fuel.
+
+**Two decisions the brief left open, and why they went this way.**
+- *The cycle is BOTH players' actions.* In a real game an ability resolves only after both players pass, so
+  the human's loop against the computer reads `activate · pass · (opponent) pass · …`, and the action that
+  completes the second cycle is usually the opponent's pass. The opponent's passes are therefore part of
+  the recorded cycle and of the replay — which is exactly CR 732.4's shortcut, the opponent having declined
+  to interrupt two demonstrated iterations. A cycle the other player did anything but pass in is refused
+  (`sharedLoop`); the manifest's CR 732 entry moved from *not-applicable* to *cited*, with 732.2b/732.5
+  (the interrupt, the two-player loop) named as the shortfall.
+- *`RulesConfig.comboDetectionSeats` is a list of seats, not a boolean.* The engine cannot tell a human from
+  a pilot and the completing action may be the pilot's, so a per-action boolean either opened windows for
+  the computer or missed the human's loop. The Play session names its human seats (`playRulesFor`: both in
+  pass-and-play, one in Solo); `DEFAULT_RULES` names none, so every simulation records nothing, clones
+  nothing (`comboHistory` / `comboWindow` / `comboDismissed` are written only when a seat is named) and
+  plays byte-identically. A loop owned by an unlisted seat is never offered, however it was completed.
+
+**The window.** `applyAction`'s tail records each settled action and looks for the loop; a find opens
+`GameState.comboWindow` for the owner, hands them the floor and remembers the priority holder and pass
+count it displaced. While open the owner's only legal actions are `repeatCombo { times }` (1 ≤ times ≤
+`COMBO_REPEAT_CAP` = 1,000 — decisive in any real game, and thirty thousand applications at most, which
+the board finishes well inside a second) and `dismissCombo`. A repeat re-applies the recorded cycle through
+`applyActionInPlace` on the draft, so every cost, trigger, state-based action and event happens as if
+clicked; iterations are all-or-nothing (a checkpoint per cycle, rolled back if an action is refused), a
+recorded `answerChoice` is re-aimed at the question actually open, the game ending mid-loop stops it, and
+`comboRepeated` says how many whole cycles ran and why it stopped. A dismissal restores the floor exactly
+and records the cycle's rotation-free key in `comboDismissed` for the turn — the next action by hand makes
+the last 2k entries a *rotation* of the same loop, which is why the key is rotation-free. Both memories
+reset as a turn begins.
+
+**The board.** `ComboPrompt` (`apps/web/src/components/play/ComboPrompt.tsx`, view model in
+`lib/play/combo-view.ts`) shows the pieces of the loop as their real faces, the change per cycle in words
+(`+1 life, +1 Saproling per cycle` — one phrasing funnel, `describeComboDelta`), a count starting at
+`COMBO_REPEAT_DEFAULT` = 100 with the cap said out loud, and three answers: *Repeat N times*, *Repeat
+forever* (disabled, *coming next*), *Not now*. The pieces light up on the board through the existing
+selection seam (selected + pulsing, marker `∞ loop`), the other seat is told who is deciding, the board goes
+quiet exactly as it does for a parked choice, and the log gains three lines. Mounted in `PlayBoard.tsx`
+beside the other prompts (the `board-scene.test.ts` adoption table has the row). The persisted-game rebuild
+derives the same rules from its record, so a recorded `repeatCombo` replays legally.
+
+**Verification.** `core/combo.test.ts` (18): the life-gain loop found with `+2 life`; untap ↔ untap refused
+`noNetChange`; a sacrifice refused `structureMoved`; differing deltas refused; the fuel rule (own mana
+spent) refused and the opponent's life loss accepted; the opponent's passes inside the cycle; a shared loop
+refused; `answerChoice` compared by payload; the smallest k reported; the cap honoured (31 not found, 30
+found); tokens counted in resources and absent from structure; counters keyed and labelled by their host.
+`core/combo-engine.test.ts` (12): a hand-built two-card loop (`{T}: gain 1 life` + `{T}: untap target
+permanent and this`) stepped through twice through `applyAction` opens the window with `+1 life` after six
+recorded actions; the owner's menu is exactly `dismissCombo`/`repeatCombo` and every other action is refused;
+`repeatCombo 50` leaves life +50, both pieces untapped, the stack empty, the window closed (measured: 801
+events, 9.9 ms on this box); the cap and the count are validated; a repeat resets the memory; dismissal
+survives a third cycle by hand and is forgotten next turn; the no-op untap loop opens nothing in four cycles;
+a seat the rules do not name is never offered; the default rules record nothing at all; a drain loop that
+kills the opponent stops at *1 of 50, the game ended*; a loop with a targeted trigger (an `answerChoice`
+every cycle) is found and replays with each iteration's answer re-aimed. `web/combo-view.test.ts` (4),
+`web/combo-prompt.test.ts` (8): the prompt's markup from a hand-built view, and — the reach half — the REAL
+`PlayBoard` on a REAL session whose state carries a window: the prompt for the owner, `∞ loop` on the tile,
+the wait text for the other seat, the quiet board. Sabotaged red: removing the `noNetChange` refusal and
+running `times − 1` iterations failed 5 of 30 core tests; removing the mount failed the reach tests and the
+adoption row.
+
+**Not in stage 1, said plainly.** The ONLINE board: the protocol's `MaskedGameView` does not carry the
+window (the transport carries the two action kinds already, and the server forwards any kind), so mounting
+the prompt there needs a `comboWindow` field on the masked view, `Room` running with both seats named, and
+the mount — a protocol version, not a one-liner; hotseat and Solo only for now. The opponent's CR 732.2b
+interrupt (a human opponent is taken to keep passing for the whole repeat). *Repeat forever* — stage 2.
+A loop that is lethal but finite (pay 1 life: drain 2) is refused as `consumesFuel` and must be stepped
+through by hand; a bounded-shortcut prompt honestly labelled *N times at most* is the natural follow-up.
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
@@ -13338,6 +13431,160 @@ generator's ranking under the measured one — WHICH basic to cut is the colour-
 and a round alternates so the two compose. Reliability is read on every manabase-phase move but never
 gates an accept. Panel settings are component state like the other tabs'. A search that is interrupted
 keeps its state only while the tab is mounted — it is resumable within a session, not across a reload.
+
+### 3.179 INCONCLUSIVE says which kind, and "keep looking" keeps looking — the verdict reason, the tunable bar, and DEPTH as the lever — ✅ done
+
+> "-tolerances for trim, manabase, and search may be too tight currently... And should be tunable.
+> Testing this, almost every result is showing inconclusive."
+>
+> "-setting the settings in the Trim tool that should keep it looking until it reaches its target
+> doesnt actually make it reach its target - it will do a couple waves then stop for some reason"
+
+Two reports, one defect wearing two hats: **a result that reports something other than what
+happened.** The planning measurement is `docs/plans/lab-tuning-plan.md`; what follows is what
+shipped.
+
+#### The measurement, first
+
+`decideVerdict` (`packages/sim/src/swap.ts`) was seven lines, and **three different situations left
+it as one word**: a sample too small to say anything (`n < minGamesForVerdict`), a real-but-unproven
+effect (`p >= alpha`), and a dead heat (`delta === 0`) all printed INCONCLUSIVE. The three want
+opposite responses — *spend more games*, *the bar is the problem*, *there is nothing here* — and the
+panel gave the reader no way to tell which one they were looking at.
+
+One layer up, `trimDeck` widened through `TRIM_ROUND_KINDS = ['singles', 'pairs']` and treated the
+end of that two-row table as the end of the search. **"Keep looking" therefore got exactly two
+rounds**, which is the "couple waves then stop". The two compound: `runTrimRound` set
+`verdict: winner ? 'improved' : 'exhausted'`, and with every row inconclusive there is never a
+winner, so every round ended `exhausted`, the ladder widened once, and the session stopped having cut
+**zero** cards while printing a word that reads as *nothing helps* — when what happened was *nothing
+was measured deeply enough to tell*.
+
+**The honest diagnosis on the tolerance, which is not what he guessed and is recorded because it
+changed the shape of the fix.** In the §3.177 joint run on Thune's Life, **863 games** were spread
+over 5 land counts × 4 partners ≈ **20 arms ≈ 43 paired games each**, at observed deltas of
+−4.4% / −8.7% / +3.3% / +6.7%. Forty-three paired games cannot clear `alpha = 0.05` at those effect
+sizes under McNemar whatever the bar is set to — the discordant-pair count is simply too small. The
+leading cause of the wall of INCONCLUSIVE is **budget spread across too many arms**, not the 0.05.
+So loosening alpha alone would have promoted noise to "better" and started recommending swaps that
+are not improvements — the exact failure the paired A/B exists to prevent. The tunable ships because
+0.10 is a legitimate exploration bar *as long as the panel says that is the bar*; the thing that
+actually answers him is the third item, the games-to-settle number, which turns a dead end into an
+action.
+
+#### What shipped
+
+**The funnel that decides is the funnel that explains.** `decideVerdict` returns a verdict AND a
+reason, out of one closed table (`SWAP_VERDICT_REASONS`): `tooFewGames` · `notSignificant` ·
+`deadHeat` · `significantGain` · `significantLoss`. A reason is a ROW — adding one is a row, not a
+branch — and each row carries the verdict it implies, its wording, and whether more games could
+settle it. The vocabulary is CLOSED: a reason outside the table reports honestly rather than being
+widened to the nearest thing that exists. Every consumer renders the reason and **nobody re-derives
+it**, because two places that answer "why is this inconclusive?" will eventually answer it
+differently and the bug will be blamed on neither.
+
+**`alpha` and `minGamesForVerdict` are Lab settings**, persisted with the other Lab settings, with
+`DEFAULT_STATS_CONFIG` still the default. **`z` is DERIVED from alpha** through one quantile
+function, never entered separately — they are one confidence level, and two fields that can disagree
+are a bug waiting to be filed. The panel states the bar it used in words next to the verdict, so a
+result read at 0.10 can never later be mistaken for one read at 0.05.
+
+**The games-to-settle estimate is computed from the DISCORDANT PAIR COUNTS**, because under McNemar
+the discordant pairs are what carry the signal and the win-rate delta does not. Holding the observed
+split, the continuity-corrected statistic scaled by a factor k is `(|b−c|·k − 1)² / ((b+c)·k)`, and
+the smallest k clearing the critical value is the larger root of `A²k² − (2A + X·D)k + 1 = 0`. When
+`|b − c| = 0` there is **no estimate and the field is ABSENT, not zero** — a dead heat has no N, and
+printing 0 would read as "already settled". It is an estimate and the panel says so; it is never
+printed as a promise.
+
+**`TrimStopReason` splits, because `'exhausted'` covered two opposite situations.** The closed set is
+`target-reached` · `awaiting-apply` · `no-improvement-conclusive` (nothing left to try and the rows
+were conclusive) · `budget-exhausted` (out of budget with rows still unsure) · `paused` (the user's
+setting). Each has a row in `TRIM_STOP_REASON_WORDING`, and a test enumerates the reasons and fails
+if one has no wording.
+
+**The lever after the kinds run out is DEPTH, not more kinds.** When a round ends with no winner and
+`TRIM_ROUND_KINDS` is exhausted, the loop asks whether the round was *unsure* — whether any row's
+reason says more games could settle it. If it was, `gamesPerCandidate` grows by a named factor up to
+a named cap and the session's game budget, the kind ladder resets, and the search continues.
+
+> ⚠️ It deepens the WHOLE round rather than hand-picking the best inconclusive rows, and that is a
+> deliberate departure from the plan's wording. `driveAdaptiveSearch` is successive halving: giving
+> the round more budget already concentrates games on the survivors. A second site choosing which
+> candidates deserve depth would be a second answer to a question the ladder already answers.
+
+**When the rows are CONCLUSIVE and none is better, the search is genuinely over** and stops
+immediately with `no-improvement-conclusive`. That is not a nicety — it is the bound that keeps the
+fix from becoming an infinite loop, and it is tested as such. `keep-looking` is not permission to run
+forever: `TrimBudget` (paired games and seconds) is the boundary, and hitting it is a REPORTED stop
+reason, never a silent one.
+
+#### Acceptance
+
+Item 3 — the ladder:
+
+1. A rigged session whose rows are all inconclusive and whose deck is above target does **not** stop
+   after two rounds: it deepens, and the test asserts `gamesPerCandidate` actually grew.
+2. A rigged session whose rows are conclusively not-better stops immediately with the *conclusive*
+   stop reason — deepening a settled question is waste, and this is the check that keeps the fix from
+   becoming an infinite loop.
+3. The budget boundary stops the session with its own reason, and the deck is returned as it stands.
+4. Each stop reason renders its own words; a test enumerates the reasons and fails if one has no
+   wording — the guard against this class returning.
+5. Driven for real on Caleb's deck: a `keep-looking` session that previously stopped after two rounds
+   now either reaches the target or stops with a reason that names the budget.
+
+Item 2 — the verdict:
+
+6. Each of the three inconclusive situations is reproduced from a hand-built input and reports its own
+   reason: `n = 29` → `tooFewGames`; `n = 400, p = 0.31` → `notSignificant`; `delta = 0` → `deadHeat`.
+7. A test enumerates the call sites of `decideVerdict` and fails if one renders the verdict without
+   the reason — the guard that fails if this class comes back.
+8. `alpha` set to 0.10 flips a verdict that reads `notSignificant` at 0.05, the panel states 0.10,
+   and `z` moves with it (the interval width changes).
+9. The games-to-settle estimate, on a rigged split with a known answer, lands within a stated
+   tolerance of it — and is absent, not zero, when there is no estimate.
+10. Driven for real: a Lab run whose table previously read all-INCONCLUSIVE now reads a reason on
+    every row.
+
+#### What the Lab actually did, driven for real
+
+A `keep-looking` session on a 63-card deck, 11 workers, the Lookahead pilot. **Before
+§3.179 this was two rounds and a stop.** It now ran **8 rounds**, deepening
+**60 → 120 → 240 → 480** games per candidate, and stopped with *"Out of budget, still
+unsure — The session hit its game or time budget with rows it still could not read.
+This is NOT 'nothing helps' — raise the budget or the depth to find out which."*
+
+Every row of the table read a reason beside its verdict rather than a bare
+INCONCLUSIVE, with the games-to-settle estimate scaling sensibly with the effect it
+was measuring — `−1× Eternal Witness` at −5.9% wanted **~501 more** paired games,
+`−1× Llanowar Elves` at −1.5% wanted **~7,643**. A smaller effect costs more to
+prove, which is the arithmetic being honest.
+
+⚠️ **That run is also what found the budget bug.** It overran its 40,000-game budget
+to **72,162** before stopping, because `stepAfterRound` tested the budget only on the
+DEEPEN branch while `trimDeck` tests it at the top of every round — so the Lab could
+still widen singles → pairs after the budget was gone. Two loops answering "can I
+afford another round?" differently is exactly the divergence rule 12 warns about.
+`trim-session-parity.test.ts` is the guard, and it enumerates `TRIM_ROUND_KINDS`
+rather than hand-listing them so a third kind cannot ship with a quiet exemption.
+
+#### Left out, on purpose
+
+The Lab's pinned progress bar is **item 4** of the same plan, recorded there with its
+measurement and deliberately not built here — it touches `LabView.tsx` and the Lab's
+stylesheet, and folding it in would mean a failure in either could not be attributed
+to one of them.
+
+The games-to-settle estimate is the RAW one on an evaluation and the Holm-effective
+one inside a family; neither models the roster shrinking as candidates are
+eliminated, so it is an estimate and every surface says so.
+
+Multi-card cuts (`k > 1` in one round) are item 1 of the same plan and a LATER lane — this section
+does not build them and does not make them harder to build. Whether Suggest and the manabase sweep
+are thin for the same budget-spread reason the joint search was is **NOT CHECKED**: the diagnosis
+above was measured on the joint search's numbers only, and generalising it without measuring would be
+exactly the substitution this project's rule 11 forbids.
 
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.

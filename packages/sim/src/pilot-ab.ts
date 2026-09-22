@@ -74,7 +74,7 @@ import type { Pilot } from '@jonny-boi/ai';
 import type { LoadedDeck } from './deck.js';
 import { gameSeedFor, makeSeats, runMatchup, type RunOptions } from './matchup.js';
 import type { MatchResult } from './match.js';
-import { decideVerdict, type SwapVerdict } from './swap.js';
+import { decideVerdict, type SwapVerdict, type SwapVerdictReason } from './swap.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, type SimConfig, type StatsConfig } from './config.js';
 import { mcNemarTest, wilsonInterval, type McNemarResult, type PairedTable, type ProportionCI } from './stats.js';
 
@@ -258,6 +258,12 @@ export interface PilotAbResult {
   readonly mcNemar: McNemarResult;
   readonly pValue: number;
   readonly verdict: PilotAbVerdict;
+  /**
+   * WHY that verdict (DESIGN §3.179), in the shared reason vocabulary. The
+   * verdict word is remapped for pilots; the reason is not, because "too few
+   * games" does not change meaning with the thing being measured.
+   */
+  readonly verdictReason: SwapVerdictReason;
   readonly perDeck: readonly PilotAbDeckRow[];
   /** True when both sides ran the same pilot id — the balance control. */
   readonly control: boolean;
@@ -498,10 +504,13 @@ export function finishPilotAb(input: FinishPilotAbInput): PilotAbResult {
   // The verdict rule is `decideVerdict`'s, unchanged: significance AND a minimum
   // sample, with the sign of the effect choosing the direction. The sample is
   // counted in matched SLOTS, because that is the independent unit here.
-  const verdict =
-    PILOT_VERDICT_OF[
-      decideVerdict(shareA.p - EVEN_SHARE, mcNemar.pValue, slots.total, stats.alpha, stats.minGamesForVerdict)
-    ];
+  const decision = decideVerdict(shareA.p - EVEN_SHARE, mcNemar.pValue, slots.total, stats.alpha, stats.minGamesForVerdict);
+  const verdict = PILOT_VERDICT_OF[decision.verdict];
+  // ⚠️ The pilot surface remaps the VERDICT into its own vocabulary, but the
+  // REASON is vocabulary-free — "too few games" means the same thing whether the
+  // thing measured is a card swap or a pilot — so it is carried through
+  // unmapped. Mapping it would be a second table to keep in step with the first.
+  const verdictReason = decision.reason;
 
   return {
     pilotA: input.pilotAId,
@@ -518,6 +527,7 @@ export function finishPilotAb(input: FinishPilotAbInput): PilotAbResult {
     mcNemar,
     pValue: mcNemar.pValue,
     verdict,
+    verdictReason,
     perDeck: input.decks.map((deck, i) => {
       const t = totals.perDeck[i] as DeckTally;
       return Object.freeze({

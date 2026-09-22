@@ -35,6 +35,7 @@ import {
   type SwapScope,
 } from './config.js';
 import {
+  chiSquare1dfUpperTail,
   mcNemarTest,
   wilsonInterval,
   type McNemarResult,
@@ -100,6 +101,159 @@ export function cutOutRefs(swap: CardSwap): readonly string[] {
 /** The 'better' / 'worse' / 'inconclusive' call. */
 export type SwapVerdict = 'better' | 'worse' | 'inconclusive';
 
+/**
+ * WHY the verdict came out the way it did — a CLOSED vocabulary (DESIGN §3.179).
+ *
+ * ⚠️ THE DEFECT THIS EXISTS TO END. `decideVerdict` used to return a
+ * `SwapVerdict` alone, and THREE different situations came out of it as the one
+ * word INCONCLUSIVE: a sample too small to say anything, a real-but-unproven
+ * effect, and a dead heat. The reader could not tell which they were looking at,
+ * and the three want OPPOSITE responses — spend more games · the bar is the
+ * problem · there is nothing here. A result that reports something other than
+ * what happened is this project's oldest defect class; the fix is always the
+ * same, which is that the funnel that decides is the funnel that explains.
+ *
+ * A reason is a ROW in `SWAP_VERDICT_REASON_ROWS`, never a branch at a render
+ * site. Adding one is a row.
+ */
+export const SWAP_VERDICT_REASONS = [
+  'tooFewGames',
+  'deadHeat',
+  'notSignificant',
+  'significantGain',
+  'significantLoss',
+] as const;
+export type SwapVerdictReason = (typeof SWAP_VERDICT_REASONS)[number];
+
+/** One row of the reason table: what it means, how it reads, and what to do about it. */
+export interface SwapVerdictReasonRow {
+  readonly reason: SwapVerdictReason;
+  /** The verdict this reason ALWAYS accompanies — the table is the mapping. */
+  readonly verdict: SwapVerdict;
+  /** Two or three words, for a table cell beside the verdict tag. */
+  readonly label: string;
+  /**
+   * One sentence, with `{n}` / `{minGames}` / `{alpha}` / `{p}` filled by
+   * `explainVerdictReason` from the numbers the decision actually used. A
+   * TEMPLATE and not a function, so the wording is DATA that every surface reads
+   * and nobody paraphrases into a second, drifting copy.
+   */
+  readonly template: string;
+  /**
+   * Whether playing more games could still change this answer. Read by the trim
+   * ladder to decide whether a round that found no winner has learned "nothing
+   * helps" or has learned NOTHING — the distinction item 3 turns on.
+   */
+  readonly moreGamesCouldSettle: boolean;
+}
+
+export const SWAP_VERDICT_REASON_ROWS: readonly SwapVerdictReasonRow[] = Object.freeze([
+  Object.freeze({
+    reason: 'tooFewGames' as const,
+    verdict: 'inconclusive' as const,
+    label: 'too few games',
+    template: 'Only {n} paired games — under the {minGames} this Lab requires before it will call a swap either way.',
+    moreGamesCouldSettle: true,
+  }),
+  Object.freeze({
+    reason: 'deadHeat' as const,
+    verdict: 'inconclusive' as const,
+    label: 'dead heat',
+    template:
+      'A dead heat: over {n} paired games the two decks won exactly as often, so there is no direction to measure and more games would not create one.',
+    moreGamesCouldSettle: false,
+  }),
+  Object.freeze({
+    reason: 'notSignificant' as const,
+    verdict: 'inconclusive' as const,
+    label: 'not proven at this depth',
+    template: 'p = {p} against a bar of {alpha} — there may well be an effect here, but {n} paired games cannot prove it.',
+    moreGamesCouldSettle: true,
+  }),
+  Object.freeze({
+    reason: 'significantGain' as const,
+    verdict: 'better' as const,
+    label: 'proved better',
+    template: 'p = {p} clears the {alpha} bar over {n} paired games, and the deck won MORE often with the change.',
+    moreGamesCouldSettle: false,
+  }),
+  Object.freeze({
+    reason: 'significantLoss' as const,
+    verdict: 'worse' as const,
+    label: 'proved worse',
+    template: 'p = {p} clears the {alpha} bar over {n} paired games, and the deck won LESS often with the change.',
+    moreGamesCouldSettle: false,
+  }),
+]);
+
+/** The reason table by key — one lookup, so no surface re-derives the mapping. */
+export const SWAP_VERDICT_REASON_BY_KEY: Readonly<Record<SwapVerdictReason, SwapVerdictReasonRow>> = Object.freeze(
+  Object.fromEntries(SWAP_VERDICT_REASON_ROWS.map((row) => [row.reason, row])) as Record<
+    SwapVerdictReason,
+    SwapVerdictReasonRow
+  >,
+);
+
+/** The numbers a reason's wording is filled from — exactly what the decision saw. */
+export interface VerdictReasonContext {
+  readonly nGames: number;
+  readonly minGames: number;
+  readonly alpha: number;
+  readonly pValue: number;
+}
+
+/** p-values below this print as "<0.001" rather than as a row of zeroes. */
+export const SMALLEST_PRINTED_P_VALUE = 0.001;
+
+/** How many decimals a printed p-value carries. */
+export const P_VALUE_DECIMALS = 3;
+
+/** Format a p-value the one way every surface prints it. */
+export function formatPValue(pValue: number): string {
+  if (!Number.isFinite(pValue)) return 'n/a';
+  if (pValue < SMALLEST_PRINTED_P_VALUE) return `<${SMALLEST_PRINTED_P_VALUE}`;
+  return pValue.toFixed(P_VALUE_DECIMALS);
+}
+
+/**
+ * Fill a reason's template — THE one place a reason becomes a sentence.
+ *
+ * A placeholder with no value is left visible rather than silently blanked: an
+ * empty string in a sentence reads as finished prose and hides the bug, which is
+ * the same "reports something other than what happened" shape this file exists
+ * to fix.
+ */
+export function explainVerdictReason(reason: SwapVerdictReason, context: VerdictReasonContext): string {
+  const row = SWAP_VERDICT_REASON_BY_KEY[reason];
+  if (!row) throw new Error(`no verdict-reason row for ${String(reason)}`);
+  const values: Readonly<Record<string, string>> = {
+    n: String(context.nGames),
+    minGames: String(context.minGames),
+    alpha: String(context.alpha),
+    p: formatPValue(context.pValue),
+  };
+  return row.template.replace(/\{(\w+)\}/gu, (whole, key: string) => values[key] ?? whole);
+}
+
+/** What `decideVerdict` returns: the call, and why it is that call. */
+export interface VerdictDecision {
+  readonly verdict: SwapVerdict;
+  readonly reason: SwapVerdictReason;
+}
+
+/**
+ * HOW MANY MORE PAIRED GAMES would be expected to settle a result — an estimate,
+ * never a promise, and the thing that turns a dead end into an action.
+ */
+export interface GamesToSettleEstimate {
+  /** Additional paired games beyond the ones already played. */
+  readonly additionalPairedGames: number;
+  /** The total the run would then have played. */
+  readonly totalPairedGames: number;
+  /** The bar the estimate was computed against, so it self-describes. */
+  readonly alpha: number;
+}
+
 /** The full verdict the lab returns for a swap. */
 export interface SwapEvaluation {
   readonly baseDeck: string;
@@ -124,6 +278,25 @@ export interface SwapEvaluation {
   readonly mcNemar: McNemarResult;
   /** The verdict. */
   readonly verdict: SwapVerdict;
+  /**
+   * WHY the verdict is what it is (DESIGN §3.179). Carried on the evaluation so
+   * every surface RENDERS it rather than re-deriving it — two places answering
+   * "why is this inconclusive?" would eventually answer it differently, and the
+   * bug would be blamed on neither.
+   */
+  readonly verdictReason: SwapVerdictReason;
+  /**
+   * How many MORE paired games would be expected to settle this, computed from
+   * the OBSERVED DISCORDANT SPLIT (McNemar's signal), not from the win-rate
+   * delta. **Absent — not zero — when the split gives no estimate**: an even
+   * split has no direction, and printing 0 would read as "already settled".
+   *
+   * ⚠️ It is the RAW estimate, against `alpha` as configured and BEFORE any
+   * multiple-comparisons correction. `finishSuggestionRun` recomputes it against
+   * the Holm-effective bar for rows inside a family, because a family's rows
+   * need more than the raw bar and an unadjusted number would understate it.
+   */
+  readonly gamesToSettle?: GamesToSettleEstimate;
   /** Paired games actually played (per opponent × games). */
   readonly nGames: number;
   /** Whether one copy or the whole playset was swapped. */
@@ -435,7 +608,13 @@ export function summarizePairedSwap(input: PairedSwapSummaryInput): SwapEvaluati
   const baseWinRate = wilsonInterval(baseWins, n, stats.z);
   const variantWinRate = wilsonInterval(variantWins, n, stats.z);
   const delta = variantWinRate.p - baseWinRate.p;
-  const verdict = decideVerdict(delta, mcNemar.pValue, n, stats.alpha, stats.minGamesForVerdict);
+  const decision = decideVerdict(delta, mcNemar.pValue, n, stats.alpha, stats.minGamesForVerdict);
+  // Offered only where more games could actually change the answer. A settled
+  // row with a games-to-settle number beside it would be an invitation to waste
+  // the budget, and a dead heat has no estimate to give in the first place.
+  const settle = SWAP_VERDICT_REASON_BY_KEY[decision.reason].moreGamesCouldSettle
+    ? gamesToSettle(paired, n, stats)
+    : undefined;
 
   return {
     baseDeck: input.baseDeckName,
@@ -450,7 +629,9 @@ export function summarizePairedSwap(input: PairedSwapSummaryInput): SwapEvaluati
     pValue: mcNemar.pValue,
     paired,
     mcNemar,
-    verdict,
+    verdict: decision.verdict,
+    verdictReason: decision.reason,
+    ...(settle ? { gamesToSettle: settle } : {}),
     nGames: n,
     scope: input.scope ?? DEFAULT_SWAP_SCOPE,
     copiesSwapped: input.copiesSwapped ?? 1,
@@ -458,10 +639,25 @@ export function summarizePairedSwap(input: PairedSwapSummaryInput): SwapEvaluati
 }
 
 /**
- * Decide the verdict from the paired test. We require BOTH statistical
- * significance (p < alpha) AND a minimum sample before claiming better/worse; the
- * sign of the win-rate delta picks the direction. Otherwise 'inconclusive' — the
- * honest default the product never overclaims past.
+ * Decide the verdict from the paired test, AND say why (DESIGN §3.179).
+ *
+ * We require BOTH statistical significance (p < alpha) AND a minimum sample
+ * before claiming better/worse; the sign of the win-rate delta picks the
+ * direction. Otherwise 'inconclusive' — the honest default the product never
+ * overclaims past. What changed in §3.179 is that 'inconclusive' now arrives
+ * with the reason it happened attached.
+ *
+ * ⚠️ THE VERDICTS ARE UNCHANGED. Every (delta, p, n) triple gets exactly the
+ * verdict the five-line original gave it — `swap-verdict-reason.test.ts` pins
+ * that against a re-statement of the old logic over a grid, so this stays a
+ * strictly ADDITIVE change and no shipped result moves.
+ *
+ * ⚠️ WHY `deadHeat` IS TESTED BEFORE `notSignificant`. An exactly even split has
+ * `p = 1` under McNemar, so it would otherwise report "not proven at this depth"
+ * — which invites the reader to spend more games on a question more games cannot
+ * answer, and `gamesToSettle` would (correctly) have no number to offer beside
+ * it. The dead heat IS what happened, so it is what gets reported. The verdict
+ * is 'inconclusive' either way, so precedence here changes only the explanation.
  */
 export function decideVerdict(
   delta: number,
@@ -469,10 +665,80 @@ export function decideVerdict(
   nGames: number,
   alpha: number,
   minGames: number,
-): SwapVerdict {
-  if (nGames < minGames) return 'inconclusive';
-  if (pValue >= alpha) return 'inconclusive';
-  if (delta > 0) return 'better';
-  if (delta < 0) return 'worse';
-  return 'inconclusive';
+): VerdictDecision {
+  if (nGames < minGames) return { verdict: 'inconclusive', reason: 'tooFewGames' };
+  if (delta === 0) return { verdict: 'inconclusive', reason: 'deadHeat' };
+  if (pValue >= alpha) return { verdict: 'inconclusive', reason: 'notSignificant' };
+  return delta > 0
+    ? { verdict: 'better', reason: 'significantGain' }
+    : { verdict: 'worse', reason: 'significantLoss' };
+}
+
+/**
+ * HOW MANY MORE PAIRED GAMES would be expected to settle this result.
+ *
+ * ⚠️ IT IS COMPUTED FROM THE DISCORDANT PAIRS, NOT FROM THE WIN-RATE DELTA.
+ * Under McNemar the concordant games carry no signal at all: the test sees only
+ * `b` (variant-only wins) and `c` (base-only wins). A projection from the delta
+ * would be answering a different question and would be wrong by whatever share
+ * of games both decks won.
+ *
+ * Holding the observed split and scaling the run by a factor k, the
+ * continuity-corrected statistic is `(A·k − 1)² / (D·k)` for `A = |b − c|` and
+ * `D = b + c`. Requiring that to reach the critical value `X = z²` gives the
+ * quadratic `A²k² − (2A + X·D)k + 1 ≥ 0`, whose LARGER root is the smallest
+ * honest scale-up (the smaller root is the degenerate sub-1 branch where the
+ * continuity correction dominates).
+ *
+ * **Returns `undefined`, not zero, when `A = 0`** — an even split has no
+ * direction to grow, so there is no N. Reporting 0 there would read as "already
+ * settled", which is the opposite of the truth.
+ */
+export function gamesToSettle(
+  paired: PairedTable,
+  nGames: number,
+  stats: StatsConfig,
+  alphaOverride?: number,
+): GamesToSettleEstimate | undefined {
+  const alpha = alphaOverride ?? stats.alpha;
+  const b = paired.variantOnly;
+  const c = paired.baseOnly;
+  const a = Math.abs(b - c);
+  const d = b + c;
+  if (a === 0 || d === 0 || nGames <= 0) return undefined;
+
+  // z is the bar's own quantile, so the critical chi-square(1) value is z². When
+  // the caller overrides alpha (the Holm-effective bar) the matching quantile is
+  // not in the table, so scale the critical value by the ratio of the tails —
+  // exact for the chi-square(1)/normal pair, which is what `mcNemarTest` uses.
+  const critical = criticalChiSquareFor(alpha, stats);
+  const linear = 2 * a + critical * d;
+  const discriminant = linear * linear - 4 * a * a;
+  if (discriminant < 0) return undefined; // cannot happen for a > 0; refuse rather than emit NaN
+  const k = (linear + Math.sqrt(discriminant)) / (2 * a * a);
+  const totalPairedGames = Math.max(nGames, Math.ceil(k * nGames), stats.minGamesForVerdict);
+  return {
+    additionalPairedGames: totalPairedGames - nGames,
+    totalPairedGames,
+    alpha,
+  };
+}
+
+/**
+ * The chi-square(1) critical value for a bar. `stats.z` IS the bar's quantile,
+ * so the default case is exactly `z²` with no approximation; an overridden alpha
+ * (Holm's effective bar) is solved from the same normal tail `mcNemarTest`
+ * inverts, by bisection — cheap, and it cannot drift from `chiSquare1dfUpperTail`
+ * because it is defined as that function's inverse.
+ */
+function criticalChiSquareFor(alpha: number, stats: StatsConfig): number {
+  if (alpha === stats.alpha) return stats.z * stats.z;
+  let low = 0;
+  let high = 1000;
+  for (let i = 0; i < 200; i++) {
+    const mid = (low + high) / 2;
+    if (chiSquare1dfUpperTail(mid) > alpha) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
 }

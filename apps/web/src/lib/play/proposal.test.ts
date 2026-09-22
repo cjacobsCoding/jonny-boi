@@ -607,6 +607,8 @@ describe('PROPOSAL_EVENT_POLICY is closed, total, and able to go red', () => {
       cardSuspended: 'revealed',
       // Another seat has a decision.
       choiceAbandoned: 'handsOff',
+      // §3.178 — a repeat replays the other seat's recorded passes.
+      comboRepeated: 'handsOff',
       // Payload-conditional: it depends who, or which card.
       zoneChange: 'conditional',
       choiceAsked: 'conditional',

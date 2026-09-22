@@ -3,8 +3,20 @@
  * branch by branch against fabricated round reports.
  */
 import { describe, expect, it } from 'vitest';
-import type { TrimRoundReport, TrimRow } from '@jonny-boi/sim';
+import {
+  DEFAULT_TRIM_BUDGET,
+  TRIM_DEEPEN,
+  deeperGamesPerCandidate,
+  type TrimRoundReport,
+  type TrimRow,
+  type TrimSpend,
+} from '@jonny-boi/sim';
 import { FIRST_ROUND_KIND, stepAfterApply, stepAfterRound, targetProblem } from './trimSession.js';
+
+/** Nothing spent yet — the budget is nowhere near biting. */
+const FRESH: TrimSpend = { games: 0, seconds: 0, rounds: 1 };
+/** The depth the session started at. */
+const DEPTH = 20;
 
 function row(label: string, verdict: 'better' | 'inconclusive' | 'worse', delta: number): TrimRow {
   return {
@@ -13,7 +25,12 @@ function row(label: string, verdict: 'better' | 'inconclusive' | 'worse', delta:
     cuts: [{ cardId: label, name: label, isLand: false }],
     label,
     sizeAfter: 62,
-    evaluation: { verdict, delta } as TrimRow['evaluation'],
+    evaluation: {
+      verdict,
+      delta,
+      // §3.179 — a row carries WHY; 'unsure' rounds are the ones that deepen.
+      verdictReason: verdict === 'better' ? 'significantGain' : verdict === 'worse' ? 'significantLoss' : 'notSignificant',
+    } as TrimRow['evaluation'],
     gamesPlayed: 40,
     rawPValue: 0.01,
     adjustedPValue: 0.02,
@@ -50,24 +67,82 @@ const edge = row('Craw Wurm', 'inconclusive', 0.02);
 describe('stepAfterRound', () => {
   it('an improving round is applied under auto and offered under ask', () => {
     const improved = report({ verdict: 'improved', winner, rows: [winner] });
-    expect(stepAfterRound(improved, { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'pause' })).toEqual({ kind: 'apply', row: winner });
-    expect(stepAfterRound(improved, { targetSize: 60, onImprovement: 'ask', onNoImprovement: 'pause' })).toEqual({ kind: 'ask', row: winner });
+    expect(stepAfterRound(improved, { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'pause' }, FRESH, DEPTH)).toEqual({ kind: 'apply', row: winner });
+    expect(stepAfterRound(improved, { targetSize: 60, onImprovement: 'ask', onNoImprovement: 'pause' }, FRESH, DEPTH)).toEqual({ kind: 'ask', row: winner });
   });
 
-  it('an exhausted round pauses with the edge candidate, or widens to pairs when told to keep looking', () => {
-    const exhausted = report({ verdict: 'exhausted', edgeCandidate: edge, rows: [edge] });
-    expect(stepAfterRound(exhausted, { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'pause' })).toEqual({ kind: 'exhausted', edge });
-    expect(stepAfterRound(exhausted, { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' })).toEqual({
+  it('a fruitless round pauses with the edge candidate, or widens to pairs when told to keep looking', () => {
+    const fruitless = report({ verdict: 'exhausted', edgeCandidate: edge, rows: [edge] });
+    expect(stepAfterRound(fruitless, { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'pause' }, FRESH, DEPTH)).toEqual({
+      kind: 'stopped',
+      reason: 'paused',
+      edge,
+    });
+    expect(stepAfterRound(fruitless, { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' }, FRESH, DEPTH)).toEqual({
       kind: 'widen',
       round: 1,
       roundKind: 'pairs',
     });
   });
 
-  it('keep looking has nowhere to go from a pairs round, or when a pair would overshoot the target', () => {
+  it('§3.179 — a CONCLUSIVE pairs round is the end of the search', () => {
     const keep = { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' } as const;
-    expect(stepAfterRound(report({ roundKind: 'pairs', round: 1, edgeCandidate: edge }), keep)).toEqual({ kind: 'exhausted', edge });
-    expect(stepAfterRound(report({ deckSize: 61 }), keep)).toEqual({ kind: 'exhausted' });
+    expect(
+      stepAfterRound(report({ verdict: 'exhausted', roundKind: 'pairs', round: 1, edgeCandidate: edge }), keep, FRESH, DEPTH),
+    ).toEqual({ kind: 'stopped', reason: 'no-improvement-conclusive', edge });
+  });
+
+  it('§3.179 — an UNSURE pairs round DEEPENS instead of stopping (the two-round ceiling, gone)', () => {
+    const keep = { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' } as const;
+    const step = stepAfterRound(report({ verdict: 'unsure', roundKind: 'pairs', round: 1, rows: [edge] }), keep, FRESH, DEPTH);
+    expect(step).toEqual({
+      kind: 'deepen',
+      round: 2,
+      roundKind: FIRST_ROUND_KIND,
+      gamesPerCandidate: deeperGamesPerCandidate(DEPTH),
+    });
+  });
+
+  it('§3.179 — the web loop and the engine loop read the SAME growth rule', () => {
+    const keep = { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' } as const;
+    const step = stepAfterRound(report({ verdict: 'unsure', roundKind: 'pairs', round: 1, rows: [edge] }), keep, FRESH, DEPTH);
+    // Not a number restated here: the value the sim's own function returns.
+    expect(step).toMatchObject({ gamesPerCandidate: DEPTH * TRIM_DEEPEN.factor });
+  });
+
+  it('§3.179 — the budget stops it, with the budget reason', () => {
+    const keep = {
+      targetSize: 60,
+      onImprovement: 'auto',
+      onNoImprovement: 'keep-looking',
+      budget: { maxGames: 10, maxSeconds: DEFAULT_TRIM_BUDGET.maxSeconds },
+    } as const;
+    const spent: TrimSpend = { games: 10, seconds: 0, rounds: 4 };
+    expect(stepAfterRound(report({ verdict: 'unsure', roundKind: 'pairs', round: 1, rows: [edge] }), keep, spent, DEPTH)).toEqual({
+      kind: 'stopped',
+      reason: 'budget-exhausted',
+    });
+  });
+
+  it('§3.179 — the depth ceiling stops it too, and says the same thing', () => {
+    const keep = { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' } as const;
+    expect(
+      stepAfterRound(
+        report({ verdict: 'unsure', roundKind: 'pairs', round: 1, rows: [edge] }),
+        keep,
+        FRESH,
+        TRIM_DEEPEN.maxGamesPerCandidate,
+      ),
+    ).toEqual({ kind: 'stopped', reason: 'budget-exhausted' });
+  });
+
+  it('keep looking still has nowhere to WIDEN when a pair would overshoot the target', () => {
+    const keep = { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' } as const;
+    // 61 cards: a pair cut would land at 59, under the target. Conclusive, so it stops.
+    expect(stepAfterRound(report({ verdict: 'exhausted', deckSize: 61 }), keep, FRESH, DEPTH)).toEqual({
+      kind: 'stopped',
+      reason: 'no-improvement-conclusive',
+    });
   });
 });
 

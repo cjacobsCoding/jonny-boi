@@ -169,6 +169,17 @@ import { ALTERNATIVE_COSTS, alternativeCostKindsOf, definitionCastAs } from './c
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
+// §3.178 — infinite combos: the pure detector and the window's constants.
+import type { ComboHistoryEntry, ComboWindow } from './combo.js';
+import {
+  COMBO_HISTORY_LENGTH,
+  COMBO_REPEAT_CAP,
+  COMBO_REPEAT_DEFAULT,
+  comboActionKey,
+  comboSignatureOf,
+  findComboLoop,
+  summarizeComboLoop,
+} from './combo.js';
 import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
 import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
 import {
@@ -455,7 +466,7 @@ function boardMayGrantDoesNotUntap(state: GameState): boolean {
 }
 
 /** Begin a new turn: bump turn number, set active player, run untap/upkeep/draw. */
-function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) => void): void {
+function beginTurn(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): void {
   // A new turn: nothing has happened in it yet. Cleared as the turn BEGINS
   // rather than at cleanup, so "this turn" still reads true for anything
   // resolving in the previous turn's end step (see turn-facts.ts).
@@ -512,6 +523,10 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
 
   // Upkeep step (priority window).
   advanceToStepWithPriority(state, 'upkeep', emit);
+  // §3.178 — a loop is a thing within a turn: the detector's memory and the
+  // turn's dismissals start over here, with THIS board as the state the first
+  // cycle's change is measured against.
+  resetComboTracking(state, config);
 }
 
 /** Empty every player's mana pool (between steps/phases), emitting if non-empty. */
@@ -1733,6 +1748,10 @@ function applyActionToDraft(
       state.priorityPlayer = state.madnessWindow.controller;
       state.consecutivePasses = 0;
     }
+    // §3.178 — the combo detector, for the seats that asked for it. Last, so the
+    // signature it records is the settled board: state-based actions run,
+    // triggers on the stack, the floor handed to whoever holds it.
+    if (config.comboDetectionSeats.length > 0) noteComboAction(state, action, config, emit);
   }
   return result;
 }
@@ -1779,9 +1798,22 @@ function dispatchAction(
       return rejectWith(prevState, 'a madness window is awaiting its controller');
     }
   }
+  // §3.178 — an open COMBO WINDOW narrows the game to its owner's two answers,
+  // for the same reason the two windows above do: the engine has asked a
+  // question, and letting anybody act around it would leave the loop's owner
+  // answering a board that has moved on.
+  if (state.comboWindow) {
+    const isAnswer =
+      (action.kind === 'repeatCombo' || action.kind === 'dismissCombo') && action.player === state.comboWindow.owner;
+    if (!isAnswer) return rejectWith(prevState, 'a combo window is awaiting its owner');
+  }
   switch (action.kind) {
     case 'answerChoice':
       return applyAnswerChoice(state, prevState, action, config, effectRegistry, emit, events);
+    case 'repeatCombo':
+      return applyRepeatCombo(state, prevState, action, config, effectRegistry, events);
+    case 'dismissCombo':
+      return applyDismissCombo(state, prevState, action, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
       // Passing with a madness window open DECLINES it (CR 702.35a): the card
@@ -1836,6 +1868,205 @@ function wasRejected(events: readonly GameEvent[]): boolean {
 
 function rejectWith(prevState: GameState, reason: string): EngineResult {
   return { state: cloneState(prevState), events: [{ type: 'actionRejected', reason }] };
+}
+
+// --- infinite combos (DESIGN §3.178) ------------------------------------------------
+
+/** The baseline entry: no action, just the board a cycle's change is measured from. */
+function comboBaseline(state: GameState): ComboHistoryEntry {
+  return { action: null, actionKey: null, signature: comboSignatureOf(state) };
+}
+
+/**
+ * Start the combo memory afresh — at the beginning of a turn, and after a
+ * repeat (whose last 2k entries ARE two equal cycles and would be found again
+ * on the very next action). A no-op for every configuration that never asked
+ * for detection, so the sim's states never acquire the keys.
+ */
+function resetComboTracking(state: GameState, config: RulesConfig): void {
+  if (config.comboDetectionSeats.length === 0) return;
+  state.comboHistory = [comboBaseline(state)];
+  state.comboDismissed = [];
+}
+
+/**
+ * Record one settled action and look for the loop it may have completed.
+ * Called at the very end of `applyActionToDraft`, for both seats' actions —
+ * the opponent's passes are part of the cycle (see `combo.ts`) — and only when
+ * `config.comboDetectionSeats` names anybody.
+ */
+function noteComboAction(state: GameState, action: GameAction, config: RulesConfig, emit: (e: GameEvent) => void): void {
+  // The two window answers are not moves in the loop: a repeat resets the
+  // history itself, and a dismissal changes nothing on the board.
+  if (action.kind === 'repeatCombo' || action.kind === 'dismissCombo') return;
+  const history = state.comboHistory ?? [];
+  history.push({ action, actionKey: comboActionKey(action), signature: comboSignatureOf(state) });
+  if (history.length > COMBO_HISTORY_LENGTH) history.splice(0, history.length - COMBO_HISTORY_LENGTH);
+  state.comboHistory = history;
+  // Nothing is offered while a question, a suspended resolution, another
+  // window or the end of the game holds the floor: the boundary of a cycle is
+  // a moment its owner could act in, or it is not a boundary.
+  if (state.gameOver || state.pendingChoice || state.resolution || state.madnessWindow || state.comboWindow) return;
+  const verdict = findComboLoop(history, state);
+  if (!verdict.found) return;
+  const loop = verdict.loop;
+  // The pilot's loops are never offered (the seat list is the board's word on
+  // who is human), and a loop its owner already declined this turn stays declined.
+  if (!config.comboDetectionSeats.includes(loop.player)) return;
+  if (state.comboDismissed !== undefined && state.comboDismissed.includes(loop.key)) return;
+  state.comboWindow = {
+    owner: loop.player,
+    loop,
+    resume: { priorityPlayer: state.priorityPlayer, consecutivePasses: state.consecutivePasses },
+  };
+  state.priorityPlayer = loop.player;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'comboWindowOpened',
+    player: loop.player,
+    cycleLength: loop.cycle.length,
+    summary: summarizeComboLoop(loop),
+  });
+}
+
+/** Close the window and hand the floor back exactly as it was when it opened. */
+function closeComboWindow(state: GameState, window: ComboWindow): void {
+  state.comboWindow = null;
+  state.priorityPlayer = window.resume.priorityPlayer;
+  state.consecutivePasses = window.resume.consecutivePasses;
+}
+
+/**
+ * The two moves an open combo window offers its owner. Decline is listed
+ * FIRST and unconditionally, as the madness menu lists its pass: the way out
+ * of a window is never the conditional entry. The repeat carries the default
+ * count; a board that lets the player type one submits its own.
+ */
+function comboActionsFor(window: ComboWindow): GameAction[] {
+  return [
+    { kind: 'dismissCombo', player: window.owner },
+    { kind: 'repeatCombo', player: window.owner, times: COMBO_REPEAT_DEFAULT },
+  ];
+}
+
+/** Why a window answer is refused, or `undefined` when it may be applied. */
+function comboAnswerProblem(state: GameState, player: PlayerId): string | undefined {
+  const window = state.comboWindow;
+  if (!window) return 'no combo window is open';
+  if (player !== window.owner) return `only player ${window.owner} may answer this combo window`;
+  return undefined;
+}
+
+function applyDismissCombo(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'dismissCombo' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  const problem = comboAnswerProblem(state, action.player);
+  if (problem !== undefined) return rejectWith(prevState, problem);
+  const window = state.comboWindow!;
+  // Remembered by the cycle's rotation-free key, so the next action by hand —
+  // which makes the last 2k entries a ROTATION of this loop — does not reopen it.
+  state.comboDismissed = [...(state.comboDismissed ?? []), window.loop.key];
+  closeComboWindow(state, window);
+  emit({ type: 'comboDismissed', player: action.player });
+  return { state, events };
+}
+
+/**
+ * Replace the CONTENTS of `target` with `source`'s, keeping `target`'s identity.
+ * `applyActionToDraft` recognises its own draft by identity (`result.state ===
+ * state`), and `applyActionInPlace`'s caller owns the object it passed, so a
+ * rollback has to happen inside the same object rather than by returning a
+ * fresh one. Every own key is replaced and none is left behind.
+ */
+function overwriteState(target: GameState, source: GameState): void {
+  for (const key of Object.keys(target)) {
+    if (!(key in source)) delete (target as unknown as Record<string, unknown>)[key];
+  }
+  Object.assign(target, source);
+}
+
+/**
+ * CR 732.4 — the loop's owner "chooses a number", and the recorded cycle is
+ * applied that many times through the ordinary action funnel: `applyActionInPlace`
+ * on this very draft, so each replayed action pays its costs, fires its
+ * triggers, runs state-based actions and writes its events exactly as the
+ * clicked one did. Detection is OFF for the replay (every replayed action would
+ * otherwise extend the history and rediscover the loop being run).
+ *
+ * An iteration is all-or-nothing: the draft is checkpointed before each cycle
+ * and put back if any action of it is refused, so the board the player gets
+ * back is always "N whole cycles later", never a cycle and a half. The repeat
+ * then stops and says why (`comboRepeated.stoppedBecause`); the game ending
+ * mid-loop stops it the same way. A recorded `answerChoice` is re-aimed at the
+ * question actually open, because choice ids are minted per question.
+ */
+function applyRepeatCombo(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'repeatCombo' }>,
+  config: RulesConfig,
+  registry: EffectRegistry,
+  events: GameEvent[],
+): EngineResult {
+  const problem = comboAnswerProblem(state, action.player);
+  if (problem !== undefined) return rejectWith(prevState, problem);
+  if (!Number.isInteger(action.times) || action.times < 1 || action.times > COMBO_REPEAT_CAP) {
+    return rejectWith(prevState, `the loop can be repeated between 1 and ${COMBO_REPEAT_CAP} times`);
+  }
+  const window = state.comboWindow!;
+  closeComboWindow(state, window);
+  const quiet: RulesConfig = { ...config, comboDetectionSeats: [] };
+
+  let completed = 0;
+  let stoppedBecause: string | undefined;
+  for (let iteration = 0; iteration < action.times && stoppedBecause === undefined; iteration++) {
+    if (state.gameOver) {
+      stoppedBecause = 'the game ended';
+      break;
+    }
+    const checkpoint = cloneState(state);
+    const iterationEvents: GameEvent[] = [];
+    let applied = 0;
+    for (const recorded of window.loop.cycle) {
+      const step: GameAction =
+        recorded.kind === 'answerChoice' && state.pendingChoice
+          ? { ...recorded, choiceId: state.pendingChoice.id }
+          : recorded;
+      const result = applyActionInPlace(state, step, quiet, registry);
+      const refusal = result.events.find((e) => e.type === 'actionRejected');
+      if (refusal !== undefined && refusal.type === 'actionRejected') {
+        stoppedBecause = `${step.kind} was refused (${refusal.reason})`;
+        break;
+      }
+      for (const event of result.events) iterationEvents.push(event);
+      applied += 1;
+      // A game the loop has just decided is not rolled back — that IS the
+      // outcome — but nothing follows it, and a cycle cut short by the end is
+      // not counted as completed.
+      if (state.gameOver) break;
+    }
+    if (stoppedBecause !== undefined) {
+      overwriteState(state, checkpoint);
+      break;
+    }
+    for (const event of iterationEvents) events.push(event);
+    if (applied === window.loop.cycle.length) completed = iteration + 1;
+    if (state.gameOver) stoppedBecause = 'the game ended';
+  }
+
+  resetComboTracking(state, config);
+  events.push({
+    type: 'comboRepeated',
+    player: action.player,
+    requested: action.times,
+    completed,
+    ...(stoppedBecause !== undefined ? { stoppedBecause } : {}),
+  });
+  return { state, events };
 }
 
 /**
@@ -5982,6 +6213,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // consumer's imagination, so every seat — a pilot, the hotseat UI, the online
   // client — plays madness by picking from the menu it already reads.
   if (state.madnessWindow) return madnessActionsFor(state);
+  // §3.178 — an open COMBO WINDOW offers its owner exactly two moves: run the
+  // loop, or decline. Enumerated here for the reason the madness menu is.
+  if (state.comboWindow) return comboActionsFor(state.comboWindow);
   const me = state.priorityPlayer;
   const player = state.players[me];
   const actions: GameAction[] = [];

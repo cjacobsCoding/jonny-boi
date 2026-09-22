@@ -1,5 +1,5 @@
 import { useMemo, type ReactElement } from 'react';
-import { SAMPLE_DECKS } from '@jonny-boi/sim';
+import { SAMPLE_DECKS, VERDICT_BARS, type VerdictBar } from '@jonny-boi/sim';
 import { allAvailableCards } from '../lib/cards.js';
 import { isPlayableCard } from '../lib/cards/playable.js';
 import { resolveEntries, type Deck } from '../lib/deck.js';
@@ -26,7 +26,7 @@ import {
   JOINT_PARTNERS,
   JOINT_RADIUS,
 } from '../lib/lab-config.js';
-import { TRIM_DEFAULT_SETTINGS, TRIM_TARGET_SIZE } from '../lib/lab-config.js';
+import { TRIM_DEFAULT_SETTINGS, TRIM_TARGET_SIZE, VERDICT_MIN_GAMES } from '../lib/lab-config.js';
 import { applyCutToDeck, describeCutApplied } from '../lib/lab/trimApply.js';
 import type { TrimCut } from '@jonny-boi/sim';
 import { RunStatus } from '../components/RunStatus.js';
@@ -74,6 +74,10 @@ export function LabView({
     setSeed,
     pilotId,
     setPilotId,
+    verdictBar,
+    setVerdictBar,
+    verdictMinGames,
+    setVerdictMinGames,
     opponentNames,
     setOpponentNames,
     applyNote,
@@ -171,6 +175,8 @@ export function LabView({
     chosenOpponents,
     seed,
     pilotId,
+    verdictBar,
+    verdictMinGames,
     sim,
     onApplySwap,
   };
@@ -186,6 +192,20 @@ export function LabView({
         }}
         seed={seed}
         onSeed={setSeed}
+        verdictBar={verdictBar}
+        onVerdictBar={(alpha) => {
+          // Same reasoning as the hero and the pilot: the result on screen was
+          // READ AT the old bar. Leaving it up beside a control that now says
+          // something else is how a 0.05 INCONCLUSIVE comes to be read as a 0.10
+          // one — the exact mislabelling §3.179 exists to prevent.
+          setVerdictBar(alpha);
+          sim.reset();
+        }}
+        verdictMinGames={verdictMinGames}
+        onVerdictMinGames={(n) => {
+          setVerdictMinGames(n);
+          sim.reset();
+        }}
         pilotId={pilotId}
         onPilot={(id) => {
           // Same reasoning as changing the hero: the result on screen was measured
@@ -365,6 +385,10 @@ function LabConfigBar({
   onSeed,
   pilotId,
   onPilot,
+  verdictBar,
+  onVerdictBar,
+  verdictMinGames,
+  onVerdictMinGames,
   runDisabled,
   eligibleOpponents,
   chosen,
@@ -377,6 +401,10 @@ function LabConfigBar({
   onSeed: (seed: number) => void;
   pilotId: string;
   onPilot: (id: string) => void;
+  verdictBar: VerdictBar;
+  onVerdictBar: (alpha: number) => void;
+  verdictMinGames: number;
+  onVerdictMinGames: (games: number) => void;
   runDisabled: boolean;
   eligibleOpponents: readonly string[];
   chosen: readonly string[];
@@ -416,6 +444,52 @@ function LabConfigBar({
             aria-label="Base seed"
             style={{ width: '9rem' }}
           />
+        </label>
+
+        {/*
+          §3.179 — THE VERDICT BAR, at Lab level rather than per panel.
+          Caleb: "tolerances for trim, manabase, and search may be too tight
+          currently... And should be tunable." It is ONE control because it is one
+          question: six panels each with their own alpha would let Trim and
+          Suggest disagree about what "better" means on the same deck.
+          A closed table of bars, never a free-text alpha — `z` comes WITH the
+          row, so the interval and the verdict can never be read at different
+          confidence levels.
+        */}
+        <label className="lab-field" data-testid="lab-verdict-bar">
+          <span className="section-label">Verdict bar</span>
+          <select
+            className="select"
+            value={String(verdictBar.alpha)}
+            onChange={(e) => onVerdictBar(Number(e.target.value))}
+            disabled={runDisabled}
+            aria-label="Verdict bar"
+            title={verdictBar.hint}
+          >
+            {VERDICT_BARS.map((bar) => (
+              <option key={bar.alpha} value={String(bar.alpha)}>
+                {bar.label}
+              </option>
+            ))}
+          </select>
+          <span className="lab-field__hint">{verdictBar.hint}</span>
+        </label>
+
+        <label className="lab-field">
+          <span className="section-label">Min paired games</span>
+          <input
+            className="input"
+            type="number"
+            value={verdictMinGames}
+            min={VERDICT_MIN_GAMES.min}
+            max={VERDICT_MIN_GAMES.max}
+            step={VERDICT_MIN_GAMES.step}
+            onChange={(e) => onVerdictMinGames(Number(e.target.value) || VERDICT_MIN_GAMES.default)}
+            disabled={runDisabled}
+            aria-label="Min paired games"
+            style={{ width: '9rem' }}
+          />
+          <span className="lab-field__hint">Below this, no verdict but inconclusive.</span>
         </label>
       </div>
 

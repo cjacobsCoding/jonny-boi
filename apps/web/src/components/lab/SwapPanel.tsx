@@ -3,7 +3,16 @@ import { WinRateBar } from '../WinRateBar.js';
 import { FidelityNote } from '../FidelityNote.js';
 import { CardHover } from '../CardHover.js';
 import { RunSlider } from './RunSlider.js';
-import { ciStr, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
+import {
+  ciStr,
+  gamesToSettleText,
+  signedPct,
+  pValueStr,
+  reasonContextOf,
+  throughputText,
+  verdictDisplay,
+  verdictReasonDisplay,
+} from '../../lib/sim-format.js';
 import { VERDICT_ALPHA } from '../../lib/lab-config.js';
 import { DEFAULT_SWAP_SCOPE, GAMES_PER_PAIRED_GAME, type SwapScope } from '@jonny-boi/sim';
 import { PilotStamp, RunCostNote } from './PilotControls.js';
@@ -26,6 +35,8 @@ export function SwapPanel({
   chosenOpponents,
   seed,
   pilotId,
+  verdictBar,
+  verdictMinGames,
   sim,
   onApplySwap,
   gamesConfig,
@@ -182,6 +193,10 @@ export function SwapPanel({
             heroPayload &&
             sim.run({
               kind: 'swap',
+              // §3.179 — the bar travels WITH the question, so the report comes
+              // back stamped with the bar it was read at.
+              verdictAlpha: verdictBar.alpha,
+              verdictMinGames,
               hero: heroPayload,
               opponentNames: chosenOpponents,
               outCardId: outId,
@@ -207,6 +222,15 @@ export function SwapPanel({
         <div className="lab-results">
           <div className={`verdict-banner verdict-banner--${verdict.tone}`}>
             <span className="verdict-banner__label">{verdict.label}</span>
+            {/*
+              §3.179 — WHY that verdict. A bare INCONCLUSIVE here was three
+              different answers wearing one word, and this is the single busiest
+              place a reader meets one.
+            */}
+            <span className="verdict-banner__detail" data-testid="swap-verdict-reason">
+              {verdictReasonDisplay(e.verdictReason, reasonContextOf({ evaluation: e }, result.stats)).detail}
+              {e.gamesToSettle && <> {gamesToSettleText(e.gamesToSettle)}.</>}
+            </span>
             <span className="verdict-banner__detail">
               −{e.copiesSwapped}×{' '}
               <CardHover cardId={e.swap.out} className="lab-card-name">
