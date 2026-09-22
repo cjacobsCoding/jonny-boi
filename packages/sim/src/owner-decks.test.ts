@@ -90,6 +90,20 @@ const EXPECTED = Object.freeze([
     revisions: [],
     currentCards: 49,
   }),
+  Object.freeze({
+    name: 'Boros Prison',
+    source: 'docs/decks/boros-prison.txt',
+    names: 14,
+    cards: 62,
+    tell: ['Sphere of Safety', 'Assemble the Legion', 'Curse of Exhaustion'],
+    revisions: [],
+    // ⚠️ 62 is what a HUMAN read off the photo, not what a machine counted. The
+    // app's own scanner returns ZERO piles for that image (DESIGN §3.182), so
+    // the counts came from counting fanned title bars by eye — +/-1 per pile,
+    // and fourteen piles. If he corrects them the correction is a REVISION, not
+    // an edit here: seeding is add-only and by then his copy is his.
+    currentCards: 62,
+  }),
 ]);
 
 /**

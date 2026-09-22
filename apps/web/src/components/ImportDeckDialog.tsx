@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { DecksApi } from '../lib/useDecks.js';
 import { useDeckImport } from '../lib/decklist/useDeckImport.js';
 import { blockedByEngineSystem, type ResolvedLine } from '../lib/decklist/resolve.js';
@@ -21,16 +21,39 @@ import { ScanDeckDialog } from './ScanDeckDialog.js';
 export function ImportDeckDialog({
   decks,
   onClose,
+  initialText,
 }: {
   decks: DecksApi;
   onClose: () => void;
+  /**
+   * A decklist to open with, already resolved on mount — how a SCAN started
+   * from outside this dialog arrives. Additive and optional: without it the
+   * dialog opens empty exactly as it always did.
+   *
+   * It exists because the scanner used to be reachable only from INSIDE here,
+   * behind a ghost button, inside a dialog named for pasting text. Caleb's
+   * verdict was that it is "impossible to find easily on mobile". The scan is
+   * now its own top-level action in the deck toolbar, and this prop is how its
+   * result comes back into the one parse -> Scryfall -> compile path, so a
+   * scanned list is still not a second kind of import (CLAUDE.md rule 12).
+   */
+  initialText?: string;
 }): ReactElement {
   const importer = useDeckImport();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
   const [deckName, setDeckName] = useState('');
   const [result, setResult] = useState<BuildResult | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A list handed in at open time is resolved once, on mount. The ref is what
+  // keeps "once" true: `resolve` sets state, so without it a re-render would
+  // start the resolve again and the dialog would loop on its own result.
+  const resolvedInitial = useRef(false);
+  useEffect(() => {
+    if (resolvedInitial.current || !initialText) return;
+    resolvedInitial.current = true;
+    void importer.resolve(initialText);
+  }, [initialText, importer]);
 
   const blockedGroups = useMemo(
     () => (importer.plan ? blockedByEngineSystem(importer.plan) : []),
