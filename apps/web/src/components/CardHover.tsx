@@ -307,7 +307,7 @@ export function CardHover({
       {children}
       {anchor && image && card
         ? createPortal(
-            <CardHoverPanel
+            <CardPreviewPanel
               panelRef={panelEl}
               onLeave={clear}
               anchor={anchor}
@@ -345,8 +345,23 @@ function isPointerish(event: Event): event is MouseEvent {
  *
  * It takes a ref because the owner MEASURES it: the hover region includes the
  * panel now, and the panel's own box is the honest source for where it is.
+ *
+ * ## ⚠️ EXPORTED, because there is ONE card preview in this app (§3.181)
+ *
+ * The Lab's card picker raises the same preview after a dwell, and it CANNOT do
+ * it by wrapping its options in {@link CardHover}: a WAI-ARIA combobox keeps DOM
+ * focus in the text input and tracks the highlighted option with
+ * `aria-activedescendant`, so an option never receives `focus` and never
+ * receives `mouseenter` from an arrow key at all. Its preview is therefore
+ * driven by the ACTIVE INDEX — which both the pointer and the arrow keys already
+ * funnel through — and it renders this panel directly.
+ *
+ * Exporting it is what keeps that from becoming a second preview with its own
+ * placement maths and its own card renderer (rule 12). `panelRef` and `onLeave`
+ * are optional for that caller: it measures nothing and closes on its own timer,
+ * and every existing caller passes both exactly as before.
  */
-function CardHoverPanel({
+export function CardPreviewPanel({
   panelRef,
   onLeave,
   anchor,
@@ -356,9 +371,9 @@ function CardHoverPanel({
   isCreature,
   unavailableReason,
 }: {
-  readonly panelRef: RefObject<HTMLDivElement>;
+  readonly panelRef?: RefObject<HTMLDivElement>;
   /** Leaving the panel itself ends the hover — the direct, immediate close. */
-  readonly onLeave: () => void;
+  readonly onLeave?: () => void;
   readonly anchor: PreviewAnchor;
   readonly cardId: string;
   readonly name: string;
@@ -373,7 +388,7 @@ function CardHoverPanel({
 
   return (
     <div
-      ref={panelRef}
+      ref={panelRef ?? null}
       className="card-hover-preview"
       style={{ left: `${left}px`, top: `${top}px`, width: `${width}px` }}
       role="tooltip"

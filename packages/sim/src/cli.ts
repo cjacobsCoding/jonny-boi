@@ -31,6 +31,8 @@
 
 import { performance } from 'node:perf_hooks';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import type { CardPool } from '@jonny-boi/cards';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID, SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
@@ -1171,6 +1173,34 @@ async function suggestOnWorkers(
   }
 }
 
+/**
+ * The two candidate restrictions a `suggest` run takes from the flags — the
+ * ONE place the CLI turns `--cut` / `--in` into the engine's `cutOnly` /
+ * `inOnly` (§3.136, §3.181).
+ *
+ * Exported so `cli-flags.test.ts` can assert that the CLI and the Lab panel
+ * hand `generateCandidates` the same restrictions for the same input. A test
+ * that re-wrote this expression would be a second copy of it and could agree
+ * with itself while disagreeing with the CLI — which is exactly how the panel
+ * and the CLI drift apart.
+ *
+ * Absent (not `undefined`) when a side is unrestricted, so "empty means
+ * everything" is expressed by the key not being there at all.
+ */
+export function suggestFocusFrom(flags: Pick<Flags, 'cut' | 'in'>): {
+  readonly cutOnly?: readonly string[];
+  readonly inOnly?: readonly string[];
+} {
+  return {
+    ...(flags.cut.length > 0 ? { cutOnly: flags.cut } : {}),
+    // §3.181 — the MIRROR of `--cut`. The engine has taken `inOnly` since the
+    // search was written (it is what `joint-moves` restricts the going-up side
+    // of a land move with), but nothing a person could type reached it: "cut
+    // something to fit THIS card in" was implemented, tested and unaskable.
+    ...(flags.in.length > 0 ? { inOnly: flags.in } : {}),
+  };
+}
+
 async function cmdSuggest(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('suggest needs a deck: suggest <deck> [--cut "<card>"] [--max-candidates K]');
@@ -1206,14 +1236,7 @@ async function cmdSuggest(flags: Flags): Promise<number> {
     // The control for the settled-leader stop (§3.98): play every wave the ladder
     // planned, so a run can be compared against the rule rather than only trusted.
     adaptiveConfig: { ...DEFAULT_ADAPTIVE_CONFIG, stopWhenLeaderSettled: !flags.fullLadder },
-    cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
-    // §3.181 — the MIRROR of `--cut`, and the reason this line exists: the
-    // engine has taken `inOnly` since the search was written (it is what
-    // `joint-moves` restricts the going-up side of a land move with), but
-    // nothing a person could type reached it. "Cut something to fit THIS card
-    // in" was implemented, tested and unaskable. Empty stays undefined so the
-    // whole pool is addable exactly as before.
-    inOnly: flags.in.length > 0 ? flags.in : undefined,
+    ...suggestFocusFrom(flags),
     // §3.136 — the search now honours `--scope` too, so "look at swapping 2 of
     // my 3 Elvish Visionaries" is askable: `--cut` picks WHICH card, `--scope`
     // picks HOW MANY of it. Without this the suggestion search always tested the
@@ -1530,12 +1553,29 @@ async function main(): Promise<number> {
   }
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  },
-);
+/**
+ * ⚠️ RUN ONLY WHEN THIS FILE IS THE PROCESS ENTRY POINT.
+ *
+ * Without this guard, merely IMPORTING this module ran the whole CLI: the first
+ * test to `import { parseFlags } from './cli.js'` printed the usage banner and
+ * called `process.exit(0)` from a `.then`, which tore the Vitest worker down
+ * mid-run. Three of the four test files in that run never executed, and the
+ * summary still said "1 passed" — a false green arriving through the runner
+ * rather than through an assertion, which is exactly the class this repo keeps
+ * getting bitten by.
+ *
+ * `process.argv[1]` is this file under `tsx src/cli.ts` and under
+ * `node dist/src/cli.js`, and is Vitest's binary when a test imports it.
+ */
+const entryPoint = process.argv[1];
+if (entryPoint !== undefined && resolve(entryPoint) === resolve(fileURLToPath(import.meta.url))) {
+  main().then(
+    (code) => process.exit(code),
+    (err) => {
+      console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    },
+  );
+}
 
 

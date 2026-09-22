@@ -176,14 +176,40 @@ export function matchCardName(
     .slice(0, limit);
 }
 
-/** Match one normalized query string against the vocabulary. */
-function matchOneQuery(query: string, index: NameIndex): NameMatch[] {
+/**
+ * Match one normalized query string against the vocabulary.
+ *
+ * ## ⚠️ THIS IS THE APP'S ONE FUZZY NAME MATCHER (§3.181)
+ *
+ * It has two callers, and that is the point. {@link matchCardName} drives it
+ * once per OCR candidate string; the Lab's card picker drives it once per typed
+ * term. Before §3.181 the app had THREE implementations of "find me the card I
+ * mean" — this one, Scryfall's fuzzy endpoint behind the deck builder's Add
+ * dialog, and the Lab picker's own substring ranking — and the Lab's, on the
+ * surface where a user is most likely to be hunting one specific card, was the
+ * only one that could not survive a typo. Promoting this to shared rather than
+ * writing a fourth is rule 12 and Caleb's fuzzy request in one edit.
+ *
+ * Scryfall's could not be the shared one: it is a network call at call time,
+ * and the pure units forbid `fetch` there.
+ *
+ * `minScore` is a PARAMETER rather than a constant read from scan's config,
+ * because OCR and a human typist are not the same problem — OCR's floor is
+ * tuned for a camera's mistakes — and a picker that inherited the camera's
+ * tuning would be tuned by accident. The default keeps every existing scan call
+ * byte-identical.
+ */
+export function matchOneQuery(
+  query: string,
+  index: NameIndex,
+  minScore: number = MIN_MATCH_SCORE,
+): NameMatch[] {
   if (query.length === 0) return [];
 
   const matches: NameMatch[] = [];
   // A name can differ from the query by at most this many edits and still clear
   // the score floor, which lets us skip most of the vocabulary outright.
-  const budget = Math.ceil(query.length * (1 - MIN_MATCH_SCORE)) + 1;
+  const budget = Math.ceil(query.length * (1 - minScore)) + 1;
 
   for (const entry of index.entries) {
     const candidate = entry.normalized;
@@ -206,7 +232,7 @@ function matchOneQuery(query: string, index: NameIndex): NameMatch[] {
       score = Math.max(score, shared / longest);
     }
 
-    if (score >= MIN_MATCH_SCORE) matches.push({ name: entry.name, score });
+    if (score >= minScore) matches.push({ name: entry.name, score });
   }
   return matches;
 }

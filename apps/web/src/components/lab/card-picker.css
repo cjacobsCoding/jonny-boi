@@ -182,3 +182,63 @@
 .lab-controls--swap {
   overflow: visible;
 }
+
+/* ---------------------------------------------------------------------------
+   §3.181 — the approximate search, the multi-select chips, and the dwell
+   preview.
+   --------------------------------------------------------------------------- */
+
+.card-picker__fuzzy-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.card-picker__fuzzy-toggle--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* An approximate row is a GUESS, and says so rather than sitting among the
+   exact hits looking like one of them. */
+.card-picker__option--fuzzy .card-picker__option-name {
+  font-style: italic;
+}
+
+.card-picker__approx {
+  color: var(--color-fg-muted);
+}
+
+.card-picker__tick {
+  margin-right: 0.35rem;
+  color: var(--color-fg-muted);
+}
+
+.card-picker__option--picked .card-picker__tick {
+  color: var(--color-accent);
+}
+
+/* Several cards picked: the chips are the picked set, and each one removes
+   itself. Wraps, because a focus of eight cards is a normal thing to want. */
+.card-picker__picked {
+  flex-wrap: wrap;
+}
+
+.card-picker__chip {
+  cursor: pointer;
+}
+
+.card-picker__chip-clear {
+  flex: 0 0 auto;
+}
+
+/*
+  The dwell preview is POINTER-TRANSPARENT, unlike the board's hover panel.
+  That panel accepts the pointer because its keyword glossary is interactive
+  (§3.143 wave 3). This one is a read raised over a dropdown the user is still
+  working in, so a panel that swallowed clicks would put a card face between the
+  cursor and the option underneath it.
+*/
+.card-picker-preview,
+.card-picker-preview * {
+  pointer-events: none;
+}

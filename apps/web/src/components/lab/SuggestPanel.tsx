@@ -39,6 +39,9 @@ import {
 import { loadCardPool } from '../../lib/sim-pool.js';
 import { toSimPayload } from '../../lib/sim-format.js';
 import type { Deck } from '../../lib/deck.js';
+import { CardPicker } from './CardPicker.js';
+import { poolInOptions } from '../../lib/lab/cardOptions.js';
+import { suggestFocusSummary } from '../../lib/lab/suggestFocusSummary.js';
 import './suggest-focus.css';
 
 /**
@@ -100,13 +103,39 @@ export function SuggestPanel({
    * moves, defaulting to the whole playset exactly as the engine does.
    */
   const [cutFocus, setCutFocus] = useState<ReadonlySet<string>>(() => new Set());
+  /**
+   * §3.181 — THE OTHER SIDE OF THE SWAP. Empty means "the whole pool", exactly
+   * as `cutFocus` empty means "the whole deck", so an untouched control changes
+   * nothing about what a run does.
+   *
+   * This is a FOCUS, not a mode. The engine has always taken two independent
+   * restrictions (`cutOnly` and `inOnly`) on one search, and a mode switch here
+   * would have been a second vocabulary for a question the engine already
+   * answers one way — two things that would eventually disagree (rule 12).
+   * Restricting this side alone asks "what should I cut to fit THIS card in?";
+   * restricting both asks "is this specific swap an improvement?", which the Lab
+   * could not be asked at all before.
+   */
+  const [inFocus, setInFocus] = useState<ReadonlySet<string>>(() => new Set());
   const [copies, setCopies] = useState<number | 'playset'>('playset');
-  const focusSummary =
-    cutFocus.size === 0 && copies === 'playset'
-      ? '— whole deck, whole playsets'
-      : `— ${cutFocus.size === 0 ? 'whole deck' : `${cutFocus.size} card${cutFocus.size === 1 ? '' : 's'}`}, ${
-          copies === 'playset' ? 'whole playsets' : `${copies} cop${copies === 1 ? 'y' : 'ies'}`
-        }`;
+
+  /**
+   * The full playable pool, for the bring-in focus. Read through the SAME funnel
+   * the A/B tab's add picker uses (`poolInOptions`) — a focus control offering a
+   * different set of cards from the search it restricts would let you pin a card
+   * the search cannot consider and hand back an empty ranking with no reason.
+   */
+  const inOptions = useMemo(() => poolInOptions(), []);
+  const soleInName =
+    inFocus.size === 1
+      ? inOptions.find((o) => o.cardId === [...inFocus][0])?.name
+      : undefined;
+  const focusSummary = suggestFocusSummary({
+    cutCount: cutFocus.size,
+    inCount: inFocus.size,
+    soleInName,
+    copies,
+  });
 
   const running = sim.status === 'running';
   const canRun = heroLegal && heroPayload !== null && chosenOpponents.length > 0 && !running;
@@ -198,6 +227,10 @@ export function SuggestPanel({
               ...(stored ? { history: stored } : {}),
               // §3.136 — the focus, when the player narrowed it.
               ...(cutFocus.size > 0 ? { cutOnly: [...cutFocus] } : {}),
+              // §3.181 — and the bring-in focus. THIS LINE IS THE FEATURE: the
+              // engine has resolved `inOnly` since the search was written, and
+              // until now nothing a person could touch reached it.
+              ...(inFocus.size > 0 ? { inOnly: [...inFocus] } : {}),
               ...(copies === 'playset' ? {} : { swapScope: { copies } }),
             })
           }
@@ -240,41 +273,80 @@ export function SuggestPanel({
             </select>
           </div>
 
-          <fieldset className="suggest-focus__cards">
-            <legend>
-              Consider cutting
-              {cutFocus.size > 0 && (
-                <button type="button" className="btn btn--ghost" onClick={() => setCutFocus(new Set())}>
-                  Clear ({cutFocus.size})
-                </button>
-              )}
-            </legend>
-            <p className="suggest-focus__hint">
-              Tick nothing to search the whole deck. Ticking cards restricts the search to swapping
-              those out — far fewer candidates, so each one gets more games.
-            </p>
-            <div className="suggest-focus__grid">
-              {cutOptions.map((o) => (
-                <label key={o.cardId} className="suggest-focus__card">
-                  <input
-                    type="checkbox"
-                    checked={cutFocus.has(o.cardId)}
-                    disabled={running}
-                    onChange={(ev) =>
-                      setCutFocus((prev) => {
-                        const next = new Set(prev);
-                        if (ev.target.checked) next.add(o.cardId);
-                        else next.delete(o.cardId);
-                        return next;
-                      })
-                    }
-                  />
-                  {o.name}
-                  {o.count !== undefined && <span className="suggest-focus__count"> ×{o.count}</span>}
-                </label>
-              ))}
+          {/*
+            §3.181 — BOTH focus controls are the shared `CardPicker`.
+
+            The cut focus used to be a grid of bare checkboxes — one per distinct
+            card in the deck, around thirty-five of them, with no search of any
+            kind. That made it the least capable card chooser in the app on the
+            control a user reaches for most often when narrowing a trim, which is
+            why it was the first thing this section fixed.
+
+            The design call, stated plainly because it was a real choice:
+            checkboxes-plus-a-filter was the smaller change, and it was rejected.
+            A filter written here would have been a FOURTH way to search for a
+            card in this app, and the rule the §3.181 gate enforces is that every
+            card chooser goes through the one picker. Routing this control
+            through `CardPicker` in a multi-select mode costs one prop and gets
+            the type-to-filter, the colour/type/mana filters, the approximate
+            search and the dwell preview on both sides of the swap at once —
+            and keeps ticking several cards quick, because the multi-select list
+            deliberately stays open between picks.
+
+            What was lost: the whole deck is no longer visible at a glance
+            without opening the list. For a ~35-row list that is a fair trade for
+            being able to find a card by typing three letters of it.
+          */}
+          <div className="suggest-focus__pickers">
+            <div className="suggest-focus__picker">
+              <CardPicker
+                label="Consider cutting"
+                options={cutOptions}
+                multiple={{
+                  selected: cutFocus,
+                  onToggle: (cardId) =>
+                    setCutFocus((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(cardId)) next.delete(cardId);
+                      else next.add(cardId);
+                      return next;
+                    }),
+                  onClear: () => setCutFocus(new Set()),
+                }}
+                disabled={running}
+                placeholder="Type a card in your deck…"
+              />
+              <p className="suggest-focus__hint">
+                Pick nothing to search the whole deck. Picking cards restricts the search to
+                swapping those out — far fewer candidates, so each one gets more games.
+              </p>
             </div>
-          </fieldset>
+
+            <div className="suggest-focus__picker">
+              <CardPicker
+                label="Bring in"
+                options={inOptions}
+                multiple={{
+                  selected: inFocus,
+                  onToggle: (cardId) =>
+                    setInFocus((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(cardId)) next.delete(cardId);
+                      else next.add(cardId);
+                      return next;
+                    }),
+                  onClear: () => setInFocus(new Set()),
+                }}
+                disabled={running}
+                placeholder="Type a card from the pool…"
+              />
+              <p className="suggest-focus__hint">
+                Pick nothing to consider the whole pool. Pick ONE card and the search runs
+                backwards: it tries different cards to cut in order to fit that card in. Pick on
+                both sides and it tests exactly those swaps.
+              </p>
+            </div>
+          </div>
         </div>
       </details>
 

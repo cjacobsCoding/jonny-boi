@@ -44,49 +44,36 @@
   min-width: 0;
 }
 
-.suggest-focus__cards {
-  border: none;
-  margin: 0;
-  padding: 0;
-}
-
-.suggest-focus__cards legend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2, 8px);
-  font-size: var(--text-sm, 0.875rem);
-  font-weight: 600;
-  padding: 0;
-}
-
 .suggest-focus__hint {
   margin: var(--space-1, 4px) 0 var(--space-2, 8px);
   font-size: var(--text-xs, 0.75rem);
   color: var(--color-fg-muted, inherit);
 }
 
-/* A dense two-or-more column grid: a 60-card deck is ~15 distinct cards, and a
-   single column would push the run button off a laptop screen. */
-.suggest-focus__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 2px var(--space-3, 12px);
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.suggest-focus__card {
+/*
+ * §3.181 — the two focus pickers, side by side: what may go OUT, what may come
+ * IN. They sit on one row because they are two restrictions on ONE search, and
+ * stacking them would have read as two separate questions.
+ *
+ * `overflow: visible` is load-bearing: each picker opens a popover that is
+ * taller than this row, and the checkbox grid that used to live here scrolled
+ * its own overflow — a rule inherited here would clip every dropdown.
+ *
+ * (The `__cards` / `__grid` / `__card` / `__count` rules that used to be here
+ * styled that checkbox grid. It was replaced by these pickers, so they were
+ * deleted rather than left to look like live layout.)
+ */
+.suggest-focus__pickers {
   display: flex;
-  align-items: center;
-  gap: var(--space-2, 8px);
-  font-size: var(--text-sm, 0.875rem);
-  padding: 1px 0;
-  cursor: pointer;
+  flex-wrap: wrap;
+  gap: var(--space-3, 12px);
+  align-items: flex-start;
+  overflow: visible;
 }
 
-.suggest-focus__count {
-  color: var(--color-fg-faint);
-  font-variant-numeric: tabular-nums;
+.suggest-focus__picker {
+  flex: 1 1 18rem;
+  min-width: 0;
 }
 
 /*
