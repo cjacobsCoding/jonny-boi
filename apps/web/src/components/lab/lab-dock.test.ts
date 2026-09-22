@@ -157,6 +157,24 @@ describe('§3.180 acceptance 4 — the contested bottom of the viewport', () => 
     expect(rulesFor(styleRules, '.lab-dock')[0]?.declarations).toMatch(/z-index:\s*var\(--lab-dock-z\)\s*;/);
   });
 
+  it('leaves room at its right edge for the launcher that sits on top of it', () => {
+    // ⚠️ FOUND BY LOOKING AT THE SCREENSHOT, not by an assertion. The dock
+    // deliberately sits BELOW the bug reporter's launcher in the stack — and the
+    // launcher is `right: 12px`, 44px wide, so it landed squarely on the dock's
+    // Cancel button. Stacking order was right and the result was still wrong:
+    // being underneath something is only safe if you leave it room.
+    const declarations = rulesFor(styleRules, '.lab-dock')[0]?.declarations ?? '';
+    expect(declarations).toMatch(/padding:[^;]*var\(--lab-dock-launcher-clearance\)/);
+    const clearance = numericToken('--lab-dock-launcher-clearance');
+    // The launcher's own footprint, read from ITS stylesheet rather than assumed.
+    const launcher = rulesFor(bugReporterRules, '.bugreport-launcher')[0]?.declarations ?? '';
+    const right = Number(/right:\s*(\d+)px/.exec(launcher)?.[1]);
+    const width = Number(/width:\s*(\d+)px/.exec(launcher)?.[1]);
+    expect(Number.isFinite(right) && Number.isFinite(width), 'could not read the launcher footprint').toBe(true);
+    // The token is in rem; 1rem is 16px in this app's root sizing.
+    expect(clearance * 16, 'the launcher would sit on the dock’s Cancel button').toBeGreaterThanOrEqual(right + width);
+  });
+
   it('does not break the bug reporter’s capture policy: the dock is NOT portalled', () => {
     // `lib/bugreport/capture-policy.ts` prunes the trailing run of below-the-fold
     // children per parent, and a boxed in-viewport LAST child freezes that

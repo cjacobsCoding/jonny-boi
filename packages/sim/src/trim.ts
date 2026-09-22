@@ -442,6 +442,32 @@ function greatestCommonDivisor(a: number, b: number): number {
   return x;
 }
 
+/**
+ * The stride the systematic sweep walks a space of `possible` subsets with, or
+ * `undefined` when the space cannot be indexed at all.
+ *
+ * `index = i * stride mod possible` enumerates every subset exactly once when
+ * `gcd(stride, possible) = 1`, which is what lets the sweep keep drawing until
+ * the roster is full instead of quietly losing a seat to every collision with
+ * the exploit quota. The starting stride spreads the first draws across the
+ * whole space; the search upward terminates because `gcd(possible − 1, possible)`
+ * is always 1.
+ *
+ * ⚠️ THE NON-FINITE GUARD IS NOT DEFENSIVE PADDING — WITHOUT IT THIS HANGS.
+ * `binomial` reports `Infinity` rather than a wrong number once C(n, k) leaves
+ * the safe-integer range. `Infinity % Infinity` is `NaN`, `NaN !== 0` is true
+ * forever, and Euclid above never returns. That is an infinite loop inside
+ * candidate generation, and it was found by reading this code rather than by any
+ * test — so the guard is here, it is exported, and `trim.test.ts` asserts it
+ * returns rather than spins.
+ */
+export function sweepStride(possible: number, quota: number): number | undefined {
+  if (!Number.isFinite(possible) || possible < 1) return undefined;
+  let stride = Math.max(1, Math.floor(possible / Math.max(1, quota)));
+  while (stride < possible && greatestCommonDivisor(stride, possible) !== 1) stride += 1;
+  return stride;
+}
+
 export function nthCombination(n: number, k: number, index: number): number[] | undefined {
   const total = binomial(n, k);
   if (!Number.isInteger(index) || index < 0 || index >= total) return undefined;
@@ -845,12 +871,12 @@ export function generateTrimCandidates(
     // actually FULL. A plain evenly-spaced sample cannot: it lands on subsets
     // the exploit quota already took, and each collision silently cost a seat —
     // a 24-seat round came back with 22 and nothing said why.
-    const sweepQuota = Math.max(1, cap - candidates.length);
-    let stride = Math.max(1, Math.floor(possible / sweepQuota));
-    while (stride < possible && greatestCommonDivisor(stride, possible) !== 1) stride += 1;
-    for (let i = 0; i < possible && candidates.length < cap; i += 1) {
-      const combination = nthCombination(n, cardsPerCut, (i * stride) % possible);
-      if (combination) take(combination);
+    const stride = sweepStride(possible, Math.max(1, cap - candidates.length));
+    if (stride !== undefined) {
+      for (let i = 0; i < possible && candidates.length < cap; i += 1) {
+        const combination = nthCombination(n, cardsPerCut, (i * stride) % possible);
+        if (combination) take(combination);
+      }
     }
   }
 
@@ -891,8 +917,7 @@ function priorOf(
     score += weights.favouredType;
     reasons.push(favoursLand ? 'a land, and a land cut is due' : 'a nonland, and no land cut is due');
   }
-  for (const { def, count } of parts) {
-    void def;
+  for (const { count } of parts) {
     score += Math.min(count, copiesCap) * weights.perCopy;
     reasons.push(`${count} ${count === 1 ? 'copy' : 'copies'} in the deck`);
   }

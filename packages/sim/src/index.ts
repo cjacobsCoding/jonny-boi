@@ -233,6 +233,7 @@ export {
   binomial,
   nthCombination,
   seedsFromRound,
+  sweepStride,
   trimCoverage,
 } from './trim.js';
 export type { SwapScope } from './config.js';

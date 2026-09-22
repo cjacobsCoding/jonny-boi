@@ -45,6 +45,7 @@ import {
   nthCombination,
   prepareTrimRound,
   runTrimRound,
+  sweepStride,
   trimCoverage,
   trimCutSizeLadder,
   trimDeck,
@@ -581,15 +582,37 @@ describe('§3.180 acceptance 3 — the coverage line prints a denominator with i
     expect(nthCombination(7, 3, -1)).toBeUndefined();
   });
 
-  it('a space too big to count REPORTS that, and does not hang trying to sweep it', () => {
-    // ⚠️ THIS TEST EXISTS BECAUSE OF A REAL HAZARD IN THIS FILE, not a
-    // hypothetical one. `binomial` returns Infinity past the safe-integer range
-    // rather than a silently wrong number — and the sweep picks a stride coprime
-    // with the space, which asks for gcd(Infinity, Infinity). `Infinity %
-    // Infinity` is NaN and `while (y !== 0)` never ends, so the generator would
-    // have spun forever on a deck large enough. The guard is that the sweep is
-    // skipped when the space cannot be indexed.
+  it('the sweep stride visits every subset exactly once — the property the roster depends on', () => {
+    // This is what lets the sweep keep drawing until the roster is FULL. An
+    // evenly-spaced sample collides with the exploit quota and every collision
+    // silently costs a seat: a 24-seat round came back with 22 and nothing said
+    // why. A stride coprime with the space cannot collide with itself.
+    for (const possible of [55, 60, 97, 210]) {
+      const stride = sweepStride(possible, 10);
+      expect(stride, `no stride for a space of ${possible}`).toBeDefined();
+      const visited = new Set<number>();
+      for (let i = 0; i < possible; i += 1) visited.add((i * (stride as number)) % possible);
+      expect(visited.size, `stride ${stride} does not cover a space of ${possible}`).toBe(possible);
+    }
+  });
+
+  it('a space too big to count REPORTS that, and RETURNS rather than spinning', () => {
+    // ⚠️ THIS TEST EXISTS BECAUSE OF A REAL HAZARD IN THIS FILE, found by reading
+    // the code rather than by anything going red. `binomial` reports Infinity
+    // past the safe-integer range rather than a silently wrong number — and the
+    // stride search asks for gcd(Infinity, Infinity). `Infinity % Infinity` is
+    // NaN, `NaN !== 0` is true forever, and Euclid never returns: an INFINITE
+    // LOOP inside candidate generation.
+    //
+    // ⚠️ AND THE FIRST VERSION OF THIS TEST COULD NOT FAIL. It asserted only on
+    // `trimCoverage`'s wording, which never touches the stride — so it passed
+    // just as happily with the guard deleted. It now calls the guarded function
+    // itself, which is the only thing that can actually catch the loop.
     expect(binomial(100_000, 4)).toBe(Number.POSITIVE_INFINITY);
+    expect(sweepStride(Number.POSITIVE_INFINITY, 10), 'an unindexable space gets no sweep').toBeUndefined();
+    expect(sweepStride(Number.NaN, 10)).toBeUndefined();
+    expect(sweepStride(0, 10)).toBeUndefined();
+
     const coverage = trimCoverage('quads', 3, 100_000);
     expect(coverage.possible).toBe(Number.POSITIVE_INFINITY);
     expect(coverage.source, 'an uncountable space must not print a number').toContain(

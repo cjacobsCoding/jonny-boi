@@ -268,15 +268,29 @@ async function main() {
     check('and an idle Lab reserves no room for one', idle.labPaddingBottom === 0, `${idle.labPaddingBottom}px`);
 
     // Start a real run.
+    //
+    // ⚠️ THE SLIDER IS PUSHED TO ITS MAXIMUM FIRST, and that is not incidental.
+    // At the default game count the run finished before the tab walk below got
+    // going, so all six tabs reported "nothing to pin" and the walk measured
+    // NOTHING — the harness said so rather than passing, which is the point, but
+    // a check that cannot reach its subject is not a check. The job has to
+    // outlast the walk for the walk to mean anything.
     console.log('\nStarting a gauntlet run…');
     const started = await page.evaluate(() => {
+      const slider = document.querySelector('.lab-panel input[type="range"]');
+      if (slider) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        setter?.call(slider, slider.max);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       const button = [...document.querySelectorAll('.lab-panel button')].find((b) =>
         b.textContent.toLowerCase().includes('run gauntlet'),
       );
       if (!button) return { clicked: false, why: 'no "Run gauntlet" button' };
       if (button.disabled) return { clicked: false, why: 'the Run button is disabled' };
       button.click();
-      return { clicked: true, why: '' };
+      return { clicked: true, why: `games per opponent set to ${slider?.value ?? 'default'}` };
     });
     check('a real run could be started', started.clicked, started.why);
     if (!started.clicked) {
@@ -286,6 +300,48 @@ async function main() {
     }
     await page.waitForSelector('.lab-dock', { timeout: DOCK_WAIT_MS });
     await assertPageAlive(page, watcher, 'starting a run');
+
+    // EVERY SUBTAB, enumerated from the DOM, while the job is still running —
+    // FIRST, because this is the check most likely to run out of job. It is the
+    // runtime half of "in all the Lab subtabs": the unit guard proves the dock
+    // is rendered outside the tab switch, and this proves it stays on screen as
+    // the tabs actually change.
+    console.log('\nWalking every Lab subtab while the job runs…');
+    const tabLabels = await page.evaluate(() =>
+      [...document.querySelectorAll('.lab-tab')].map((b) => b.textContent.trim()),
+    );
+    check('the Lab exposes its subtabs to walk', tabLabels.length > 1, tabLabels.join(' · '));
+    let tabsCovered = 0;
+    for (const label of tabLabels) {
+      const switched = await page.evaluate((wanted) => {
+        const tab = [...document.querySelectorAll('.lab-tab')].find((b) => b.textContent.trim() === wanted);
+        if (!tab) return false;
+        tab.click();
+        return true;
+      }, label);
+      await new Promise((r) => setTimeout(r, RENDER_SETTLE_MS));
+      const here = await readDock(page);
+      if (!here.present || !here.rect) {
+        // The run finished. That is not a dock failure — but it is also not a
+        // measurement, so it is reported as coverage lost rather than as a pass.
+        console.log(`  n/a   '${label}' — the run had already finished, nothing to pin`);
+        continue;
+      }
+      tabsCovered += 1;
+      check(
+        `'${label}' keeps the dock pinned while the job runs`,
+        switched && Math.abs(here.rect.bottom - here.innerHeight) <= EDGE_TOLERANCE_PX,
+        `bottom ${Math.round(here.rect.bottom)} vs viewport ${here.innerHeight}`,
+      );
+    }
+    // ⚠️ THE NON-VACUITY GUARD. Without this the walk passes by measuring
+    // nothing at all, which is precisely the shape of check this project has
+    // paid for most often.
+    check(
+      'the job outlasted the walk, so EVERY subtab was actually measured',
+      tabsCovered === tabLabels.length,
+      `${tabsCovered} of ${tabLabels.length} tabs measured with a job in flight`,
+    );
 
     // THE PAGE MUST ACTUALLY SCROLL, or every scroll check below is vacuous.
     const atTop = await readDock(page);
@@ -330,38 +386,6 @@ async function main() {
     const shot = await page.screenshot({ encoding: 'binary' });
     writeFileSync(resolve(OUT_DIR, 'lab-dock-scrolled.png'), shot);
     check('a screenshot of the scrolled, running Lab was captured', shot.length > 10_000, `${Math.round(shot.length / 1024)} KB`);
-
-    // EVERY SUBTAB, enumerated from the DOM, while the job is still running.
-    // This is the runtime half of "in all the Lab subtabs": the unit guard
-    // proves the dock is rendered outside the tab switch; this proves it stays
-    // on screen as the tabs actually change.
-    console.log('\nWalking every Lab subtab while the job runs…');
-    const tabLabels = await page.evaluate(() =>
-      [...document.querySelectorAll('.lab-tab')].map((b) => b.textContent.trim()),
-    );
-    check('the Lab exposes its subtabs to walk', tabLabels.length > 1, tabLabels.join(' · '));
-    let stillRunning = true;
-    for (const label of tabLabels) {
-      const switched = await page.evaluate((wanted) => {
-        const tab = [...document.querySelectorAll('.lab-tab')].find((b) => b.textContent.trim() === wanted);
-        if (!tab) return false;
-        tab.click();
-        return true;
-      }, label);
-      await new Promise((r) => setTimeout(r, RENDER_SETTLE_MS));
-      const here = await readDock(page);
-      if (!here.present) {
-        // The run may simply have finished; that is not a dock failure, and
-        // saying so is better than filing a bug against a job that ended.
-        stillRunning = false;
-        console.log(`  n/a   '${label}' — the run had already finished, nothing to pin`);
-        continue;
-      }
-      check(`'${label}' keeps the dock pinned while the job runs`, switched && Math.abs(here.rect.bottom - here.innerHeight) <= EDGE_TOLERANCE_PX,
-        `bottom ${Math.round(here.rect.bottom)} vs viewport ${here.innerHeight}`);
-    }
-    check('the job outlasted the tab walk, so those checks measured something', stillRunning,
-      stillRunning ? '' : 'the run finished mid-walk — re-run with a slower gauntlet to cover every tab');
 
     // AND IT GOES AWAY. Cancel, and the dock must vanish along with the reserve.
     console.log('\nCancelling…');

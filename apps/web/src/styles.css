@@ -73,6 +73,12 @@
      long run. `styles-regressions.test.ts` asserts that ordering against all
      three stylesheets, so it cannot drift silently. */
   --lab-dock-z: 85;
+  /* Room at the dock's right edge for the bug-reporter launcher, which is
+     `position: fixed; right: 12px` and 44px wide (`bug-reporter.css`) and sits
+     ABOVE the dock in the stack. Without this the launcher lands on top of the
+     dock's Cancel button — caught by LOOKING at the harness screenshot, not by
+     any assertion, which is why the screenshot is part of the acceptance. */
+  --lab-dock-launcher-clearance: 4.5rem;
   /* Room reserved at the foot of `.lab` while the dock is up, so the last row of
      a panel stays reachable instead of sitting under the bar. Generously more
      than the bar's own height: it wraps to two lines on a narrow viewport
@@ -1281,7 +1287,7 @@ button {
   left: 0;
   right: 0;
   z-index: var(--lab-dock-z);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--lab-dock-launcher-clearance) var(--space-3) var(--space-4);
   background: var(--color-surface);
   border-top: 1px solid var(--color-border-strong);
   /* Lift it off whatever scrolls beneath, the way `.action-bar` does. */
