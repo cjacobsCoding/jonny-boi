@@ -3,6 +3,7 @@ import {
   DEFAULT_TRIM_CONFIG,
   TRIM_STOP_REASON_WORDING,
   deckFingerprint,
+  seedsFromRound,
   type TrimCut,
   type LandRatio,
   type TrimOnImprovement,
@@ -38,7 +39,20 @@ import {
   stepAfterRound,
   targetProblem,
 } from '../../lib/lab/trimSession.js';
+import { TRIM_MAX_CARDS_PER_CUT } from '../../lib/lab-config.js';
 import './trim-panel.css';
+
+/**
+ * Hold a typed cut size inside the sim's closed table (§3.180).
+ *
+ * A number input hands back `NaN` while it is being cleared, and a user can type
+ * 9 into a table whose largest row is 4. Both fall back to something the table
+ * actually has a row for rather than being passed on to be refused deeper down.
+ */
+function clampCutSize(typed: number): number {
+  if (!Number.isFinite(typed)) return TRIM_MAX_CARDS_PER_CUT.default;
+  return Math.min(Math.max(Math.round(typed), TRIM_MAX_CARDS_PER_CUT.min), TRIM_MAX_CARDS_PER_CUT.max);
+}
 
 /** The target-size input's bounds (named in `lab-config`). */
 export interface TargetConfig {
@@ -142,7 +156,10 @@ export function TrimPanel({
   const [targetSize, setTargetSize] = useState(defaultSettings.targetSize);
   const [onImprovement, setOnImprovement] = useState<TrimOnImprovement>(defaultSettings.onImprovement);
   const [onNoImprovement, setOnNoImprovement] = useState<TrimOnNoImprovement>(defaultSettings.onNoImprovement);
-  const settings: TrimSettings = { targetSize, onImprovement, onNoImprovement };
+  const [maxCardsPerCut, setMaxCardsPerCut] = useState<number>(
+    defaultSettings.maxCardsPerCut ?? TRIM_MAX_CARDS_PER_CUT.default,
+  );
+  const settings: TrimSettings = { targetSize, onImprovement, onNoImprovement, maxCardsPerCut };
 
   const heroId = hero?.id ?? '';
   const [session, setSession] = useState<Session>(() => IDLE_SESSION(heroId, games));
@@ -174,6 +191,14 @@ export function TrimPanel({
     roundKind: TrimRoundKind,
     base: LandRatio | null,
     gamesPerCandidate: number,
+    /**
+     * §3.180 — what the last single-card round MEASURED, so a widening round
+     * exploits it. The candidates are enumerated on the worker (that is where
+     * the card pool lives), so the seeds have to travel with the request; a
+     * round issued without them falls back to the cheap prior's order, which
+     * cannot see which cards merely measured badly.
+     */
+    seeds: readonly string[] = [],
   ): void => {
     if (!heroPayload) return;
     sim.run({
@@ -191,6 +216,7 @@ export function TrimPanel({
       targetSize,
       pilotId,
       ...(base ? { baseLandRatio: base } : {}),
+      ...(seeds.length > 0 ? { seeds } : {}),
     });
   };
 
@@ -242,12 +268,17 @@ export function TrimPanel({
             : { ...s, status: 'stopped', stopNote: 'An improving removal was found — copy this deck to your decks to apply it.' },
         );
         break;
+      // §3.180 — a widening round is seeded from what THIS round measured, and
+      // `seedsFromRound` is the sim's own function so the Lab and the headless
+      // loop cannot disagree about what counts as a seed. It reads only
+      // single-card rows, so widening from an already-wide round carries none
+      // and the prior's order stands.
       case 'widen':
-        issueRound(step.round, step.roundKind, base, session.gamesPerCandidate);
+        issueRound(step.round, step.roundKind, base, session.gamesPerCandidate, seedsFromRound(report));
         break;
       case 'deepen':
         setSession((s) => ({ ...s, gamesPerCandidate: step.gamesPerCandidate }));
-        issueRound(step.round, step.roundKind, base, step.gamesPerCandidate);
+        issueRound(step.round, step.roundKind, base, step.gamesPerCandidate, seedsFromRound(report));
         break;
       case 'stopped':
         setSession((s) => ({ ...s, status: 'finished', stopReason: step.reason }));
@@ -420,8 +451,34 @@ export function TrimPanel({
             disabled={busy}
             onChange={() => setOnNoImprovement('keep-looking')}
           />
-          Keep looking — widen to nonland + land pairs
+          Keep looking — widen the cut, then go deeper
         </label>
+      </fieldset>
+      <fieldset className="trim-setting">
+        <legend>Cut at most</legend>
+        <label className="trim-cut-size">
+          <input
+            type="number"
+            min={TRIM_MAX_CARDS_PER_CUT.min}
+            max={TRIM_MAX_CARDS_PER_CUT.max}
+            step={TRIM_MAX_CARDS_PER_CUT.step}
+            value={maxCardsPerCut}
+            disabled={busy}
+            onChange={(event) => setMaxCardsPerCut(clampCutSize(event.target.valueAsNumber))}
+          />
+          {maxCardsPerCut === 1 ? 'card at a time' : 'cards at a time'}
+        </label>
+        <p className="lab-hint">
+          A session always starts by trying single cards — a one-card cut that helps is cheaper to find and
+          safer to apply. This is how far it may widen when a round finds nothing.
+          {maxCardsPerCut > 1 && (
+            <>
+              {' '}
+              There are far too many {maxCardsPerCut}-card combinations to try them all, so a wide round
+              scouts a sample and every result says how much of the space it saw.
+            </>
+          )}
+        </p>
       </fieldset>
 
       {chosenOpponents.length > 0 && hero && (
@@ -546,13 +603,23 @@ export function RoundCard({
 }): ReactElement {
   const winner = report.winner;
   const edge = report.edgeCandidate;
-  const kindLabel = report.roundKind === 'pairs' ? 'nonland + land pairs' : 'single cards';
+  // §3.180 — the round's own noun, out of the sim's cut-size table rather than a
+  // branch here. "nonland + land pairs" was true only while a pair WAS one of
+  // each; a k = 2 round now tries any two cards, and a label that describes the
+  // old behaviour is worse than no label.
+  const kindLabel = report.coverage.noun;
   return (
     <section className={`lab-results trim-round${isLatest ? ' trim-round--latest' : ''}`} aria-label={`Round ${report.round + 1}`}>
       <h3 className="trim-round__title">
         Round {report.round + 1} · {kindLabel} · {report.deckSize} cards → target {report.targetSize}
       </h3>
       <p className="trim-reading">{report.reading.explanation}</p>
+      {/*
+        HOW MUCH OF THE SPACE THIS ROUND SAW (§3.180). Printed for every round,
+        k = 1 included, because a count without its denominator invites the
+        reader to assume it was all of them — and at k > 1 it never is.
+      */}
+      <p className="trim-coverage">{report.coverage.source}</p>
 
       {winner ? (
         <div className="verdict-banner verdict-banner--better">

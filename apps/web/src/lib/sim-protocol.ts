@@ -192,6 +192,15 @@ export interface TrimRequest extends PilotedRequest, VerdictBarRequest {
   readonly targetSize: number;
   /** Omitted on the first round: the hero IS the base. */
   readonly baseLandRatio?: LandRatio;
+  /**
+   * §3.180 — the card ids of the previous round's best SINGLE cuts, best-first.
+   * A k > 1 round draws part of its roster from k-subsets of these, so the
+   * seeds have to cross the boundary with the request: candidates are
+   * enumerated on the worker, where the card pool lives. Absent on a first
+   * round, and absent when the previous round was itself wide — then the
+   * prior's own order seeds it.
+   */
+  readonly seeds?: readonly string[];
 }
 
 /** Anything the UI can ask the worker to run. */

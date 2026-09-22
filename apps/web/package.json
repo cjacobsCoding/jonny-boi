@@ -11,7 +11,8 @@
     "cards:index": "node scripts/build-card-index.mjs",
     "cards:glossary": "node scripts/check-glossary-coverage.mjs",
     "preview": "vite preview",
-    "verify:reporter": "node scripts/verify-bug-reporter.mjs"
+    "verify:reporter": "node scripts/verify-bug-reporter.mjs",
+    "verify:lab-dock": "node scripts/verify-lab-progress-dock.mjs"
   },
   "dependencies": {
     "@jonny-boi/ai": "*",

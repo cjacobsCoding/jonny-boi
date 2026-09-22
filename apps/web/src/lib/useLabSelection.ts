@@ -17,8 +17,31 @@ import { VERDICT_BARS, type VerdictBar } from '@jonny-boi/sim';
 import { DEFAULT_LAB_SEED, DEFAULT_VERDICT_BAR, VERDICT_MIN_GAMES } from './lab-config.js';
 import { DEFAULT_PILOT_ID } from './sim/pilots.js';
 
-/** The Lab's sub-tabs — the things you can run against the gauntlet. */
-export type LabTabId = 'gauntlet' | 'swap' | 'suggest' | 'trim' | 'manabase' | 'joint';
+/**
+ * THE LAB'S SUB-TABS — one registry, and the id union is DERIVED from it
+ * (DESIGN §3.180).
+ *
+ * ⚠️ There used to be two lists: this union, hand-written, and a `LAB_TABS`
+ * array private to `LabView.tsx` carrying the same six ids and the same
+ * doc-comment, with NOTHING pinning them together. Two places answering "what
+ * are the Lab's tabs?" eventually answer it differently, and the bug gets blamed
+ * on neither (project rule 12). It lives here rather than in the view because a
+ * view importing from a lib is the direction the rest of the app already runs.
+ *
+ * It is exported so a TEST CAN ENUMERATE IT: the guard that every tab gets the
+ * pinned progress dock iterates these rows, so a seventh tab cannot ship without
+ * one. Adding a tab is a row here.
+ */
+export const LAB_TABS = [
+  { id: 'gauntlet', label: 'Gauntlet' },
+  { id: 'swap', label: 'A/B Swap Test' },
+  { id: 'suggest', label: 'Suggestions' },
+  { id: 'trim', label: 'Trim' },
+  { id: 'manabase', label: 'Manabase' },
+  { id: 'joint', label: 'Joint search' },
+] as const;
+
+export type LabTabId = (typeof LAB_TABS)[number]['id'];
 
 /** Everything the Lab needs to remember between visits. */
 export interface LabSelection {

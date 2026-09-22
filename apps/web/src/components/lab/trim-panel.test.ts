@@ -24,7 +24,17 @@ import {
   type SwapVerdictReason,
   type TrimRoundReport,
   type TrimRow,
+  trimCoverage,
 } from '@jonny-boi/sim';
+
+/**
+ * A plausible distinct-card count for a 63-card deck, so a fake round's
+ * coverage line reads like a real one. It is a FIXTURE, not a claim about any
+ * particular deck -- and the line itself is built by the sim's own
+ * `trimCoverage`, so a test can never assert a sentence the panel does not
+ * actually print.
+ */
+const DISTINCT_CARDS = 35;
 import { RoundCard, TrimPanel } from './TrimPanel.js';
 import {
   DEFAULT_VERDICT_BAR,
@@ -133,6 +143,7 @@ function report(overrides: Partial<TrimRoundReport>): TrimRoundReport {
     round: 0,
     roundKind: 'singles',
     cardsPerCut: 1,
+    coverage: trimCoverage('singles', 1, DISTINCT_CARDS),
     reading: {
       base: { lands: 27, size: 63 },
       current: { lands: 27, size: 63 },
@@ -191,11 +202,38 @@ describe('the Trim panel', () => {
     expect(html).toContain(`value="${TRIM_TARGET_SIZE.default}"`);
     expect(html).toContain('On an improving removal');
     expect(html).toContain('When nothing improves');
-    expect(html).toContain('Keep looking — widen to nonland + land pairs');
+    // §3.180 — "widen to nonland + land pairs" was true only while a pair WAS
+    // one of each. A k = 2 round now tries any two cards and there are rows past
+    // two, so the label describes the LADDER rather than one rung of it.
+    expect(html).toContain('Keep looking — widen the cut, then go deeper');
+    expect(html).not.toContain('nonland + land pairs');
     expect(html).toContain('lands 27/63');
     expect(html).toContain('<strong>3</strong> to cut');
     expect(html).toMatch(/<button[^>]*class="btn btn--primary"[^>]*>Start trimming<\/button>/);
     expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Start trimming/);
+  });
+
+  it('§3.180 — the cut-size tunable is on screen, bounded by the sim’s closed table', () => {
+    // REACHABILITY, not existence. The engine work is worth nothing if a person
+    // opening the Trim tab cannot find the setting, and "built, tested, green
+    // and unreachable" is this repo's documented failure mode for UI work.
+    const html = markup();
+    expect(html).toContain('Cut at most');
+    expect(html).toMatch(/<input[^>]*type="number"[^>]*min="1"[^>]*max="4"[^>]*value="2"/);
+    expect(html).toContain('cards at a time');
+    // ...and it explains that a wide round is a SAMPLE, rather than letting the
+    // reader assume every combination was tried.
+    expect(html).toContain('scouts a sample');
+  });
+
+  it('§3.180 — every round prints how much of the space it tried, with the denominator', () => {
+    const html = card(report({ coverage: trimCoverage('pairs', 24, 11) }), 'finished');
+    expect(html).toContain('24 of 55 two-card cuts tried');
+    expect(html, 'a count without its source invites "that was all of them"').toContain('C(11, 2)');
+    expect(html).toContain('two-card cuts');
+    // The heading reads the noun from the table too, so it cannot say "nonland
+    // + land pairs" about a round that tried any two cards.
+    expect(html).not.toContain('nonland + land pairs');
   });
 
   it('refuses a target the deck cannot be trimmed to, in words, with Start dead', () => {

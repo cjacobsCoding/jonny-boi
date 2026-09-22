@@ -26,18 +26,30 @@ import { swappedInstanceIdsFor, type ArmHandle, type SwapArm } from './paired-ar
 import { DEFAULT_DECK_RULES } from './config.js';
 import {
   CARDS_PER_CUT,
+  DEFAULT_MAX_CARDS_PER_CUT,
   DEFAULT_TRIM_CONFIG,
   LAND_RATIO_TOLERANCE_LANDS,
+  TRIM_CUT_SIZE_ROWS,
+  TRIM_CUT_SIZE_ROW_BY_KIND,
+  TRIM_FIRST_ROUND_KIND,
+  TRIM_MAX_CUT_SIZE,
+  TRIM_ROUND_KINDS,
   TRIM_SKIP_NOT_APPLICABLE,
   applyTrimCut,
+  binomial,
   deckSizeOf,
   generateTrimCandidates,
   landCutDue,
   landRatioOf,
   nextWideningStep,
+  nthCombination,
   prepareTrimRound,
   runTrimRound,
+  sweepStride,
+  trimCoverage,
+  trimCutSizeLadder,
   trimDeck,
+  trimKindForCutSize,
   type TrimArmRunner,
 } from './trim.js';
 import { MONO_GREEN_STOMPY, UW_CONTROL } from '../data/decks/index.js';
@@ -265,23 +277,48 @@ describe('generateTrimCandidates', () => {
     expect(quiet.findIndex((c) => c.outId === FOREST_ID)).toBeGreaterThan(lastNonland);
   });
 
-  it('pairs are every nonland × land, capped with the rest reported', () => {
-    const { candidates, skipped } = generateTrimCandidates(RIGGED, pool, { kind: 'pairs', reading: due });
-    expect(candidates.length).toBe(9 * 2);
-    expect(skipped).toEqual([]);
+  it('pairs are any TWO distinct cards now, not just nonland × land (§3.180)', () => {
+    const { candidates } = generateTrimCandidates(RIGGED, pool, { kind: 'pairs', reading: due });
+    expect(candidates.length).toBe(DEFAULT_TRIM_CONFIG.maxMultiCutCandidates);
     for (const c of candidates) {
       expect(c.cuts.length).toBe(2);
-      expect(c.cuts.filter((cut) => cut.isLand).length).toBe(1);
       expect(c.copiesSwapped).toBe(2);
       expect(c.sizeAfter).toBe(61);
     }
+    // THE DISCRIMINATOR for §3.180. Before it, a pair was built as the nonland ×
+    // land cross product, so EVERY candidate held exactly one land and a pair of
+    // two nonlands was unreachable whatever the deck. Both shapes must appear.
+    const nonlandPairs = candidates.filter((c) => c.cuts.every((cut) => !cut.isLand));
+    const mixedPairs = candidates.filter((c) => c.cuts.filter((cut) => cut.isLand).length === 1);
+    expect(nonlandPairs.length, 'two nonlands together is the shape §3.174 could not reach').toBeGreaterThan(0);
+    expect(mixedPairs.length, 'and the nonland+land pair §3.174 DID reach must still be there').toBeGreaterThan(0);
+
     const capped = generateTrimCandidates(RIGGED, pool, {
       kind: 'pairs',
       reading: due,
-      config: { ...DEFAULT_TRIM_CONFIG, maxPairCandidates: 5 },
+      config: { ...DEFAULT_TRIM_CONFIG, maxMultiCutCandidates: 5 },
     });
     expect(capped.candidates.length).toBe(5);
-    expect(capped.skipped.filter((s) => s.reason === 'capped').length).toBe(13);
+  });
+
+  it('a space small enough to enumerate is enumerated, not sampled — and says so', () => {
+    // Four distinct cards is C(4,2) = 6 pairs, under any sane cap: the round is
+    // EXACT, and the coverage line must not imply a sample where none happened.
+    const small: Deck = {
+      name: 'Four Distinct',
+      archetype: 'test',
+      cards: [
+        { cardId: 'Llanowar Elves', count: 4 },
+        { cardId: 'Craw Wurm', count: 4 },
+        { cardId: 'Forest', count: 52 },
+        { cardId: 'Swamp', count: 3 },
+      ],
+    };
+    const { candidates, coverage } = generateTrimCandidates(small, pool, { kind: 'pairs', reading: notDue });
+    expect(coverage.possible).toBe(6);
+    expect(candidates.length).toBe(6);
+    expect(coverage.tried).toBe(6);
+    expect(coverage.source).toContain('6 of 6 two-card cuts tried');
   });
 
   it('a cut that would take the deck under the minimum is reported illegal, not built', () => {
@@ -327,6 +364,344 @@ describe('nextWideningStep', () => {
     expect(nextWideningStep('singles', 62, 60)).toBe('pairs');
     expect(nextWideningStep('singles', 61, 60)).toBeUndefined();
     expect(nextWideningStep('pairs', 63, 60)).toBeUndefined();
+  });
+
+  it('stops at the ceiling the user set, and the ladder is the denominator (§3.180)', () => {
+    // The default ceiling is TWO — the ladder §3.179 shipped — so the default
+    // ladder must be exactly [singles, pairs] however many rows the table holds.
+    expect(trimCutSizeLadder(DEFAULT_MAX_CARDS_PER_CUT, 63, 60)).toEqual(['singles', 'pairs']);
+    expect(TRIM_CUT_SIZE_ROWS.length, 'the TABLE is longer than the default LADDER — that is the point').toBeGreaterThan(
+      trimCutSizeLadder(DEFAULT_MAX_CARDS_PER_CUT, 63, 60).length,
+    );
+    // Raise the ceiling and the ladder actually lengthens.
+    expect(nextWideningStep('pairs', 70, 60, 3)).toBe('triples');
+    expect(nextWideningStep('triples', 70, 60, 4)).toBe('quads');
+    expect(nextWideningStep('pairs', 70, 60, 2)).toBeUndefined();
+    // A ceiling outside the table is CLAMPED in one place, never approximated
+    // into a row that does not exist.
+    expect(trimCutSizeLadder(99, 70, 60).length).toBe(TRIM_CUT_SIZE_ROWS.length);
+    expect(trimCutSizeLadder(0, 70, 60)).toEqual(['singles']);
+    // And the target still rules rows out, ceiling or no ceiling.
+    expect(nextWideningStep('singles', 61, 60, 4)).toBeUndefined();
+  });
+
+  it('the derived tables cannot drift from the rows they are derived from', () => {
+    // The guard for §3.180's whole shape: one table, everything else derived.
+    expect(TRIM_ROUND_KINDS.length).toBe(TRIM_CUT_SIZE_ROWS.length);
+    for (const row of TRIM_CUT_SIZE_ROWS) {
+      expect(CARDS_PER_CUT[row.kind], `CARDS_PER_CUT drifted from the row for ${row.kind}`).toBe(row.cardsPerCut);
+      expect(TRIM_CUT_SIZE_ROW_BY_KIND[row.kind]).toBe(row);
+      expect(trimKindForCutSize(row.cardsPerCut)).toBe(row.kind);
+    }
+    expect(TRIM_FIRST_ROUND_KIND).toBe(TRIM_CUT_SIZE_ROWS[0]?.kind);
+    expect(TRIM_MAX_CUT_SIZE).toBe(TRIM_CUT_SIZE_ROWS[TRIM_CUT_SIZE_ROWS.length - 1]?.cardsPerCut);
+    // A size with no row REPORTS rather than being widened to its neighbour.
+    expect(trimKindForCutSize(TRIM_MAX_CUT_SIZE + 1)).toBeUndefined();
+    expect(trimKindForCutSize(0)).toBeUndefined();
+  });
+});
+
+// --- §3.180 — cutting more than one card at a time --------------------------------------
+
+const CRAW_WURM_ID = pool.getByName('Craw Wurm')?.id ?? 'missing-craw-wurm';
+const PELAKKA_ID = pool.getByName('Pelakka Wurm')?.id ?? 'missing-pelakka-wurm';
+
+/** The two readings, at module scope so this whole section can share them. */
+const RIGGED_NOT_DUE = landCutDue(27, 63, 27, 63);
+const RIGGED_DUE = landCutDue(24, 60, 24, 57);
+
+/**
+ * A WHISPER on one card: it wins two extra slots and no more, ever.
+ *
+ * ⚠️ FIXED SLOTS, NOT A PERIODIC RULE, and the difference is the test. A rig
+ * like `slot % 5 === 1` scales its effect with the depth, so the deeper the
+ * ladder goes the MORE significant it becomes — and a single card duly proved
+ * better at 80 paired games, which made the k = 1 arm of acceptance 2 pass for
+ * the wrong reason. Two discordant games out of however many is a whisper at
+ * every depth: enough to rank top on observed delta, never enough to call.
+ */
+const whisperSlots = (slot: number): boolean => slot === 1 || slot === 3;
+
+/**
+ * TWO CARDS THAT ARE ONLY BAD TOGETHER — the rig acceptance check 2 turns on.
+ *
+ * Each ALONE wins a couple of extra slots: enough to rank at the top of a singles
+ * round by observed delta, nowhere near enough for Holm to call it. Cut as a
+ * PAIR they win 90% of slots outright. Any search that can only evaluate one
+ * card at a time is structurally unable to find this, which is the whole reason
+ * the feature exists — and both cards are NONLANDS, so §3.174's nonland × land
+ * cross product could not have reached the pair either.
+ */
+const onlyBadTogether =
+  (a: string, b: string): Rig =>
+  (swap, slot, baseWon) => {
+    const outs = swap.out.split(CUT_OUT_SEPARATOR);
+    if (outs.length === 2 && outs.includes(a) && outs.includes(b)) return slot % 10 < 9;
+    if (outs.length === 1 && (outs[0] === a || outs[0] === b)) return baseWon || whisperSlots(slot);
+    return baseWon;
+  };
+
+describe('§3.180 acceptance 1 — k = 1 reproduces today’s behaviour exactly', () => {
+  it('is every distinct card once, in the old prior order, at the old scores', () => {
+    const { candidates, coverage } = generateTrimCandidates(RIGGED, pool, { kind: 'singles', reading: RIGGED_NOT_DUE });
+    expect(candidates.length).toBe(11);
+    expect(new Set(candidates.map((c) => c.outId)).size).toBe(11);
+    for (const c of candidates) {
+      expect(c.cuts.length).toBe(1);
+      expect(c.sizeAfter).toBe(62);
+    }
+    // The score is the PRE-§3.180 per-card formula, re-derived here from the
+    // weights rather than copied from the implementation.
+    const { favouredType, perCopy } = DEFAULT_TRIM_CONFIG.prior;
+    for (const c of candidates) {
+      const cut = c.cuts[0];
+      const count = countIn(RIGGED, cut?.cardId ?? '');
+      const expected =
+        (cut?.isLand === false ? favouredType : 0) + Math.min(count, DEFAULT_DECK_RULES.maxCopiesNonBasic) * perCopy;
+      expect(c.heuristicScore, `${c.outName} scored differently than §3.174 scored it`).toBe(expected);
+    }
+    // Sorted best-first, ties by name — the old comparator, unchanged.
+    for (let i = 1; i < candidates.length; i += 1) {
+      const prev = candidates[i - 1];
+      const here = candidates[i];
+      if (!prev || !here) continue;
+      expect(prev.heuristicScore).toBeGreaterThanOrEqual(here.heuristicScore);
+      if (prev.heuristicScore === here.heuristicScore) expect(prev.outName < here.outName).toBe(true);
+    }
+    // A k = 1 round sees the whole space, and says so.
+    expect(coverage.possible).toBe(11);
+    expect(coverage.tried).toBe(11);
+  });
+
+  it('the subset prior equals the old per-card prior on every shape §3.174 could build', () => {
+    // §3.180 awards the favoured-type bonus ONCE for the subset instead of once
+    // per card. That is only safe because §3.174's pairs were always exactly one
+    // nonland and one land — so exactly one part could ever match. This is the
+    // check that the claim is true rather than merely plausible.
+    const { favouredType, perCopy } = DEFAULT_TRIM_CONFIG.prior;
+    for (const reading of [RIGGED_DUE, RIGGED_NOT_DUE]) {
+      const pairs = generateTrimCandidates(RIGGED, pool, { kind: 'pairs', reading }).candidates;
+      const mixed = pairs.filter((c) => c.cuts.filter((cut) => cut.isLand).length === 1);
+      expect(mixed.length).toBeGreaterThan(0);
+      for (const c of mixed) {
+        const perCard = c.cuts.reduce((sum, cut) => {
+          const matches = cut.isLand === (reading.favoured === 'land');
+          const count = countIn(RIGGED, cut.cardId);
+          return sum + (matches ? favouredType : 0) + Math.min(count, DEFAULT_DECK_RULES.maxCopiesNonBasic) * perCopy;
+        }, 0);
+        expect(c.heuristicScore, `${c.outName} would have scored ${perCard} under §3.174`).toBe(perCard);
+      }
+    }
+  });
+});
+
+describe('§3.180 acceptance 2 — a pair that is only bad TOGETHER', () => {
+  it('is in the k = 2 roster, seeded from what the previous round measured', () => {
+    const seeded = generateTrimCandidates(RIGGED, pool, {
+      kind: 'pairs',
+      reading: RIGGED_NOT_DUE,
+      seeds: [CRAW_WURM_ID, PELAKKA_ID],
+    });
+    const pair = seeded.candidates.find(
+      (c) => c.cuts.length === 2 && c.cuts.some((x) => x.cardId === CRAW_WURM_ID) && c.cuts.some((x) => x.cardId === PELAKKA_ID),
+    );
+    expect(pair, 'the seeded pair was not scouted at all').toBeDefined();
+    expect(pair?.cuts.every((cut) => !cut.isLand), 'both cards are nonlands — unreachable before §3.180').toBe(true);
+  });
+
+  it('k = 2 FINDS it and k = 1 finds neither card — the whole point of the feature', () => {
+    const rig = onlyBadTogether(CRAW_WURM_ID, PELAKKA_ID);
+    const deep = { ...sessionOptions, gamesPerCandidate: 40 };
+
+    // k = 1: the ceiling is one card, so the ladder cannot widen. Neither card
+    // is provably worth cutting on its own, and the session ends having applied
+    // nothing at all.
+    const singlesOnly = trimDeck(RIGGED, {
+      ...deep,
+      gauntletDecks: TWO_OPPONENTS,
+      settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking', maxCardsPerCut: 1 },
+      armRunner: (base) => riggedRunner(base, rig),
+    });
+    expect(singlesOnly.applied, 'a one-card-at-a-time search must not find this').toEqual([]);
+    for (const round of singlesOnly.rounds) expect(round.winner).toBeUndefined();
+
+    // k = 2: the same rig, the same games, the ceiling raised by one.
+    const withPairs = trimDeck(RIGGED, {
+      ...deep,
+      gauntletDecks: TWO_OPPONENTS,
+      settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking', maxCardsPerCut: 2 },
+      armRunner: (base) => riggedRunner(base, rig),
+    });
+    const applied = withPairs.applied[0];
+    expect(applied, 'k = 2 found nothing — the feature is decoration').toBeDefined();
+    expect(applied?.cuts.length).toBe(2);
+    expect(applied?.cuts.map((c) => c.cardId).sort()).toEqual([CRAW_WURM_ID, PELAKKA_ID].sort());
+    // And the deck really did lose both cards, not one twice.
+    expect(deckSizeOf(withPairs.deck)).toBe(61);
+    expect(countIn(withPairs.deck, CRAW_WURM_ID)).toBe(countIn(RIGGED, CRAW_WURM_ID) - 1);
+    expect(countIn(withPairs.deck, PELAKKA_ID)).toBe(countIn(RIGGED, PELAKKA_ID) - 1);
+  });
+});
+
+describe('§3.180 acceptance 3 — the coverage line prints a denominator with its source', () => {
+  it('counts C(distinct, k) for a known deck, computed independently here', () => {
+    // RIGGED holds 11 distinct cards: 9 nonlands + Forest + Swamp.
+    // C(11,2) = 55, and 55 is written here as a literal so a broken `binomial`
+    // cannot make this test agree with it.
+    const { coverage, candidates } = generateTrimCandidates(RIGGED, pool, { kind: 'pairs', reading: RIGGED_DUE });
+    expect(coverage.distinctCards).toBe(11);
+    expect(coverage.possible).toBe(55);
+    expect(binomial(11, 2)).toBe(55);
+    expect(coverage.tried).toBe(candidates.length);
+    expect(coverage.cardsPerCut).toBe(2);
+    expect(coverage.noun).toBe('two-card cuts');
+    expect(coverage.source).toContain(`${candidates.length} of 55 two-card cuts tried`);
+    expect(coverage.source, 'the denominator must name where it came from').toContain('C(11, 2)');
+    // The old cross product could only ever have reached 9 × 2 = 18 of those 55.
+    expect(coverage.possible).toBeGreaterThan(9 * 2);
+  });
+
+  it('binomial and nthCombination agree, and neither invents a value it cannot give', () => {
+    expect(binomial(35, 2)).toBe(595);
+    expect(binomial(35, 3)).toBe(6545);
+    expect(binomial(5, 0)).toBe(1);
+    expect(binomial(3, 5)).toBe(0);
+    // Every index in range yields a distinct, ascending, in-range subset...
+    const seen = new Set<string>();
+    for (let i = 0; i < binomial(7, 3); i += 1) {
+      const combo = nthCombination(7, 3, i);
+      expect(combo).toBeDefined();
+      expect(combo?.length).toBe(3);
+      expect(combo).toEqual([...(combo ?? [])].sort((x, y) => x - y));
+      expect(combo?.every((v) => v >= 0 && v < 7)).toBe(true);
+      seen.add((combo ?? []).join(','));
+    }
+    expect(seen.size, 'the unranking repeated a subset').toBe(binomial(7, 3));
+    // ...and one out of range REPORTS rather than wrapping round.
+    expect(nthCombination(7, 3, binomial(7, 3))).toBeUndefined();
+    expect(nthCombination(7, 3, -1)).toBeUndefined();
+  });
+
+  it('the sweep stride visits every subset exactly once — the property the roster depends on', () => {
+    // This is what lets the sweep keep drawing until the roster is FULL. An
+    // evenly-spaced sample collides with the exploit quota and every collision
+    // silently costs a seat: a 24-seat round came back with 22 and nothing said
+    // why. A stride coprime with the space cannot collide with itself.
+    for (const possible of [55, 60, 97, 210]) {
+      const stride = sweepStride(possible, 10);
+      expect(stride, `no stride for a space of ${possible}`).toBeDefined();
+      const visited = new Set<number>();
+      for (let i = 0; i < possible; i += 1) visited.add((i * (stride as number)) % possible);
+      expect(visited.size, `stride ${stride} does not cover a space of ${possible}`).toBe(possible);
+    }
+  });
+
+  it('a space too big to count REPORTS that, and RETURNS rather than spinning', () => {
+    // ⚠️ THIS TEST EXISTS BECAUSE OF A REAL HAZARD IN THIS FILE, found by reading
+    // the code rather than by anything going red. `binomial` reports Infinity
+    // past the safe-integer range rather than a silently wrong number — and the
+    // stride search asks for gcd(Infinity, Infinity). `Infinity % Infinity` is
+    // NaN, `NaN !== 0` is true forever, and Euclid never returns: an INFINITE
+    // LOOP inside candidate generation.
+    //
+    // ⚠️ AND THE FIRST VERSION OF THIS TEST COULD NOT FAIL. It asserted only on
+    // `trimCoverage`'s wording, which never touches the stride — so it passed
+    // just as happily with the guard deleted. It now calls the guarded function
+    // itself, which is the only thing that can actually catch the loop.
+    expect(binomial(100_000, 4)).toBe(Number.POSITIVE_INFINITY);
+    expect(sweepStride(Number.POSITIVE_INFINITY, 10), 'an unindexable space gets no sweep').toBeUndefined();
+    expect(sweepStride(Number.NaN, 10)).toBeUndefined();
+    expect(sweepStride(0, 10)).toBeUndefined();
+
+    const coverage = trimCoverage('quads', 3, 100_000);
+    expect(coverage.possible).toBe(Number.POSITIVE_INFINITY);
+    expect(coverage.source, 'an uncountable space must not print a number').toContain(
+      'more than can be counted',
+    );
+  });
+});
+
+describe('§3.180 acceptance 4 — deck size and the post-cut land ratio', () => {
+  it('a k-card cut moves the size by k, and the ratio the prior reads is the POST-cut one', () => {
+    // RIGGED is 63 cards, 27 of them lands (24 Forest + 3 Swamp).
+    expect(deckSizeOf(RIGGED)).toBe(63);
+    expect(landRatioOf(RIGGED, pool)).toEqual({ lands: 27, size: 63 });
+
+    const pairs = generateTrimCandidates(RIGGED, pool, { kind: 'pairs', reading: RIGGED_DUE }).candidates;
+    for (const c of pairs) {
+      expect(c.sizeAfter).toBe(63 - 2);
+      expect(c.ratioAfter.size).toBe(61);
+      // The lands it leaves behind depend on what the PAIR was, not on k.
+      const landsCut = c.cuts.filter((cut) => cut.isLand).length;
+      expect(c.ratioAfter.lands, `${c.outName} mis-reported its post-cut manabase`).toBe(27 - landsCut);
+    }
+    // The two shapes really do differ, so the assertion above is discriminating.
+    expect(new Set(pairs.map((c) => c.ratioAfter.lands)).size).toBeGreaterThan(1);
+
+    const singles = generateTrimCandidates(RIGGED, pool, { kind: 'singles', reading: RIGGED_DUE }).candidates;
+    for (const c of singles) {
+      expect(c.sizeAfter).toBe(62);
+      expect(c.ratioAfter.size).toBe(62);
+      expect(c.ratioAfter.lands).toBe(27 - (c.cuts[0]?.isLand ? 1 : 0));
+    }
+  });
+});
+
+describe('§3.180 acceptance 5 — a wider cut is not a bigger bill', () => {
+  it('a k = 2 round of the same roster size spends no more games than a k = 1 round', () => {
+    const rosterSize = 11; // what a singles round on RIGGED produces
+    const common = {
+      ...sessionOptions,
+      gauntletDecks: TWO_OPPONENTS,
+      round: 0,
+      targetSize: 60,
+      armRunner: (base: Deck) => riggedRunner(base, flatWithEdge(SWAMP_ID)),
+    };
+    const singles = runTrimRound(RIGGED, { ...common, roundKind: 'singles' });
+    const pairs = runTrimRound(RIGGED, {
+      ...common,
+      roundKind: 'pairs',
+      trimConfig: { ...DEFAULT_TRIM_CONFIG, maxMultiCutCandidates: rosterSize },
+    });
+    // Same roster, so the comparison is about k and nothing else.
+    expect(singles.candidatesEvaluated).toBe(rosterSize);
+    expect(pairs.candidatesEvaluated).toBe(rosterSize);
+    // ASSERTED, not assumed: the games actually run.
+    expect(pairs.notes.totalGamesRun).toBeLessThanOrEqual(singles.notes.totalGamesRun);
+    expect(singles.notes.totalGamesRun).toBeGreaterThan(0);
+  });
+});
+
+describe('§3.180 acceptance 6 — a wide round still composes with §3.179', () => {
+  it('a k = 2 round whose rows are all unread reports UNSURE and deepens, never “nothing helps”', () => {
+    const depths: number[] = [];
+    const result = trimDeck(RIGGED, {
+      ...sessionOptions,
+      gauntletDecks: TWO_OPPONENTS,
+      settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking', maxCardsPerCut: 2 },
+      armRunner: (base, round) => {
+        depths.push(round.plan.maxPairedGames / TWO_OPPONENTS.length);
+        // ⚠️ A WHISPER, NOT A DEAD FLAT. A rig where nothing ever differs from
+        // the base produces `deadHeat` rows — and a dead heat is CONCLUSIVE:
+        // §3.179 is right that more games cannot settle a zero. Rigging it flat
+        // therefore tested the opposite of what this check is about. Every row
+        // here moves by two games and no more, so every row is genuinely
+        // UNREAD rather than genuinely settled.
+        return riggedRunner(base, (_swap, slot, baseWon) => baseWon || whisperSlots(slot));
+      },
+    });
+    const pairRounds = result.rounds.filter((r) => r.cardsPerCut === 2);
+    expect(pairRounds.length, 'the ladder never reached a k = 2 round').toBeGreaterThan(0);
+    for (const round of pairRounds) {
+      expect(round.verdict, 'an unread k = 2 round must not claim the question is settled').not.toBe('exhausted');
+    }
+    expect(result.stopped).not.toBe('no-improvement-conclusive');
+    expect(new Set(depths).size, 'the ladder never deepened').toBeGreaterThan(1);
+    // And the coverage line rides along on every round, k = 1 and k = 2 alike.
+    for (const round of result.rounds) {
+      expect(round.coverage.possible).toBeGreaterThan(0);
+      expect(round.coverage.source).toContain('tried');
+    }
   });
 });
 
