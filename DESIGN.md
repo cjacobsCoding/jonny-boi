@@ -13586,6 +13586,166 @@ are thin for the same budget-spread reason the joint search was is **NOT CHECKED
 above was measured on the joint search's numbers only, and generalising it without measuring would be
 exactly the substitution this project's rule 11 forbids.
 
+### 3.181 Suggest, run backwards — and one card picker, everywhere, with a preview and a fuzzy find — ✅ done
+
+> "-in the :Lab -> Suggestions, you can currently suggest a card for cutting in trade of some other
+> unknown card. Can you make an alternative mode where you can do the opposite? And cut some card
+> from the deck (try different ones) in order to get a different specific card into the deck?"
+>
+> "-anywhere that there is a drop down to choose from a list of magic cards in the whole app, each
+> option in the list must be hoverable to show the specific card if you pause over an item for a
+> couple seconds without clicking. Also, all such dropdowns should show a text-typable filter that
+> optionally allows for fuzzy search if there are more than 10 options in the list - to make it
+> easier to find what you are looking for."
+
+Two requests. The measurement changed the shape of both, and in one case it changed what the work
+*was*. The planning document is `docs/plans/inverse-suggest-and-card-pickers.md`.
+
+#### The measurement, first — and the honest number is small
+
+**The engine has answered "cut something to fit THIS card in" all along.** `generateCandidates`
+(`packages/sim/src/suggest-candidates.ts`) resolves the two sides of a swap symmetrically:
+
+```ts
+const cutDefs = resolveCuttables(base, pool, rules, config, options.cutOnly);
+const inDefs  = resolveAddables(base, pool, rules, options.inOnly);
+```
+
+`inOnly` is plumbed through `suggest.ts` and `suggest-run.ts`, pinned by six cases in
+`suggest.test.ts`, and used in production by `joint-moves.ts` to restrict the going-up side of a
+land-count move to the deck's basics. Measured on the shipped pool with
+`packages/sim/scripts/inonly-probe.mjs`, against a real deck:
+
+| run | candidates | distinct IN | OUT side |
+|---|---|---|---|
+| unrestricted | 15,628 | 7,810 | everything cuttable |
+| `inOnly: ['Sol Ring']` | **2** | **1** | Grizzly Bears, Lightning Bolt |
+
+So the ranked table already held the in-card fixed and varied the out-card. **It was reachable from
+nowhere.** `cli.ts` wired `cutOnly` and had no `--in` for `suggest`; `apps/web` contained **zero**
+occurrences of `inOnly`. This was therefore an EXPOSURE, not an engine feature — the tenth
+built-tested-green-and-unreachable finding on this surface — and it is reported as one rather than
+dressed up as new capability.
+
+**The second request was half-shipped too, and the half that was missing was not the half it looked
+like.** §3.165 already gave `CardPicker` a type-to-filter combobox. What did not exist: the dwell
+preview (nothing in the component), the ">10" rule as a rule, and *fuzzy* matching —
+`lib/lab/cardPicker.ts`'s `rankForTerm` was four SUBSTRING tiers (`startsWith`, word-start
+`includes`, …) with **no edit distance at all**. Which produced an asymmetry worth stating: the
+app had **three** implementations of "find me the card I mean" — this one, Scryfall's fuzzy endpoint
+behind the deck builder's Add dialog, and `matchCardName` in the scan flow — and the Lab's, on the
+surface where a user is most likely hunting one specific card, was the only one a typo defeated.
+
+**And "anywhere in the whole app" was the real work.** `CardPicker`'s own doc-comment claimed *"Every
+selector that picks ONE card from a list of any size goes through this component."* `<CardPicker`
+appeared in **exactly one** component. The four card-from-a-list surfaces measured:
+
+| surface | how | through `CardPicker`? | filter | preview |
+|---|---|---|---|---|
+| Lab → Swap (cut / add) | the combobox | yes | yes | no |
+| Lab → Suggest (cut focus) | **~35 bare checkboxes** | no | **none at all** | no |
+| Deck builder → + Add card | free text + Scryfall fuzzy | no | its own | no |
+| Scan dialog → fix a misread | `matchCardName` + buttons | no | a third | no |
+
+Card GRIDS (the Cards view, the builder's grid) are **out of scope**, stated rather than implied: a
+filtered grid of art tiles is not a list you pick one option out of, and it already carries the card
+browser's own search. The DECKLIST panel is out for the same reason — a list of what you already own,
+with buttons that add and remove copies, is content you operate on.
+
+#### What shipped — item 5, as a focus on each side, not a mode
+
+The panel already had *"Consider cutting"*, restricting the OUT side and meaning "whole deck" when
+empty. Its mirror is **"Bring in"**, restricting the IN side and meaning "whole pool" when empty.
+Two independent restrictions on ONE search — a mode switch would have been a second vocabulary for a
+question the engine answers one way, and the two would eventually have disagreed (rule 12).
+
+That yields three questions from one control, the third of which the Lab could not previously be
+asked at all:
+
+| cut focus | bring-in focus | the question |
+|---|---|---|
+| empty | empty | "what is the best swap?" — unchanged, §3.136 |
+| set | empty | "what should I cut these for?" — unchanged, §3.136 |
+| empty | ONE card | **"what should I cut to fit THIS card in?"** |
+| set | set | **"is this specific swap an improvement?"** — exactly the cross product |
+
+The summary line says both sides, and when exactly one card may come in it says so in words —
+*"— what to cut to fit Sol Ring in, whole playsets"* — because that is the question the user thinks
+they asked, and "1 card" is a true description of the set and a useless description of the intent.
+The wording lives in the pure `lib/lab/suggestFocusSummary.ts` so it is pinned by tests; every
+§3.136 phrasing is byte-identical to what it was.
+
+**The CLI got `--in` in the same change**, because a panel and a CLI reading one option through two
+plumbings is how they drift. `--in` already existed as `swap`'s single in-card, so it is now
+collected into ONE list and each command states the arity it needs — `swap` refuses two values
+rather than silently testing the last, which is the closed-table rule applied to a flag.
+
+#### What shipped — item 6: one picker, and a gate
+
+- **Both** Suggest focus controls are now the shared `CardPicker`. The cut focus was the worst card
+  chooser in the app and it went first. Stated as a design call, because it was a real choice:
+  checkboxes-plus-a-filter was the smaller change and was **rejected**, since a filter written there
+  would have been a FOURTH card search. The multi-select mode deliberately keeps the list open
+  between picks, so ticking six cards still costs one opening. What was traded away: the whole deck
+  is no longer visible at a glance without opening the list.
+- **The dwell preview** (`CARD_PREVIEW_DWELL_MS`, a named constant — "a couple of seconds" taken
+  literally, so running a pointer down a list never flashes twenty card images). It is driven by the
+  **active index**, not by wrapping options in `CardHover`: this is an `aria-activedescendant`
+  combobox, so an option never receives `focus`, and never receives `mouseenter` when an arrow key
+  moves the highlight. A hover-wrapped implementation would have shipped the feature to people with
+  pointers only. Both inputs already funnel through one piece of state, so there is **one** path and
+  the keyboard cannot silently differ from the mouse. It renders `CardHoverPanel` — the app's
+  single card preview, exported from `CardHover.tsx` for this — so there is no second placement
+  calculation and no second card renderer.
+- **Fuzzy, above `CARD_PICKER_FUZZY_MIN_OPTIONS`** (Caleb's ">10", strictly "more than"). It is
+  **strictly additive**: approximate rows append *below* the exact hits and never reorder them, so
+  turning it on cannot make the picker worse — and it cannot smuggle a card past an active
+  colour/type/mana filter.
+- **Promoted, not written.** `scan/match.ts`'s single-query matcher is now the app's ONE fuzzy
+  matcher, with its score floor as a parameter so scan keeps its camera-tuned value byte-identical
+  and the picker states its own. Scryfall's could not be the shared one — it is a network call at
+  call time, which the pure units forbid.
+- **The stale doc-comment is corrected in the same change**, per this repo's own standing warning
+  about comments that send agents to work defects that do not exist.
+
+#### The gate, because prose has now failed this rule twice
+
+`scripts/check-card-choosers.mjs` fails if a new card chooser appears that does not go through the
+picker. Caleb asked for type-to-filter card choosers in §3.165 and asked again here in different
+words; the rule was written down as a doc-comment the first time and was false of the app on the day
+it was written. So it is executable now, and `no-raw-card-dropdown.test.ts` makes `npm test` run it.
+
+Two holes that this repo has hit in its own guards were closed deliberately:
+
+- it never checks *"does this file import CardPicker"* — that check is satisfied by an **unused
+  import**. It only looks for the SHAPES a raw chooser takes;
+- there is **no inline suppression** — comments are stripped, so there is nowhere for a magic
+  "ignore me" token to survive to. The only escape is a named allowlist **in the script**, whose
+  entries are themselves verified: a stale `exempt` entry (a file that no longer violates) FAILS.
+
+It was **calibrated against the real tree, not guessed**: an early version fired on the decklist
+panel, so the button detector now requires a candidate-list receiver. Red-then-green, unpiped:
+restoring the deleted checkbox grid → exit 1; a raw `<select>` of cards → exit 1; the same with every
+suppression comment invented for it → still exit 1; the same markup living only in comments → exit 0
+(no false alarm); a stale allowlist entry → exit 1; clean tree → exit 0.
+
+#### What is NOT done, and what was NOT checked, by name
+
+- **`views/LabView.tsx` still holds private copies of `heroOutOptions` / `poolInOptions`.** The
+  shared funnel is `lib/lab/cardOptions.ts` and the Suggest panel reads it; pointing LabView at it is
+  a three-line follow-up that was **not** done here because that file belonged to another lane this
+  wave. Until then two derivations exist, identical by construction and documented as such.
+- **The deck builder's Add dialog and the scan fixer are allowlisted `out-of-scope`, with reasons.**
+  Both choose a *name* — Scryfall's vocabulary over the network, and the ~30k Magic name list — not a
+  card from the playable pool, and most of those names have no local card record for a preview to
+  show. The gate's detectors key off a pool card identifier and therefore cannot see a name-only
+  chooser at all; widening them to a bare `.name` was measured and rejected because it matches decks,
+  pilots and opponents. **If a future chooser picks a POOL card by name alone, this gate will miss
+  it** — a known limit, recorded here rather than left to be discovered.
+- **Whether the dwell length is right for a touch screen is NOT CHECKED.** The constant was chosen
+  from Caleb's words and verified on a pointer and a keyboard in a desktop browser.
+- Sorting/groupingof approximate matches beyond "score, then name" was not explored.
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

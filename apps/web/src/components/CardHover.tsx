@@ -307,7 +307,7 @@ export function CardHover({
       {children}
       {anchor && image && card
         ? createPortal(
-            <CardPreviewPanel
+            <CardHoverPanel
               panelRef={panelEl}
               onLeave={clear}
               anchor={anchor}
@@ -361,7 +361,7 @@ function isPointerish(event: Event): event is MouseEvent {
  * are optional for that caller: it measures nothing and closes on its own timer,
  * and every existing caller passes both exactly as before.
  */
-export function CardPreviewPanel({
+export function CardHoverPanel({
   panelRef,
   onLeave,
   anchor,

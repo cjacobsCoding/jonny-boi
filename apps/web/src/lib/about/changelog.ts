@@ -70,6 +70,14 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.181',
+    date: '2026-09-21',
+    kind: 'app',
+    title: 'Suggestions can run backwards — and every card list is searchable now',
+    summary:
+      'The Suggest tab has a “Bring in” focus beside “Consider cutting”. Pin one card and the search runs the other way: it tries different cards to CUT in order to fit that card in. Pin cards on both sides and it tests exactly those swaps. Leave either empty and it means everything, as before. The focus lists are now the same searchable picker the A/B tab uses — pause on any option for a couple of seconds and the card itself appears, and above ten options you can turn on fuzzy matching to find a name you only half remember.',
+  },
+  {
     section: '3.179',
     date: '2026-09-21',
     kind: 'fix',

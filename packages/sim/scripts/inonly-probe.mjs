@@ -29,7 +29,6 @@ import { loadCardPool } from '@jonny-boi/cards';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const byName = new Map(pool.cards.map((c) => [c.name, c]));
-const byId = new Map(pool.cards.map((c) => [c.id, c]));
 
 const entry = (name, count) => {
   if (!byName.has(name)) throw new Error(`not in pool: ${name}`);

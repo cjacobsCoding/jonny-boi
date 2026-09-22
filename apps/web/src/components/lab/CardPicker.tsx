@@ -48,7 +48,7 @@
  * Both inputs already funnel through ONE piece of state, `active`. So the dwell
  * watches `active` and nothing else, which is why the keyboard path cannot
  * silently differ from the mouse path — there is only one path. The panel it
- * raises is `CardPreviewPanel`, the app's single card preview, so there is no
+ * raises is `CardHoverPanel`, the app's single card preview, so there is no
  * second placement calculation and no second card renderer (rule 12).
  *
  * ⚠️ The candidate list is the caller's (the hero's cards for "cut", the whole
@@ -80,7 +80,7 @@ import {
   type ManaValueBounds,
   type PickableCard,
 } from '../../lib/lab/cardPicker.js';
-import { CardPreviewPanel } from '../CardHover.js';
+import { CardHoverPanel } from '../CardHover.js';
 import { ManaCost } from '../ManaCost.js';
 import './card-picker.css';
 
@@ -169,11 +169,15 @@ export function CardPicker({
   const [manaValue, setManaValue] = useState<ManaValueBounds>({});
   const [fuzzy, setFuzzy] = useState(false);
   /**
-   * Bumped every time the pointer ENTERS an option, and when it leaves the
-   * list. `active` alone is not enough to re-arm the dwell: leaving an option
-   * and coming back to the SAME one leaves `active` unchanged, so without this
-   * the second pause would never raise a preview — a dead feature that looks
-   * alive on the first try.
+   * Bumped every time the pointer ENTERS an option — and NOWHERE else.
+   *
+   * `active` alone cannot re-arm the dwell: leaving an option and coming back to
+   * the SAME one leaves `active` unchanged, so without this the second pause
+   * would never raise a preview — a dead feature that looks alive on the first
+   * try. It is deliberately NOT bumped when the pointer leaves the list; doing
+   * that armed a fresh timer on the still-highlighted option and raised a card
+   * two seconds after the pointer had gone elsewhere (caught by
+   * `verify-card-picker-preview.mjs`, which is the guard for it).
    */
   const [dwellNonce, setDwellNonce] = useState(0);
   const [preview, setPreview] = useState<{ cardId: string; x: number; y: number } | null>(null);
@@ -187,13 +191,24 @@ export function CardPicker({
   // Caleb's ">10 options" rule, read from the model so the boundary has one home.
   const canFuzzy = offersFuzzy(options.length);
   /**
-   * Built over the whole option set and memoised on it, NOT on the typed text:
-   * normalising thousands of names on every keystroke is the one way this
-   * feature could make the picker feel worse than it did without it.
+   * The approximate pass's vocabulary — built ONLY once fuzzy is switched on.
+   *
+   * Normalising thousands of names is the one way this feature could make the
+   * picker feel worse than it did without it, so the default path does not build
+   * it at all and costs exactly what it cost before §3.181. With fuzzy on it is
+   * memoised on `candidates`, which a caller that rebuilds its `options` array
+   * each render (the Lab's `poolInOptions()` does) will invalidate per render —
+   * the same cadence at which `candidates` itself is already rebuilt, so this
+   * adds a constant factor to work the picker was doing anyway rather than a new
+   * order of cost.
+   *
+   * A signature-keyed `useRef` cache was written first and removed: writing a
+   * ref during render is a lint error's worth of cleverness for a saving that
+   * only applies while the toggle is on.
    */
   const fuzzyIndex = useMemo(
-    () => (canFuzzy ? buildFuzzyIndex(candidates) : null),
-    [canFuzzy, candidates],
+    () => (canFuzzy && fuzzy ? buildFuzzyIndex(candidates) : null),
+    [canFuzzy, fuzzy, candidates],
   );
   const fuzzyOn = canFuzzy && fuzzy && fuzzyIndex !== null;
 
@@ -209,6 +224,20 @@ export function CardPicker({
   );
   /** The first row index that is an APPROXIMATE match, so those rows can say so. */
   const firstFuzzyRow = listing.rows.length - listing.fuzzy;
+  /**
+   * The highlighted card's ID — the dwell's real dependency.
+   *
+   * ⚠️ NOT `listing`. A caller may hand `options` a freshly-built array on every
+   * render (the Lab's `heroOutOptions(hero)` does exactly that), which makes
+   * `candidates` and therefore `listing` a new object each time. An effect
+   * depending on `listing` would re-run on every unrelated re-render of the
+   * parent, cancelling a pause in progress and closing an open preview — the
+   * feature would work perfectly on an idle screen and flicker uselessly on a
+   * busy one, which is the worst kind of bug to be handed. A string id is stable
+   * for as long as the same option is highlighted, which is exactly the
+   * condition the dwell is measuring.
+   */
+  const activeRowId = listing.rows[active]?.id;
 
   const selected = multiple?.selected;
   const picked = options.find((o) => o.cardId === value);
@@ -242,28 +271,43 @@ export function CardPicker({
    * list never leaves a stale card on screen, and "leaving before the dwell
    * elapses shows nothing" is a property of the cleanup rather than a second
    * rule that could disagree with the first.
+   *
+   * ⚠️ The effect ARMS and CANCELS; it never clears the preview itself. Clearing
+   * it here meant a `setState` in an effect body — a cascading render on every
+   * highlight move, and the lint rule that names it. Whether a preview is still
+   * valid is DERIVED at render instead (`visiblePreview`): it belongs to the
+   * highlighted option or it is not shown. One less render, and one less rule
+   * that could disagree with the cleanup.
    */
   useEffect(() => {
     clearDwell();
-    setPreview(null);
-    if (!open || disabled) return undefined;
-    const row = listing.rows[active];
-    if (!row) return undefined;
+    if (!open || disabled || activeRowId === undefined) return undefined;
     const optionId = `${listId}-${active}`;
     dwellTimer.current = setTimeout(() => {
       // Measured at FIRE time, not at arm time: the list may have scrolled the
       // option under the keyboard while the clock ran.
       const box = document.getElementById(optionId)?.getBoundingClientRect();
       if (!box || box.width === 0) return;
-      setPreview({ cardId: row.id, x: box.right, y: box.top });
+      setPreview({ cardId: activeRowId, x: box.right, y: box.top });
     }, CARD_PREVIEW_DWELL_MS);
     return clearDwell;
-  }, [open, disabled, active, dwellNonce, listing, listId, clearDwell]);
+  }, [open, disabled, active, activeRowId, dwellNonce, listId, clearDwell]);
 
   const dismissPreview = useCallback((): void => {
     clearDwell();
     setPreview(null);
   }, [clearDwell]);
+
+  /**
+   * The preview that is actually on screen — DERIVED, never stored.
+   *
+   * A preview belongs to the option that was highlighted when its dwell
+   * elapsed. If the highlight has since moved, the list has closed, or the
+   * picker has been disabled, it is simply not shown; there is no second piece
+   * of state to keep in step and nothing to clear in an effect.
+   */
+  const visiblePreview =
+    open && !disabled && preview !== null && preview.cardId === activeRowId ? preview : null;
 
   const pick = (cardId: string): void => {
     // A click is not a pause: whatever the dwell was about to show, the user has
@@ -502,12 +546,20 @@ export function CardPicker({
             role="listbox"
             aria-label={label}
             aria-multiselectable={multiple ? true : undefined}
-            // The pointer leaving the list ends any pause in progress. The nonce
-            // bump is what lets the SAME option re-arm when the pointer returns.
-            onMouseLeave={() => {
-              dismissPreview();
-              setDwellNonce((n) => n + 1);
-            }}
+            /*
+              The pointer leaving the list ends any pause in progress — and must
+              NOT start another one.
+
+              ⚠️ This originally bumped `dwellNonce` here too, "to re-arm". The
+              browser harness caught what that actually did: leaving re-ran the
+              dwell effect, which armed a FRESH timer on the still-highlighted
+              option, and two seconds later a card appeared while the pointer was
+              somewhere else entirely — floating over unrelated UI, with nothing
+              hovered. Cancelling without re-arming is correct, and re-entry is
+              already covered: coming back fires the option's own `mouseenter`,
+              which bumps the nonce then.
+            */
+            onMouseLeave={dismissPreview}
           >
             {listing.rows.length === 0 && (
               <li className="card-picker__empty" role="presentation">
@@ -547,7 +599,10 @@ export function CardPicker({
                         {isPicked ? '☑' : '☐'}
                       </span>
                     )}
-                    {card.name}
+                    {/* The bare NAME, in an element of its own, so reading an
+                        option's name never picks up the tick or the ≈ marker
+                        alongside it. The harness read "☐Sol Ring" before this. */}
+                    <span className="card-picker__option-label">{card.name}</span>
                     {index >= firstFuzzyRow && (
                       <span className="card-picker__approx" title="an approximate match">
                         {' '}
@@ -580,14 +635,18 @@ export function CardPicker({
         so it can never sit between the cursor and the option underneath it —
         this preview is a read, not a surface with its own controls.
       */}
-      {preview &&
+      {visiblePreview &&
         createPortal(
           <div className="card-picker-preview">
-            <CardPreviewPanel anchor={{ x: preview.x, y: preview.y }} cardId={preview.cardId} name={
-              listing.rows.find((r) => r.id === preview.cardId)?.name ??
-              options.find((o) => o.cardId === preview.cardId)?.name ??
-              ''
-            } />
+            <CardHoverPanel
+              anchor={{ x: visiblePreview.x, y: visiblePreview.y }}
+              cardId={visiblePreview.cardId}
+              name={
+                listing.rows.find((r) => r.id === visiblePreview.cardId)?.name ??
+                options.find((o) => o.cardId === visiblePreview.cardId)?.name ??
+                ''
+              }
+            />
           </div>,
           document.body,
         )}
