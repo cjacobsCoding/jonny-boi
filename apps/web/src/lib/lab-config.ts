@@ -15,6 +15,8 @@ import {
   JOINT_LAND_COUNT_RADIUS,
   JOINT_PARTNERS_PER_COUNT_STEP,
   DEFAULT_TRIM_BUDGET,
+  DEFAULT_MAX_CARDS_PER_CUT,
+  TRIM_MAX_CUT_SIZE,
   VERDICT_BARS,
   type VerdictBar,
 } from '@jonny-boi/sim';
@@ -196,6 +198,27 @@ export const VERDICT_MIN_GAMES = {
  * reported rather than silent.
  */
 export const TRIM_BUDGET = DEFAULT_TRIM_BUDGET;
+
+/**
+ * §3.180 — HOW MANY CARDS ONE CUT MAY TAKE.
+ *
+ * > "the new trim feature needs to have more tunables - right now it tries to
+ * >  cut one card at a time - it should allow you to try to cut more than one
+ * >  at a time."
+ *
+ * The ceiling of the widening ladder, not the size of every round: a session
+ * still starts at single cards and widens only when a round finds nothing,
+ * because a one-card cut that improves the deck is cheaper to find and safer to
+ * apply than a two-card one. The bounds are the sim's own closed table, looked
+ * up rather than restated — a value the table has no row for is refused there,
+ * and `TRIM_MAX_CUT_SIZE` is what the table actually holds.
+ */
+export const TRIM_MAX_CARDS_PER_CUT = {
+  default: DEFAULT_MAX_CARDS_PER_CUT,
+  min: 1,
+  max: TRIM_MAX_CUT_SIZE,
+  step: 1,
+} as const;
 
 /**
  * The fidelity caveat surfaced near every verdict. Re-exported verbatim from the

@@ -20,7 +20,17 @@ import {
   type TrimRoundReport,
   type TrimSettings,
   type TrimSpend,
+  trimCoverage,
 } from '@jonny-boi/sim';
+
+/**
+ * A plausible distinct-card count for a 63-card deck, so a fake round's
+ * coverage line reads like a real one. It is a FIXTURE, not a claim about any
+ * particular deck -- and the line itself is built by the sim's own
+ * `trimCoverage`, so a test can never assert a sentence the panel does not
+ * actually print.
+ */
+const DISTINCT_CARDS = 35;
 import { stepAfterRound } from './trimSession.js';
 
 const KEEP_LOOKING: TrimSettings = {
@@ -39,6 +49,7 @@ function unsureRound(roundKind: (typeof TRIM_ROUND_KINDS)[number], round = 0): T
     round,
     roundKind,
     cardsPerCut: roundKind === 'pairs' ? 2 : 1,
+    coverage: trimCoverage(roundKind, 1, DISTINCT_CARDS),
     reading: {} as TrimRoundReport['reading'],
     verdict: 'unsure',
     rows: [],

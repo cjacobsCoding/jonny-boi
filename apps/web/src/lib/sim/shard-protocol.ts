@@ -275,6 +275,8 @@ export interface TrimPlanJob {
   readonly roundKind: TrimRoundKind;
   readonly targetSize: number;
   readonly baseLandRatio?: LandRatio;
+  /** §3.180 — the previous round's best single cuts, seeding a k > 1 roster. */
+  readonly seeds?: readonly string[];
 }
 
 export interface TrimPlanResult {

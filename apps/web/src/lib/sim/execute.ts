@@ -382,6 +382,7 @@ export function runTrimPlan(job: TrimPlanJob, context: SimContext): TrimPlanResu
     roundKind: job.roundKind,
     targetSize: job.targetSize,
     ...(job.baseLandRatio ? { baseLandRatio: job.baseLandRatio } : {}),
+    ...(job.seeds ? { seeds: job.seeds } : {}),
   });
   return { kind: 'trim-plan', round };
 }

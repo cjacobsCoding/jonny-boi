@@ -410,6 +410,30 @@ export function binomial(n: number, k: number): number {
  *
  * Returns `undefined` for an index outside `C(n, k)`.
  */
+/**
+ * Build a coverage row — the ONE place the line is worded (§3.180).
+ *
+ * Exported because every surface that shows a trim round needs one and the web
+ * Lab's own tests build fake rounds: a test that hand-wrote the sentence would
+ * pass while the panel printed something else, which is the divergence rule 12
+ * exists to stop. The generator calls this; so does anything faking a report.
+ */
+export function trimCoverage(kind: TrimRoundKind, tried: number, distinctCards: number): TrimSubsetCoverage {
+  const row = TRIM_CUT_SIZE_ROW_BY_KIND[kind];
+  const possible = binomial(distinctCards, row.cardsPerCut);
+  const possibleText = Number.isFinite(possible) ? possible.toLocaleString('en-US') : 'more than can be counted';
+  return {
+    cardsPerCut: row.cardsPerCut,
+    tried,
+    possible,
+    distinctCards,
+    noun: row.noun,
+    source:
+      `${tried.toLocaleString('en-US')} of ${possibleText} ${row.noun} tried` +
+      ` — C(${distinctCards}, ${row.cardsPerCut}) over the deck's ${distinctCards} distinct cards`,
+  };
+}
+
 /** Euclid, for choosing a sweep stride that visits every subset exactly once. */
 function greatestCommonDivisor(a: number, b: number): number {
   let x = Math.abs(a);
@@ -835,19 +859,7 @@ export function generateTrimCandidates(
   for (const dropped of candidates.slice(cap)) {
     skipped.push({ outName: dropped.outName, inName: TRIM_IN_NAME, reason: 'capped', details: dropped.priorReasons });
   }
-  const row = TRIM_CUT_SIZE_ROW_BY_KIND[options.kind];
-  const possibleText = Number.isFinite(possible) ? possible.toLocaleString('en-US') : 'more than can be counted';
-  const coverage: TrimSubsetCoverage = {
-    cardsPerCut,
-    tried: kept.length,
-    possible,
-    distinctCards: n,
-    noun: row.noun,
-    source:
-      `${kept.length.toLocaleString('en-US')} of ${possibleText} ${row.noun} tried` +
-      ` — C(${n}, ${cardsPerCut}) over the deck's ${n} distinct cards`,
-  };
-  return { candidates: kept, skipped, coverage };
+  return { candidates: kept, skipped, coverage: trimCoverage(options.kind, kept.length, n) };
 }
 
 /**

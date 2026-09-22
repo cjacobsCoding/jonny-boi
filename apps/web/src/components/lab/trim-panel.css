@@ -138,3 +138,29 @@
   font-size: var(--text-sm, 0.875rem);
   color: var(--color-fg-muted, inherit);
 }
+
+/*
+ * HOW MUCH OF THE SPACE A ROUND SAW (§3.180).
+ *
+ * Printed under every round, k = 1 included. Muted and tabular: it is a
+ * footnote to the verdict, not a competitor to it — but it is never absent,
+ * because a count without its denominator reads as "we tried everything" and at
+ * k > 1 that is never true.
+ */
+.trim-coverage {
+  margin: var(--space-1, 4px) 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The cut-size tunable: a narrow number box reading as part of the sentence. */
+.trim-cut-size {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.trim-cut-size input {
+  width: 4rem;
+}

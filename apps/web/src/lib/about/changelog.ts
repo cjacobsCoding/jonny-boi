@@ -70,6 +70,18 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.180',
+    date: '2026-09-21',
+    kind: 'app',
+    title: 'Trim can cut more than one card at a time, and the progress bar stays where you can see it',
+    summary:
+      'The Trim tool has a new setting for how many cards one cut may take, so it can find the pair ' +
+      'that is only bad together — something a one-card-at-a-time search cannot see. There are far too ' +
+      'many combinations to try them all, so every round now says how many it actually tried out of how ' +
+      'many there were. The Lab’s progress bar is also pinned to the bottom of the screen while a job ' +
+      'runs, so you can scroll around and keep watching it.',
+  },
+  {
     section: '3.179',
     date: '2026-09-21',
     kind: 'fix',

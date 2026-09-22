@@ -30,7 +30,7 @@ import type {
   TrimRequest,
   VerdictBarRequest,
 } from '../sim-protocol.js';
-import { TRIM_SWAP_SCOPE, finishTrimRound } from '@jonny-boi/sim';
+import { TRIM_CUT_SIZE_ROW_BY_KIND, TRIM_SWAP_SCOPE, finishTrimRound } from '@jonny-boi/sim';
 import {
   finishManabaseRun,
   variantForCandidateKey,
@@ -755,7 +755,10 @@ export async function runTrim(
     total: 0,
     gamesRun: 0,
     elapsedSeconds: 0,
-    label: request.roundKind === 'pairs' ? 'finding nonland + land pairs to cut…' : 'finding cards to cut…',
+    // §3.180 — the noun comes from the sim's cut-size table, not a branch here.
+    // "nonland + land pairs" was true only while a pair WAS one of each; a k = 2
+    // round now tries any two cards, and there are rows past two.
+    label: `finding ${TRIM_CUT_SIZE_ROW_BY_KIND[request.roundKind].noun} to make…`,
   });
   const planned = (await runner.submit(
     {
@@ -766,6 +769,11 @@ export async function runTrim(
       roundKind: request.roundKind,
       targetSize: request.targetSize,
       ...(request.baseLandRatio ? { baseLandRatio: request.baseLandRatio } : {}),
+      // §3.180 — enumerated by hand like the rest of this literal, so a new
+      // field is a decision rather than an omission. Without it a widening
+      // round loses the previous round's measurements and falls back to the
+      // prior, which cannot see which cards merely measured badly.
+      ...(request.seeds ? { seeds: request.seeds } : {}),
     },
     () => {},
   )) as TrimPlanResult;

@@ -13586,6 +13586,160 @@ are thin for the same budget-spread reason the joint search was is **NOT CHECKED
 above was measured on the joint search's numbers only, and generalising it without measuring would be
 exactly the substitution this project's rule 11 forbids.
 
+### 3.180 Trim cuts more than one card at a time, and the Lab's progress bar is pinned where you can watch it — ✅ done
+
+> "-the new trim feature needs to have more tunables - right now it tries to cut one card at a time -
+> it should allow you to try to cut more than one at a time."
+>
+> "-in all the Lab subtabs, make the loading bar get pinned to the bottom of the screen while in that
+> area while its working on a lab, so you can scroll around and still watch the progress."
+
+Items 1 and 4 of `docs/plans/lab-tuning-plan.md`; items 2 and 3 shipped as §3.179. Both were
+**measured before being designed**, and both measurements changed the work — one shrank it, one grew
+it.
+
+#### The measurement, first
+
+**Half of item 1 was already shipped, and the missing half was not the half the request named.**
+`TRIM_ROUND_KINDS` was already `['singles', 'pairs']` with a `CARDS_PER_CUT` row each, and §3.179's
+`keep-looking` already widened to a pair — so trim *could* already cut two cards. What it could not
+do was cut *any* two cards: `generateTrimCandidates` enumerated the **nonland × land cross product**,
+so on the rigged 63-card test deck it reached 18 of the 55 possible pairs and **two nonlands together
+was unreachable whatever the deck**. Cutting the two cards that are weak only as a pair — the case a
+one-card-at-a-time search is structurally blind to — was therefore impossible. `k` was also not a
+user setting anywhere: it was derived from the round kind, and the round kind was chosen only by the
+widening ladder.
+
+⚠️ **The plan's proposed default was wrong, and following it would have deleted a shipped feature.**
+It called for a cut size "default 1 so today's behaviour is unchanged". That was written against the
+pre-§3.179 code. Today's ladder is singles *then* pairs, and `trim-ladder.test.ts` asserts that a
+conclusive session runs exactly those two rounds — so a default of 1 would have removed the `pairs`
+round §3.179 shipped. **Two** is what leaves today untouched, and `DEFAULT_MAX_CARDS_PER_CUT` is two.
+
+**Item 4 shrank on measurement.** The Lab already had exactly ONE progress bar, owned by the shell —
+`RunStatus`, rendered once by `LabView`. There was nothing to consolidate and no per-panel bar to
+remove; the bar simply sat in normal document flow and scrolled away. But two things the plan did not
+have: `RunStatus` is **also mounted by `MatchView`**, whose root is likewise `.lab`, so pinning
+`.run-status` itself would have silently pinned the Match view's bar too; and the bottom of the
+viewport is contested by five `position: fixed` elements, not the three the plan listed.
+
+#### What shipped — the cut size
+
+**The cut SIZE is the table and the kind NAME is derived from it.** `TRIM_CUT_SIZE_ROWS` is one
+closed table, one row per size, carrying `cardsPerCut`, the kind label, and the plural noun the
+coverage line uses. `TRIM_ROUND_KINDS`, `CARDS_PER_CUT`, `TRIM_MAX_CUT_SIZE` and the by-kind lookup
+are all derived from it, and a test asserts the derivations cannot drift. Adding a size is a ROW.
+
+**`TrimSettings.maxCardsPerCut` is the ceiling of the ladder, not the size of every round.** A
+session still starts at single cards and widens only when a round finds nothing, because a one-card
+cut that improves the deck is cheaper to find and safer to apply than a two-card one. A value outside
+the table is clamped in exactly one place, `trimCutSizeLadder`, which is also **exported as the
+honest denominator**: three assertions in `trim-ladder.test.ts` had been using `TRIM_ROUND_KINDS.length`
+as a stand-in for "how many rounds a session will run", which was the length of the *table* rather
+than of the *path walked through it* — the same number only by accident, and only while the table had
+exactly two rows.
+
+**A k > 1 round is SEEDED, not enumerated, and the panel says how much it saw.** C(35,2) is 595 and
+C(35,3) is 6,545; running a paired A/B on each would spend the whole session on a table nobody can
+read, which is precisely the budget-spread §3.179 measured as the reason every row said INCONCLUSIVE.
+The roster is drawn under two stated quotas (`TRIM_SEED_POLICY`): k-subsets of the best single cuts
+the previous round **measured** — its ranking, which is delta order, not the cheap prior — plus a
+**systematic strided sweep of the whole space**.
+
+> ⚠️ The sweep is not decoration. Seeding only from the best singles would systematically miss two
+> cards that each look fine alone, which is the exact case this feature exists for. Its stride is
+> chosen coprime with the size of the space so the walk visits every subset once and can fill the
+> roster; an evenly-spaced sample collided with the exploit quota and a 24-seat round quietly came
+> back with 22.
+
+**`TrimSubsetCoverage` is a count with its denominator AND the denominator's source** — *"24 of 55
+two-card cuts tried — C(11, 2) over the deck's 11 distinct cards"* — printed under every round, k = 1
+included, because a bare count invites the reader to assume it was all of them and at k > 1 it never
+is. When the whole space fits under the cap the round is EXACT and the line says so ("6 of 6").
+
+**The mana prior awards its favoured-type bonus once for the SUBSET, not once per card.** Summing it
+per card would let a two-nonland cut outrank a one-nonland cut on arithmetic alone, and at k = 3 a
+three-nonland cut would outrank everything. This is **provably identical** to the old per-card sum for
+every shape that existed before — at k = 1 the subset is one card, and §3.174's pairs were always
+exactly one nonland and one land, so exactly one part could ever match — and there is a test that
+asserts that identity rather than a comment that claims it. Candidates also carry `ratioAfter`, read
+off the variant the one funnel built: a nonland+land pair leaves the manabase where it was, two
+nonlands move it as far as two rounds of single cuts would.
+
+#### What shipped — the dock
+
+`RunStatus` is untouched and still has exactly one owner. The shell wraps it in a **dock** —
+`position: fixed; bottom: 0`, full width — and `.lab` reserves a named bottom padding while a job is
+running so the last row of a panel stays reachable. A subtab with nothing to report renders **nothing
+at all**: the dock is absent, not an empty bar, which falls out of the existing `sim.status ===
+'running'` guard rather than being a new state to maintain.
+
+⚠️ **The dock stays in the React tree and is NOT portalled, and that is load-bearing.** The bug
+reporter's capture prunes the trailing run of below-the-fold children per parent, and a boxed,
+in-viewport *last* child freezes that pruning — an 11-second capture, a regression already paid for
+once. In place, the dock is a middle child of `.lab` followed by `.lab-panel`, so it anchors exactly
+as it did before and the panel stays prunable. Fixed positioning is visual; the DOM position is what
+the capture reads. The stacking order is named against all three neighbours: below
+`.bugreport-launcher` (900), because a run in flight must never be the reason a bug about it cannot
+be filed, and above `.update-pill` (70), because a pill over the Cancel button would trap a long run.
+
+`LAB_TABS` moved to `lib/useLabSelection.ts` and **`LabTabId` is derived from it**. There had been two
+lists — the array, private to the view, and a hand-written union beside it carrying the same six ids
+and a byte-identical doc comment, with nothing pinning them together.
+
+#### Verification, and its honest limits
+
+⚠️ **There is no DOM in this suite.** The root `vitest.config.ts` sets no `environment`, so tests run
+in `node`; jsdom, happy-dom and `@testing-library` are not dependencies. `getBoundingClientRect` does
+not exist there and CSS files are never loaded. So the on-screen rectangle **cannot** be asserted in a
+unit test, and `lab-dock.test.ts` does not pretend to: it pins the stylesheet DECLARATIONS as text
+(comments stripped, so a rule described in prose cannot satisfy an assertion), the z-order against the
+other stylesheets, and the render STRUCTURE — that the dock is rendered by the shell *before* the tab
+switch, iterating `LAB_TABS`, which is what makes "in all the Lab subtabs" true for a seventh tab
+nobody has written yet. The rectangle is measured by
+`apps/web/scripts/verify-lab-progress-dock.mjs`, which drives a real browser at a deliberately short
+viewport — the Lab does not scroll at 1280×800, so a scroll test there would pass without scrolling
+anything, and the harness asserts the page is genuinely taller than the viewport before believing any
+of its own scroll checks.
+
+#### Acceptance
+
+The cut size:
+
+1. k = 1 reproduces §3.174 exactly — every distinct card, the old order, the old scores — and the
+   subset prior is asserted equal to the old per-card prior on every shape §3.174 could build.
+2. **k = 2 finds a pair that is only bad TOGETHER, where k = 1 finds neither card.** Both cards are
+   nonlands, so §3.174's cross product could not have reached the pair either. This is the check the
+   feature exists for.
+3. The coverage line prints tried-of-possible with the denominator's source, and 55 is written into
+   the test as a literal so a broken `binomial` cannot make the test agree with it.
+4. A k-card cut moves the size by k, and the post-cut land ratio depends on what the subset held.
+5. A k = 2 round of the same roster size spends no more games than a k = 1 round — the games are
+   asserted, not assumed.
+6. A k = 2 round whose rows are all unread reports `unsure` and deepens, never `no-improvement-conclusive`.
+
+The dock:
+
+7. It declares `position: fixed` and `bottom: 0`, and the harness measures its real rectangle after
+   scrolling to the bottom AND back to the top.
+8. It is present for every row of `LAB_TABS`, by a guard that iterates the registry.
+9. It is absent when no job runs, and does not cover the last row of content when visible.
+10. It sits below the bug reporter and above the update pill, asserted on the named z-index values,
+    and does not break the capture policy.
+
+#### Left out, on purpose
+
+`TrimConfig.maxPairCandidates` was renamed `maxMultiCutCandidates`: the old name stopped being true
+the moment a round could cut three cards, and nothing outside the module read it.
+
+**Sizes above two are reachable but unmeasured.** The table carries rows for three and four and the
+ladder walks them when the ceiling is raised, but every measurement in this section was taken at
+k ≤ 2. Whether a three-card round is worth its budget on a real deck is **NOT CHECKED**, and the
+coverage line is what will say how thin it is spread when someone tries.
+
+**Whether Suggest and the manabase sweep are budget-thin for the same reason the joint search was**
+remains **NOT CHECKED**, exactly as §3.179 left it. Nothing here measured them.
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).
