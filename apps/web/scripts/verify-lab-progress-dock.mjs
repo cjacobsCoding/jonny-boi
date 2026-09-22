@@ -277,6 +277,16 @@ async function main() {
     // outlast the walk for the walk to mean anything.
     console.log('\nStarting a gauntlet run…');
     const started = await page.evaluate(() => {
+      // ⚠️ EARLY STOPPING HAS TO GO OFF FIRST, and raising the slider alone did
+      // not do it. "Stop once the win rate is measured precisely enough" sizes
+      // the run to the precision wanted, so a 400-games-per-opponent gauntlet
+      // still settled in about two seconds and the tab walk measured 0 of 6
+      // tabs. The slider sets the ceiling; this checkbox is what decides whether
+      // the run ever reaches it.
+      const precise = document.querySelector(
+        '.lab-panel input[type="checkbox"][aria-label^="Stop once the win rate"]',
+      );
+      if (precise?.checked) precise.click();
       const slider = document.querySelector('.lab-panel input[type="range"]');
       if (slider) {
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -290,7 +300,10 @@ async function main() {
       if (!button) return { clicked: false, why: 'no "Run gauntlet" button' };
       if (button.disabled) return { clicked: false, why: 'the Run button is disabled' };
       button.click();
-      return { clicked: true, why: `games per opponent set to ${slider?.value ?? 'default'}` };
+      return {
+        clicked: true,
+        why: `${slider?.value ?? 'default'} games per opponent, early stopping ${precise ? (precise.checked ? 'ON' : 'off') : 'not found'}`,
+      };
     });
     check('a real run could be started', started.clicked, started.why);
     if (!started.clicked) {
@@ -300,48 +313,6 @@ async function main() {
     }
     await page.waitForSelector('.lab-dock', { timeout: DOCK_WAIT_MS });
     await assertPageAlive(page, watcher, 'starting a run');
-
-    // EVERY SUBTAB, enumerated from the DOM, while the job is still running —
-    // FIRST, because this is the check most likely to run out of job. It is the
-    // runtime half of "in all the Lab subtabs": the unit guard proves the dock
-    // is rendered outside the tab switch, and this proves it stays on screen as
-    // the tabs actually change.
-    console.log('\nWalking every Lab subtab while the job runs…');
-    const tabLabels = await page.evaluate(() =>
-      [...document.querySelectorAll('.lab-tab')].map((b) => b.textContent.trim()),
-    );
-    check('the Lab exposes its subtabs to walk', tabLabels.length > 1, tabLabels.join(' · '));
-    let tabsCovered = 0;
-    for (const label of tabLabels) {
-      const switched = await page.evaluate((wanted) => {
-        const tab = [...document.querySelectorAll('.lab-tab')].find((b) => b.textContent.trim() === wanted);
-        if (!tab) return false;
-        tab.click();
-        return true;
-      }, label);
-      await new Promise((r) => setTimeout(r, RENDER_SETTLE_MS));
-      const here = await readDock(page);
-      if (!here.present || !here.rect) {
-        // The run finished. That is not a dock failure — but it is also not a
-        // measurement, so it is reported as coverage lost rather than as a pass.
-        console.log(`  n/a   '${label}' — the run had already finished, nothing to pin`);
-        continue;
-      }
-      tabsCovered += 1;
-      check(
-        `'${label}' keeps the dock pinned while the job runs`,
-        switched && Math.abs(here.rect.bottom - here.innerHeight) <= EDGE_TOLERANCE_PX,
-        `bottom ${Math.round(here.rect.bottom)} vs viewport ${here.innerHeight}`,
-      );
-    }
-    // ⚠️ THE NON-VACUITY GUARD. Without this the walk passes by measuring
-    // nothing at all, which is precisely the shape of check this project has
-    // paid for most often.
-    check(
-      'the job outlasted the walk, so EVERY subtab was actually measured',
-      tabsCovered === tabLabels.length,
-      `${tabsCovered} of ${tabLabels.length} tabs measured with a job in flight`,
-    );
 
     // THE PAGE MUST ACTUALLY SCROLL, or every scroll check below is vacuous.
     const atTop = await readDock(page);
@@ -386,6 +357,100 @@ async function main() {
     const shot = await page.screenshot({ encoding: 'binary' });
     writeFileSync(resolve(OUT_DIR, 'lab-dock-scrolled.png'), shot);
     check('a screenshot of the scrolled, running Lab was captured', shot.length > 10_000, `${Math.round(shot.length / 1024)} KB`);
+
+    // EVERY SUBTAB, each running a job OF ITS OWN.
+    //
+    // ⚠️ MEASURED, AND IT CHANGED THIS CHECK. Clicking a Lab tab calls
+    // `sim.reset()` (`LabView.tsx`), so a job does NOT survive a tab switch —
+    // an earlier version of this harness started one gauntlet run and walked
+    // the tabs expecting to still see it, and measured 0 of 6 tabs because the
+    // first click had cancelled the run. The app is not wrong and neither is the
+    // request: "while in that area while its working" means the tab you are ON
+    // shows its own job. So each tab is asked to start its own work.
+    //
+    // A tab whose primary action is not available from a standing start is
+    // reported as NOT COVERED rather than skipped quietly.
+    console.log('\nStarting a job on each Lab subtab in turn…');
+    // The standing gauntlet job has to go first: a tab's own Run button is
+    // disabled while ANY job is in flight, so leaving it running would have the
+    // walk report "no enabled primary action" for every tab it visits.
+    await page.evaluate(() => {
+      const cancel = [...document.querySelectorAll('.lab-dock button')].find((b) =>
+        b.textContent.toLowerCase().includes('cancel'),
+      );
+      if (cancel) cancel.click();
+    });
+    await new Promise((r) => setTimeout(r, RENDER_SETTLE_MS));
+
+    const tabLabels = await page.evaluate(() =>
+      [...document.querySelectorAll('.lab-tab')].map((b) => b.textContent.trim()),
+    );
+    check('the Lab exposes its subtabs to walk', tabLabels.length > 1, tabLabels.join(' · '));
+    const covered = [];
+    const uncovered = [];
+    for (const label of tabLabels) {
+      // ⚠️ TWO STEPS WITH A RENDER BETWEEN THEM, and the first version of this
+      // was one. Clicking the tab and reading `.lab-panel` in the same
+      // synchronous block reads the OUTGOING panel, because React has not
+      // committed yet — so the walk clicked the previous tab's button and
+      // cheerfully reported 'Trim' passing by pressing "Suggest swaps".
+      const switched = await page.evaluate((wanted) => {
+        const tab = [...document.querySelectorAll('.lab-tab')].find((b) => b.textContent.trim() === wanted);
+        if (!tab) return false;
+        tab.click();
+        return true;
+      }, label);
+      if (!switched) {
+        uncovered.push(`${label} (no such tab)`);
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, RENDER_SETTLE_MS));
+      const startedHere = await page.evaluate(() => {
+        const precise = document.querySelector(
+          '.lab-panel input[type="checkbox"][aria-label^="Stop once the win rate"]',
+        );
+        if (precise?.checked) precise.click();
+        const button = [...document.querySelectorAll('.lab-panel button.btn--primary')].find((b) => !b.disabled);
+        if (!button) return { ok: false, why: 'no enabled primary action on this tab' };
+        button.click();
+        return { ok: true, why: button.textContent.trim() };
+      });
+      if (!startedHere.ok) {
+        uncovered.push(`${label} (${startedHere.why})`);
+        continue;
+      }
+      let here = null;
+      try {
+        await page.waitForSelector('.lab-dock', { timeout: DOCK_WAIT_MS });
+        here = await readDock(page);
+      } catch {
+        here = null;
+      }
+      if (!here?.present || !here.rect) {
+        uncovered.push(`${label} (the job ended before it could be measured)`);
+        continue;
+      }
+      covered.push(label);
+      check(
+        `'${label}' pins the dock while ITS OWN job runs — "${startedHere.why}"`,
+        Math.abs(here.rect.bottom - here.innerHeight) <= EDGE_TOLERANCE_PX && here.position === 'fixed',
+        `bottom ${Math.round(here.rect.bottom)} vs viewport ${here.innerHeight}`,
+      );
+      await page.evaluate(() => {
+        const cancel = [...document.querySelectorAll('.lab-dock button')].find((b) =>
+          b.textContent.toLowerCase().includes('cancel'),
+        );
+        if (cancel) cancel.click();
+      });
+      await new Promise((r) => setTimeout(r, RENDER_SETTLE_MS));
+    }
+    // ⚠️ THE NON-VACUITY GUARD: a walk that measured nothing must not read as a
+    // pass. It names the tabs it could not cover rather than printing a total.
+    check(
+      'every Lab subtab was actually measured with a job in flight',
+      uncovered.length === 0,
+      uncovered.length === 0 ? `all ${covered.length}` : `covered ${covered.join(', ')} — NOT covered: ${uncovered.join('; ')}`,
+    );
 
     // AND IT GOES AWAY. Cancel, and the dock must vanish along with the reserve.
     console.log('\nCancelling…');
