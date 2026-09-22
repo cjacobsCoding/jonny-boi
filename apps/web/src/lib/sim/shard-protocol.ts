@@ -174,6 +174,11 @@ export interface SuggestPlanJob {
    * Omit to search the whole deck, which is what every run did before.
    */
   readonly cutOnly?: readonly string[];
+  /**
+   * §3.181 — FOCUSED MODE, the other side: consider bringing in only these
+   * cards (names or ids). Omit to consider the whole pool.
+   */
+  readonly inOnly?: readonly string[];
 }
 
 /** The plan a suggestions run will execute, straight from the sim. */

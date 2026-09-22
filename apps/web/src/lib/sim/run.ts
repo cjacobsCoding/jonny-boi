@@ -646,6 +646,9 @@ export async function runSuggest(
       // §3.136 — which cards the search may cut. The scope rides the context
       // (the arms need it too); this is the planning half.
       ...(request.cutOnly && request.cutOnly.length > 0 ? { cutOnly: request.cutOnly } : {}),
+      // §3.181 — and which cards it may bring IN. Same empty-means-everything
+      // rule as the cut side, so an untouched control changes nothing.
+      ...(request.inOnly && request.inOnly.length > 0 ? { inOnly: request.inOnly } : {}),
     },
     () => {},
   )) as SuggestPlanResult;

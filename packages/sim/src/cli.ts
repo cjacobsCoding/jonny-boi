@@ -114,7 +114,8 @@ Usage:
                                 [--until-precise H]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset|N] [--workers W]
                              [--until-decided [--looks K]]
-  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S] [--scope one|playset|N]
+  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--in "<card>"] [--max-candidates K] [--seed S]
+                               [--scope one|playset|N]
                                [--pilot id] [--history <file>] [--no-adaptive] [--workers W]
                                [--full-ladder]
   npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
@@ -171,6 +172,14 @@ Notes:
     manufactures ~1 false "better" in 20).
   • suggest: --cut may repeat to focus the cards considered for cutting; omit for
     auto mode (a scout roster of ${DEFAULT_SUGGEST_CONFIG.maxCandidates} by a cheap color/curve heuristic).
+  • suggest: --in is the MIRROR of --cut and may repeat too — it restricts the
+    cards considered for bringing IN, where --cut restricts the ones considered
+    for going OUT. Omit it and the whole pool is addable, exactly as before.
+    Pinning a single card asks the opposite question from the default one:
+    "what should I CUT to fit THIS card in?" rather than "what should I cut, for
+    whatever fits best?". Setting both at once asks a third: "is this specific
+    swap an improvement?" — the search is then exactly the cross product of the
+    two lists. These are two independent restrictions on ONE search, not a mode.
     --max-candidates K sets that roster size (default ${DEFAULT_SUGGEST_CONFIG.maxCandidates}).
     --games N is the depth a FINALIST reaches (default ${DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate}), not what everyone gets.
   • --history <file> makes the search PROGRESSIVE: it reads what earlier runs
@@ -227,7 +236,18 @@ interface Flags {
   /** Swap one copy or the whole playset (A/B test). */
   readonly scope?: SwapScope;
   readonly out?: string;
-  readonly in?: string;
+  /**
+   * `--in`, as the LIST it is parsed into — one storage, two readers.
+   *
+   * `swap` needs exactly one (it tests a named swap) and `suggest` takes a
+   * repeatable focus, so the flag is collected once and each command states the
+   * arity it needs: `requireOneCard` for swap, the whole list for suggest. The
+   * rejected alternative was a second field (`inCard` beside `inCards`) — two
+   * places answering "what did the user pass to --in?" is exactly the drift
+   * rule 12 forbids, and the one that silently took the LAST value would have
+   * been the one nobody noticed was wrong.
+   */
+  readonly in: readonly string[];
   /** suggest: cards to focus the cut on (repeatable). Empty = auto mode. */
   readonly cut: readonly string[];
   /** suggest: cap on candidate swaps simulated. */
@@ -256,7 +276,12 @@ interface Flags {
 /** A thrown CLI error carries an exit-worthy message (no stack shown). */
 class CliError extends Error {}
 
-function parseFlags(args: readonly string[]): Flags {
+/**
+ * Exported for `cli-flags.test.ts` — the flag TABLE is the contract a user
+ * types against, and it had no test at all when `--in` was added to it. A
+ * repeatable flag that silently keeps one value is invisible in a diff.
+ */
+export function parseFlags(args: readonly string[]): Flags {
   const positionals: string[] = [];
   let games: number | undefined;
   let seed: number | undefined;
@@ -265,7 +290,7 @@ function parseFlags(args: readonly string[]): Flags {
   let pilotB: string | undefined;
   let scope: SwapScope | undefined;
   let out: string | undefined;
-  let inCard: string | undefined;
+  const inCards: string[] = [];
   const cut: string[] = [];
   let maxCandidates: number | undefined;
   let history: string | undefined;
@@ -320,7 +345,7 @@ function parseFlags(args: readonly string[]): Flags {
         out = requireValue(arg, args[++i]);
         break;
       case '--in':
-        inCard = requireValue(arg, args[++i]);
+        inCards.push(requireValue(arg, args[++i]));
         break;
       case '--cut':
         cut.push(requireValue(arg, args[++i]));
@@ -358,12 +383,34 @@ function parseFlags(args: readonly string[]): Flags {
     }
   }
 
-  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, untilDecided, untilPrecise, fullLadder, looks, workers, help };
+  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCards, cut, maxCandidates, history, noAdaptive, untilDecided, untilPrecise, fullLadder, looks, workers, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
   if (value === undefined) throw new CliError(`option "${flag}" needs a value`);
   return value;
+}
+
+/**
+ * The single value a command that tests ONE named card needs from a repeatable
+ * flag — and an honest refusal when it was given more.
+ *
+ * `swap --in A --in B` is not a runnable question: a swap evaluation names one
+ * in-card. Taking the last silently would run a test the user did not ask for
+ * and report it as though they had, which is the "widen to the nearest thing
+ * that happens to exist" failure the closed-table rule exists to prevent. The
+ * error names the other command, because wanting several IS supported — there.
+ */
+function requireOneCard(flag: string, values: readonly string[]): string {
+  const [first] = values;
+  if (first === undefined) throw new CliError(`option "${flag}" needs a value`);
+  if (values.length > 1) {
+    throw new CliError(
+      `option "${flag}" was given ${values.length} times ("${values.join('", "')}") but swap tests ONE card — ` +
+        `use "suggest" to search several in-cards at once`,
+    );
+  }
+  return first;
 }
 
 function parseIntFlag(flag: string, value: string | undefined): number {
@@ -973,7 +1020,10 @@ async function runSwapInWindows(
 async function cmdSwap(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('swap needs a deck: swap <deck> --out X --in Y');
-  if (!flags.out || !flags.in) throw new CliError('swap needs --out <card> and --in <card>');
+  if (!flags.out || flags.in.length === 0) {
+    throw new CliError('swap needs --out <card> and --in <card>');
+  }
+  const inCard = requireOneCard('--in', flags.in);
   const lab = makeLab();
   const baseDeck = resolveDeck(heroSel);
   const pilots = resolvePilots(flags);
@@ -994,10 +1044,10 @@ async function cmdSwap(flags: Flags): Promise<number> {
       const scope = flags.scope ?? DEFAULT_SWAP_SCOPE;
       // Validate the swap HERE, cheaply, before hiring anyone — the same reason
       // the pooled branch below does.
-      applySwap(baseDeck, { out: flags.out, in: flags.in }, lab.pool, scope);
+      applySwap(baseDeck, { out: flags.out, in: inCard }, lab.pool, scope);
       const windowed = await runSwapInWindows({
         baseDeck,
-        swap: { out: flags.out, in: flags.in },
+        swap: { out: flags.out, in: inCard },
         scope,
         gauntletDecks,
         games,
@@ -1017,10 +1067,10 @@ async function cmdSwap(flags: Flags): Promise<number> {
       // Validate the swap HERE, cheaply, before hiring anyone: an unknown card
       // or an out-card not in the deck must print the same one-line error the
       // sequential path prints, not a worker stack.
-      applySwap(baseDeck, { out: flags.out, in: flags.in }, lab.pool, scope);
+      applySwap(baseDeck, { out: flags.out, in: inCard }, lab.pool, scope);
       const jobs = planPairedSlices(gauntletDecks.length, games, workers, seed, {
         out: flags.out,
-        in: flags.in,
+        in: inCard,
         scope,
       });
       const init: WorkerInitSpec = {
@@ -1029,11 +1079,11 @@ async function cmdSwap(flags: Flags): Promise<number> {
         pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
       };
       const slices = (await runJobsOnWorkers(jobs, init, workers)) as readonly PairedSliceResult[];
-      evaluation = mergeSwapFromSlices(slices, { out: flags.out, in: flags.in });
+      evaluation = mergeSwapFromSlices(slices, { out: flags.out, in: inCard });
     } else {
       evaluation = evaluateSwap(
         baseDeck,
-        { out: flags.out, in: flags.in },
+        { out: flags.out, in: inCard },
         gauntletDecks,
         pilots,
         games,
@@ -1157,6 +1207,13 @@ async function cmdSuggest(flags: Flags): Promise<number> {
     // planned, so a run can be compared against the rule rather than only trusted.
     adaptiveConfig: { ...DEFAULT_ADAPTIVE_CONFIG, stopWhenLeaderSettled: !flags.fullLadder },
     cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
+    // §3.181 — the MIRROR of `--cut`, and the reason this line exists: the
+    // engine has taken `inOnly` since the search was written (it is what
+    // `joint-moves` restricts the going-up side of a land move with), but
+    // nothing a person could type reached it. "Cut something to fit THIS card
+    // in" was implemented, tested and unaskable. Empty stays undefined so the
+    // whole pool is addable exactly as before.
+    inOnly: flags.in.length > 0 ? flags.in : undefined,
     // §3.136 — the search now honours `--scope` too, so "look at swapping 2 of
     // my 3 Elvish Visionaries" is askable: `--cut` picks WHICH card, `--scope`
     // picks HOW MANY of it. Without this the suggestion search always tested the

@@ -144,6 +144,17 @@ export interface SuggestRequest extends PilotedRequest, VerdictBarRequest {
    */
   readonly cutOnly?: readonly string[];
   /**
+   * §3.181 — the MIRROR of {@link cutOnly}: consider bringing in only these
+   * cards (names or ids). Omit to consider the whole pool, which is what every
+   * run did before.
+   *
+   * With one card it asks "what should I CUT to fit THIS in?"; with both
+   * restrictions set the search is exactly the cross product, i.e. "is this
+   * specific swap an improvement?". Two independent restrictions on one search
+   * rather than a mode, so there is one vocabulary for both sides of a swap.
+   */
+  readonly inOnly?: readonly string[];
+  /**
    * §3.136 — how many copies each candidate swap moves: one, the whole playset,
    * or a named count ("I have 3 Elvish Visionaries but I want to swap 2").
    * Omit for `DEFAULT_SWAP_SCOPE`.

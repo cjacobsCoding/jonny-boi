@@ -349,6 +349,10 @@ export function runSuggestPlan(job: SuggestPlanJob, context: SimContext): Sugges
     // describe a different experiment than the one that gets played; it rides
     // the shared context for precisely that reason.
     ...(job.cutOnly ? { cutOnly: job.cutOnly } : {}),
+    // §3.181 — the bring-in focus reaches `generateCandidates` here. This is the
+    // LAST hop: the option has existed on the engine all along, and this line is
+    // what makes it askable from a screen.
+    ...(job.inOnly ? { inOnly: job.inOnly } : {}),
     ...(job.context.swapScope ? { swapScope: job.context.swapScope } : {}),
   });
 
