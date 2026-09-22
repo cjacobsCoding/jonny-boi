@@ -82,6 +82,22 @@ export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
       'runs, so you can scroll around and keep watching it.',
   },
   {
+    section: '3.182',
+    date: '2026-09-21',
+    kind: 'app',
+    title: 'Scan a photo is a button you can actually find — and your Boros deck is in',
+    summary:
+      'You said photographing a deck was impossible to find on mobile. It was: the scanner lived inside the '
+      + 'Import dialog, as the faintest kind of button, under a heading about pasting a decklist. It is now '
+      + '“Scan a photo”, a main button in the deck toolbar next to Import deck, and your phone still offers '
+      + 'both the camera and your gallery. The deck from your photo — Sphere of Safety behind a wall of '
+      + 'enchantments — is in your collection as an ordinary deck you can rename and edit. Two honest notes: '
+      + 'its counts were read by a human eye off the fanned piles, not by the scanner, so check the two basic '
+      + 'land piles and Tibalt if the total looks off; and the scanner could not read that photo at all — it '
+      + 'finds no piles in a sparse, staggered layout, which is now a failing test with your photo in it '
+      + 'rather than a silence.',
+  },
+  {
     section: '3.179',
     date: '2026-09-21',
     kind: 'fix',

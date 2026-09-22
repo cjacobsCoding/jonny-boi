@@ -37,6 +37,7 @@ import { CardGrid } from '../components/CardGrid.js';
 import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
 import { ImportDeckDialog } from '../components/ImportDeckDialog.js';
+import { ScanDeckDialog } from '../components/ScanDeckDialog.js';
 import { AddCardDialog } from '../components/AddCardDialog.js';
 import { DeckEntryPrinting } from '../components/DeckEntryPrinting.js';
 import { usePrints } from '../lib/proxy/usePrints.js';
@@ -124,6 +125,12 @@ function DeckPanel({
   const active = decks.activeDeck;
   const [ioOpen, setIoOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  // A scanned list is handed to the IMPORT dialog rather than applied here: a
+  // scan is an import whose text came from a camera, so it goes through the ONE
+  // parse -> Scryfall -> compile path and is not a second kind of import
+  // (CLAUDE.md rule 12).
+  const [scannedText, setScannedText] = useState<string | null>(null);
   const [addCardOpen, setAddCardOpen] = useState(false);
   // ONE printings lookup for the whole deck list — see DeckEntryPrinting for why
   // a hook per row would cross-talk between cards.
@@ -164,6 +171,19 @@ function DeckPanel({
           </button>
           <button type="button" className="btn btn--primary" onClick={() => setImportOpen(true)}>
             Import deck
+          </button>
+          {/* ⚠️ A TOP-LEVEL ACTION ON PURPOSE. Scanning a photo used to live
+              only INSIDE the import dialog, as a ghost button, under a heading
+              about pasting a decklist — two dialogs deep behind a word that
+              does not mean "photograph my cards". Caleb, who owns the physical
+              decks this feature exists for: "if there is [a way], its impossible
+              to find easily on mobile cuz the deckbuilder there is trash."
+              Photographing a deck is not a sub-mode of typing one out; it is
+              how someone with the cards in front of them starts. The old entry
+              point stays where it is, because someone already in the import
+              dialog with a photo in hand should not have to back out. */}
+          <button type="button" className="btn btn--primary" onClick={() => setScanOpen(true)}>
+            Scan a photo
           </button>
           {/* The one-card path: needing a single card mid-build shouldn't send
               you to a decklist paste box. */}
@@ -409,7 +429,26 @@ function DeckPanel({
       <SavedDecks decks={decks} />
       <GauntletDecks decks={decks} />
 
-      {importOpen && <ImportDeckDialog decks={decks} onClose={() => setImportOpen(false)} />}
+      {scanOpen && (
+        <ScanDeckDialog
+          onClose={() => setScanOpen(false)}
+          onUseDecklist={(decklistText) => {
+            setScanOpen(false);
+            setScannedText(decklistText);
+            setImportOpen(true);
+          }}
+        />
+      )}
+      {importOpen && (
+        <ImportDeckDialog
+          decks={decks}
+          onClose={() => {
+            setImportOpen(false);
+            setScannedText(null);
+          }}
+          {...(scannedText === null ? {} : { initialText: scannedText })}
+        />
+      )}
 
       {/* Adding from here puts the card straight into the deck being built —
           that is the whole reason to offer it inside the builder. */}

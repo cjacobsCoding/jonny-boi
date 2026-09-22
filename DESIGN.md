@@ -11369,6 +11369,47 @@ full face), `graveyard-both-seats.test.ts`, `auto-advance.test.ts` (the forced d
 a real block still stops), `right-overlay-inset.test.ts` (the feed pins to nothing). Live checks are
 the table's own column.
 
+
+### 3.182 A photo becomes a deck without hunting for it — and the scanner cannot read his second photo — ✅ done (the entry point), ⚠️ OPEN (the scanner)
+
+> "Please make a deck in the deckbuilder for me from this image. And add something on the app where I can easily upload an image to turn into a deck. Maybe theres a way already, but if there is, its impossible to find easily on mobile cuz the deckbuilder there is trash"
+
+He photographed a second physical deck — a Boros enchantment prison built around Sphere of Safety — and asked for two things. The second one deserves the credit it is due: **there was already a way, and he could not find it**, which on a feature he personally asked for is the same as it not existing.
+
+**Where the scanner actually was.** Deck Builder → `Import deck` → then, inside that dialog, a `btn--ghost` labelled *"Scan from a photo…"*. Two dialogs deep, behind a word that means "paste a decklist", in the app's lowest-emphasis button style. `ScanDeckDialog` had exactly one reference in the whole codebase and it was `ImportDeckDialog`; `DeckBuilderView` did not mention scanning at all.
+
+**What it is now.** `Scan a photo` is a **primary** button in the deck toolbar, a peer of `Import deck`. Photographing a deck is not a sub-mode of typing one out — it is how a person holding the cards starts. The old entry point stays exactly where it is, because someone already inside the import dialog with a photo in hand should not have to back out to use it.
+
+The scan's result still goes through `ImportDeckDialog`, via a new optional `initialText` prop that resolves once on mount. A scanned list is an import whose text came from a camera, so it takes the ONE parse → Scryfall → compile path and is not a second kind of import (rule 12). The file input already carried `accept="image/*"` and deliberately no `capture`, so a phone offers camera *and* gallery; that was right and is unchanged.
+
+**⚠️ A new CLI, because the pipeline could not be run at all.** `apps/web/scripts/scan-photo.mjs` runs the REAL modules — `detectStacks`, `scanCards`, `buildNameIndex` — over any image and prints a decklist. Before it, the only way to ask "what does the scanner read from this photo?" was to click through a phone, which is why nobody had asked. It runs under `vite-node` (the scan modules import each other with `.js` specifiers, which Node's type-stripping does not remap) and prints an unsure pile WITH its raw OCR text rather than promoting it to the nearest catalogue entry, because a wrong name that looks confident is worse than an obvious gap.
+
+## ⚠️ The scanner returns ZERO piles for his photo. The transcription is a human's.
+
+Pointing the new CLI at the photo he sent:
+
+```
+no piles detected in rw-prison.jpg at ANY of the four orientations (1500x2000)
+```
+
+Ruled out by measurement, not by argument:
+
+| theory | test | result |
+|---|---|---|
+| orientation — `stacks.ts` says it "assumes the fan runs downward" | all four quarter turns | **0 piles each** |
+| scale | 800, 1000, 1200, 1500, 2000 px long edge | **0 piles each** |
+| brightness | mean luminance | 58.8 vs the working photo's 66.8 — not a gap, and the detector works off variance |
+
+The control matters: the FIRST photo still reads correctly, **16 piles in 2 rows × 8 columns**. So this is the photo, not a regression.
+
+What is left is **layout**. The photo that works is a dense 2×8 landscape grid with piles shoulder to shoulder; this one is sparse and **staggered** — piles at unrelated x-positions across seven loose rows, separated by wide bands of bare table, in glossy top-loaders. `detectStacks` starts by finding COLUMN bands in an x-variance profile, and a staggered layout has no columns to find: nearly every x has some pile at some y. **It fails at the first step, before OCR is ever reached.**
+
+`second-photo.test.ts` pins that failure with the photo as a fixture, and pins the working photo beside it as a control. **A failure of that file is good news** — it means someone fixed staggered layouts, and the test makes them come back and write down what the scanner now reads.
+
+**So `docs/decks/boros-prison.txt` is a HUMAN transcription and says so in its own header.** The names are certain — every title in the photo is legible. The counts are counted fanned title bars, ±1 per pile over fourteen piles, i.e. a list somewhere between 55 and 70. It reads 62. If his real list is 60 the difference is almost certainly the two basic-land piles or Tibalt, and the file says that too. Seeding is add-only, so a correction after he has been seeded is a REVISION and not an edit to the list.
+
+**Not done, named:** the scanner itself. Fixing staggered layouts is its own lane and the test above is its red. Also untouched is the thing he said in passing — *"the deckbuilder there is trash"* on mobile — which is a wider complaint than one button and is not silently folded into this section.
+
 ### 3.178 Infinite combos, stage 1 — the loop is found and can be repeated — ✅ done
 
 > "if it detects that you have been stepping through what results as an infinite combo, it should do a

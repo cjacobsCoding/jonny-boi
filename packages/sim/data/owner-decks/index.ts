@@ -63,6 +63,7 @@
 import type { Deck } from '../../src/deck.js';
 import { THUNES_LIFE, THUNES_LIFE_REVISIONS } from './thunes-life.js';
 import { TAMIYO_JACE_SURGE } from './tamiyo-jace-surge.js';
+import { BOROS_PRISON } from './boros-prison.js';
 import { applyDeckRevisions, type DeckRevision } from './revisions.js';
 
 /** One owner deck plus the transcription it is derived from. */
@@ -94,6 +95,7 @@ export interface OwnerDeckEntry {
 export const OWNER_DECK_ENTRIES: readonly OwnerDeckEntry[] = Object.freeze([
   Object.freeze({ deck: THUNES_LIFE, source: 'docs/decks/thunes-life.txt', revisions: THUNES_LIFE_REVISIONS }),
   Object.freeze({ deck: TAMIYO_JACE_SURGE, source: 'docs/decks/tamiyo-jace-surge.txt', revisions: [] }),
+  Object.freeze({ deck: BOROS_PRISON, source: 'docs/decks/boros-prison.txt', revisions: [] }),
 ]);
 
 /** The owner's decks AS TRANSCRIBED, in the order they were scanned in. */

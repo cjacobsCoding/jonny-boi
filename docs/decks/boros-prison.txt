@@ -1,0 +1,45 @@
+// Boros Prison — Sphere of Safety behind a wall of cheap enchantments
+// Transcribed from photo, 2026-09-21. RENAME IT to whatever you call it: it is
+// seeded as an ordinary deck of yours and is yours to edit, rename or delete.
+//
+// ⚠️ THE COUNTS ARE READ BY EYE AND THE NAMES ARE NOT.
+// The card NAMES are certain — every title in the photo is legible. The COUNTS
+// come from counting fanned title bars, which is +/-1 per pile; over fourteen
+// piles that is a decklist anywhere between 55 and 70 cards. The two BASIC LAND
+// piles are the least certain because they are the deepest.
+//
+// The app's own scanner would have answered this, and it COULD NOT read this
+// photo — `detectStacks` finds zero piles in it at every orientation and every
+// scale from 800px to 2000px, while reading the earlier deck photo correctly as
+// 16 piles in 2 rows x 8 columns. See DESIGN §3.182. So these numbers are a
+// human's, and that is stated rather than hidden.
+//
+// The archetype, for whoever reads this later: Sphere of Safety taxes attackers
+// by the number of enchantments you control, so the cheap "removal" auras are
+// doing two jobs at once — answering a creature AND raising the tax. Curse of
+// Exhaustion stops the opponent rebuilding, Possibility Storm scrambles what
+// they draw into, and Assemble the Legion wins the game on its own while the
+// board is locked. Terminus is the reset when the wall is not enough.
+
+// --- lands (22) — the two basics are the least certain counts in this list ---
+7 Plains
+7 Mountain
+4 Clifftop Retreat
+4 Sacred Foundry
+
+// --- the wall: every one of these also raises Sphere of Safety's tax (28) ---
+4 Sphere of Safety
+4 Assemble the Legion
+4 Possibility Storm
+4 Curse of Exhaustion
+4 Oblivion Ring
+4 Pacifism
+4 Burden of Guilt
+
+// --- the rest (12) ---
+4 Terminus
+4 Wild Guess
+4 Tibalt, the Fiend-Blooded
+
+// 62 cards as read. If your real list is 60, the difference is almost certainly
+// in the two basic-land piles or in Tibalt — check those three first.
