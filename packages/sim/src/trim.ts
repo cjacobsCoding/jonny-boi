@@ -99,19 +99,76 @@ export const TRIM_SWAP_SCOPE: SwapScope = 'one';
 export const LAND_RATIO_TOLERANCE_LANDS = 1;
 
 /**
- * The KINDS of round, in widening order — a closed table. `singles` cuts one
- * card; `pairs` cuts a nonland AND a land together, the step "keep looking"
- * widens to when no single removal improved the deck. A third step is a row
- * here plus a `CARDS_PER_CUT` entry, never a branch in the loop.
+ * THE CUT SIZES a trim round may run, in widening order — ONE closed table with
+ * one row per size (DESIGN §3.180).
+ *
+ * ⚠️ WHY THE SIZE IS THE TABLE AND THE KIND NAME IS DERIVED FROM IT. The cut
+ * SIZE is the real axis: a round cuts k cards, the deck shrinks by k, and the
+ * mana prior reads the ratio k cards later. The kind NAME is only a label for k.
+ * Before §3.180 the two were separate facts — `TRIM_ROUND_KINDS` listed the
+ * names and `CARDS_PER_CUT` mapped each name to its k — so adding a size meant
+ * editing two tables that could disagree about the same question. Now a new size
+ * is ONE row here and every other shape is derived from it; `trim.test.ts`
+ * asserts the derivations cannot drift from these rows.
+ *
+ * `noun` is the coverage line's wording, so "48 of 595 two-card cuts tried" is
+ * written once here rather than assembled by whichever surface prints it.
  */
-export const TRIM_ROUND_KINDS = ['singles', 'pairs'] as const;
-export type TrimRoundKind = (typeof TRIM_ROUND_KINDS)[number];
+export interface TrimCutSizeRow {
+  /** How many cards leave the deck when a candidate of this size is applied. */
+  readonly cardsPerCut: number;
+  /** The round-kind label this size is known by, in reports and in the panel. */
+  readonly kind: string;
+  /** The plural noun the coverage line uses: "two-card cuts". */
+  readonly noun: string;
+}
 
-/** How many cards leave the deck when a candidate of each kind is applied. */
-export const CARDS_PER_CUT: Readonly<Record<TrimRoundKind, number>> = Object.freeze({
-  singles: 1,
-  pairs: 2,
-});
+export const TRIM_CUT_SIZE_ROWS = [
+  { cardsPerCut: 1, kind: 'singles', noun: 'single-card cuts' },
+  { cardsPerCut: 2, kind: 'pairs', noun: 'two-card cuts' },
+  { cardsPerCut: 3, kind: 'triples', noun: 'three-card cuts' },
+  { cardsPerCut: 4, kind: 'quads', noun: 'four-card cuts' },
+] as const;
+
+export type TrimRoundKind = (typeof TRIM_CUT_SIZE_ROWS)[number]['kind'];
+
+/**
+ * The kinds, in widening order. DERIVED — kept under its original name because
+ * the CLI, the Lab's own driver and two test files already read it.
+ */
+export const TRIM_ROUND_KINDS: readonly TrimRoundKind[] = TRIM_CUT_SIZE_ROWS.map((row) => row.kind);
+
+/**
+ * The cheapest kind — where every ladder starts, and where it returns after a
+ * cut lands. Derived from row 0 so "the first kind" has one answer.
+ */
+export const TRIM_FIRST_ROUND_KIND: TrimRoundKind = TRIM_CUT_SIZE_ROWS[0].kind;
+
+/** How many cards leave the deck when a candidate of each kind is applied. DERIVED. */
+export const CARDS_PER_CUT: Readonly<Record<TrimRoundKind, number>> = Object.freeze(
+  Object.fromEntries(TRIM_CUT_SIZE_ROWS.map((row) => [row.kind, row.cardsPerCut])),
+) as Readonly<Record<TrimRoundKind, number>>;
+
+/** Each kind's whole row, for the surfaces that need its wording. DERIVED. */
+export const TRIM_CUT_SIZE_ROW_BY_KIND: Readonly<Record<TrimRoundKind, TrimCutSizeRow>> = Object.freeze(
+  Object.fromEntries(TRIM_CUT_SIZE_ROWS.map((row) => [row.kind, row])),
+) as Readonly<Record<TrimRoundKind, TrimCutSizeRow>>;
+
+/**
+ * The largest cut the table can express. A `maxCardsPerCut` above this is
+ * clamped and the clamp is REPORTED (`TrimSettings.maxCardsPerCut`) — the
+ * closed-table rule: a value outside the table says so rather than being
+ * widened to the nearest thing that happens to exist.
+ */
+export const TRIM_MAX_CUT_SIZE: number = TRIM_CUT_SIZE_ROWS[TRIM_CUT_SIZE_ROWS.length - 1]?.cardsPerCut ?? 1;
+
+/**
+ * The kind whose cut is exactly `cardsPerCut`, or `undefined` when the table has
+ * no such row. The closed-table read: nothing is approximated to a neighbour.
+ */
+export function trimKindForCutSize(cardsPerCut: number): TrimRoundKind | undefined {
+  return TRIM_CUT_SIZE_ROWS.find((row) => row.cardsPerCut === cardsPerCut)?.kind;
+}
 
 /** What to do when a round finds an improving removal. */
 export const TRIM_ON_IMPROVEMENT = ['ask', 'auto'] as const;
@@ -173,6 +230,19 @@ export const DEFAULT_TRIM_BUDGET: TrimBudget = Object.freeze({
   maxSeconds: 1_800,
 });
 
+/**
+ * The DEFAULT ceiling on how many cards one cut may take.
+ *
+ * ⚠️ TWO, NOT ONE, AND THE REASON MATTERS. The plan for §3.180 proposed a
+ * default of 1 "so today's behaviour is unchanged" — but that was written
+ * against the pre-§3.179 code, and it is not what the measurement says. Today's
+ * ladder is singles THEN pairs: §3.179 ships `keep-looking` widening to a
+ * nonland+land pair, and `trim-ladder.test.ts` asserts a conclusive session runs
+ * exactly that two-round ladder. A default of 1 would DELETE the pairs round.
+ * Two is what leaves today's behaviour untouched, so two is the default.
+ */
+export const DEFAULT_MAX_CARDS_PER_CUT = 2;
+
 /** The user's settings for a trim session. */
 export interface TrimSettings {
   /** The size to trim towards. Never below the format's `minDeckSize`. */
@@ -185,6 +255,20 @@ export interface TrimSettings {
    * deepens instead of giving up and something has to stop it.
    */
   readonly budget?: TrimBudget;
+  /**
+   * THE TUNABLE CUT SIZE (§3.180) — the most cards one removal may take.
+   *
+   * Caleb's words: *"right now it tries to cut one card at a time - it should
+   * allow you to try to cut more than one at a time."* This is the ceiling of
+   * the widening ladder, not the size of every round: a session still starts at
+   * singles and widens only when a round finds nothing, because a one-card cut
+   * that improves the deck is strictly cheaper to find and strictly safer to
+   * apply than a two-card one. Omitted means `DEFAULT_MAX_CARDS_PER_CUT`.
+   *
+   * Values above `TRIM_MAX_CUT_SIZE` are clamped to it — and `trimCutSizeLadder`
+   * is the ONE place that clamps, so no surface can disagree about the ceiling.
+   */
+  readonly maxCardsPerCut?: number;
 }
 
 /**
@@ -875,16 +959,48 @@ export function applyTrimCut(deck: Deck, cuts: readonly TrimCut[], pool: CardPoo
 }
 
 /**
- * The next round kind to widen to when a round found nothing — the row after
- * `kind` in `TRIM_ROUND_KINDS` whose cut still fits above the target — or
- * `undefined` when there is nothing left to widen to (exhaustion is final).
+ * THE LADDER A SESSION ACTUALLY WALKS, as one function — the kinds whose cut is
+ * at most `maxCardsPerCut` AND still fits above the target, in widening order.
+ *
+ * ⚠️ THIS IS THE DENOMINATOR, AND IT IS EXPORTED FOR THAT REASON. Before
+ * §3.180 the ladder was the whole of `TRIM_ROUND_KINDS`, so tests used
+ * `TRIM_ROUND_KINDS.length` as a stand-in for "how many rounds a session that
+ * finds nothing will run". That stand-in was only accidentally right: it is the
+ * length of the TABLE, not of the path walked through it, and the two part
+ * company the moment the table has a row the settings or the target rule out.
+ * Every caller that wants the walked path asks here (project rule 11: print the
+ * denominator AND its source; rule 12: one answer to one question).
+ *
+ * A `maxCardsPerCut` outside the table is clamped HERE and only here.
  */
-export function nextWideningStep(kind: TrimRoundKind, deckSize: number, targetSize: number): TrimRoundKind | undefined {
-  const index = TRIM_ROUND_KINDS.indexOf(kind);
-  for (const next of TRIM_ROUND_KINDS.slice(index + 1)) {
-    if (deckSize - CARDS_PER_CUT[next] >= targetSize) return next;
-  }
-  return undefined;
+export function trimCutSizeLadder(
+  maxCardsPerCut: number = DEFAULT_MAX_CARDS_PER_CUT,
+  deckSize: number = Number.POSITIVE_INFINITY,
+  targetSize: number = 0,
+): readonly TrimRoundKind[] {
+  const ceiling = Math.max(1, Math.min(Math.floor(maxCardsPerCut), TRIM_MAX_CUT_SIZE));
+  return TRIM_CUT_SIZE_ROWS.filter(
+    (row) => row.cardsPerCut <= ceiling && deckSize - row.cardsPerCut >= targetSize,
+  ).map((row) => row.kind);
+}
+
+/**
+ * The next round kind to widen to when a round found nothing — the row after
+ * `kind` on the ladder this session walks — or `undefined` when there is nothing
+ * left to widen to (and the lever left is DEPTH, per §3.179).
+ */
+export function nextWideningStep(
+  kind: TrimRoundKind,
+  deckSize: number,
+  targetSize: number,
+  maxCardsPerCut: number = DEFAULT_MAX_CARDS_PER_CUT,
+): TrimRoundKind | undefined {
+  // The ladder is filtered by the target, so a kind the target has ruled out is
+  // absent from it; `indexOf` returning -1 then reads as "start from the top",
+  // which is why the current kind's own size is the floor rather than its index.
+  const ladder = trimCutSizeLadder(maxCardsPerCut, deckSize, targetSize);
+  const currentSize = CARDS_PER_CUT[kind];
+  return ladder.find((next) => CARDS_PER_CUT[next] > currentSize);
 }
 
 // --- playing a round on the calling thread ---------------------------------------------
@@ -1151,7 +1267,7 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
   const applied: TrimRow[] = [];
   let deck = base;
   let round = 0;
-  let kind: TrimRoundKind = TRIM_ROUND_KINDS[0];
+  let kind: TrimRoundKind = TRIM_FIRST_ROUND_KIND;
   let gamesPerCandidate = options.gamesPerCandidate;
   let games = 0;
   let seconds = 0;
@@ -1193,14 +1309,14 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
       // A smaller deck is a new question: back to the cheapest kind AND the
       // starting depth, so the next cut is not paid for at the deep rate the
       // previous impasse needed.
-      kind = TRIM_ROUND_KINDS[0];
+      kind = TRIM_FIRST_ROUND_KIND;
       gamesPerCandidate = options.gamesPerCandidate;
       continue;
     }
 
     if (settings.onNoImprovement === 'pause') return stop('paused');
 
-    const next = nextWideningStep(kind, deckSizeOf(deck), settings.targetSize);
+    const next = nextWideningStep(kind, deckSizeOf(deck), settings.targetSize, settings.maxCardsPerCut);
     if (next !== undefined) {
       kind = next;
       continue;
@@ -1214,7 +1330,7 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
     const deeper = deeperGamesPerCandidate(gamesPerCandidate);
     if (deeper === undefined) return stop('budget-exhausted');
     gamesPerCandidate = deeper;
-    kind = TRIM_ROUND_KINDS[0];
+    kind = TRIM_FIRST_ROUND_KIND;
   }
   return stop('target-reached');
 }

@@ -14,7 +14,7 @@
  */
 import {
   DEFAULT_TRIM_BUDGET,
-  TRIM_ROUND_KINDS,
+  TRIM_FIRST_ROUND_KIND,
   deeperGamesPerCandidate,
   nextWideningStep,
   type LandRatio,
@@ -43,8 +43,15 @@ export type TrimNextStep =
   /** The session is over. `reason` says WHICH of the several ways it ended. */
   | { readonly kind: 'stopped'; readonly reason: TrimStopReason; readonly edge?: TrimRow };
 
-/** The first round of a session, and of every fresh start after an apply. */
-export const FIRST_ROUND_KIND: TrimRoundKind = TRIM_ROUND_KINDS[0];
+/**
+ * The first round of a session, and of every fresh start after an apply.
+ *
+ * Re-exported from the sim's own `TRIM_FIRST_ROUND_KIND` rather than read out of
+ * the kinds table by index: §3.180 made that table longer than the ladder any
+ * one session walks, and `TRIM_ROUND_KINDS[0]` is the sort of index-into-a-table
+ * that keeps working right up until the table is reordered.
+ */
+export const FIRST_ROUND_KIND: TrimRoundKind = TRIM_FIRST_ROUND_KIND;
 
 /**
  * Decide what follows a finished round. The whole closed table, in one place.
@@ -80,7 +87,12 @@ export function stepAfterRound(
   const spent = spend.games >= budget.maxGames || spend.seconds >= budget.maxSeconds;
   if (spent) return { kind: 'stopped', reason: 'budget-exhausted', ...edge };
 
-  const next = nextWideningStep(report.roundKind, report.deckSize, report.targetSize);
+  // ⚠️ `maxCardsPerCut` IS PASSED, and it has to be. It is the ceiling of the
+  // ladder (§3.180), so a Lab that omitted it would widen past the size the user
+  // asked for while `trimDeck` stopped at it — the same two-loops-one-question
+  // divergence that overran a 40,000-game budget to 72,162. The parity test is
+  // the guard.
+  const next = nextWideningStep(report.roundKind, report.deckSize, report.targetSize, settings.maxCardsPerCut);
   if (next !== undefined) return { kind: 'widen', round: report.round + 1, roundKind: next };
 
   // The kinds are spent. A CONCLUSIVE round has settled the question; an UNSURE

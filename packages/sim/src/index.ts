@@ -157,6 +157,7 @@ export { SWAP_IN_NOTHING, CUT_OUT_SEPARATOR, isCut, cutOutRefs } from './swap.js
  */
 export type {
   TrimRoundKind,
+  TrimCutSizeRow,
   TrimOnImprovement,
   TrimOnNoImprovement,
   TrimSettings,
@@ -217,6 +218,16 @@ export {
   TRIM_STOP_REASONS,
   TRIM_STOP_REASON_WORDING,
   deeperGamesPerCandidate,
+  // §3.180 — a tunable cut size. The cut SIZE is the table and the kind name is
+  // derived from it, so a new size is one row; the ladder a session actually
+  // walks is its own exported function because it is the honest denominator.
+  TRIM_CUT_SIZE_ROWS,
+  TRIM_CUT_SIZE_ROW_BY_KIND,
+  TRIM_FIRST_ROUND_KIND,
+  TRIM_MAX_CUT_SIZE,
+  DEFAULT_MAX_CARDS_PER_CUT,
+  trimKindForCutSize,
+  trimCutSizeLadder,
 } from './trim.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE, copiesForScope, describeScope } from './config.js';
