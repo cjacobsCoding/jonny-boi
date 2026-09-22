@@ -60,6 +60,25 @@
   --space-6: 2rem;
   --space-8: 3rem;
 
+  /* The Lab's pinned progress dock (DESIGN §3.180).
+
+     The bottom of the viewport is CONTESTED, and every neighbour is named here
+     rather than discovered by a later reader:
+       .bugreport-launcher / .bugreport-lastlink  z-index 900  (bug-reporter.css)
+       .lab-dock                                  z-index  85  (this token)
+       .update-pill                               z-index  70  (update-pill.css)
+     The dock sits BELOW the bug reporter's launcher, because a run in progress
+     must never be the reason someone cannot file a report about it, and ABOVE
+     the update pill, because a pill that covered the Cancel button would trap a
+     long run. `styles-regressions.test.ts` asserts that ordering against all
+     three stylesheets, so it cannot drift silently. */
+  --lab-dock-z: 85;
+  /* Room reserved at the foot of `.lab` while the dock is up, so the last row of
+     a panel stays reachable instead of sitting under the bar. Generously more
+     than the bar's own height: it wraps to two lines on a narrow viewport
+     (`.run-status` gets `flex-wrap: wrap` under the width media query). */
+  --lab-dock-reserve: 7rem;
+
   /* Radii */
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -1237,6 +1256,42 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/*
+ * THE PINNED PROGRESS DOCK (DESIGN §3.180).
+ *
+ * > "in all the Lab subtabs, make the loading bar get pinned to the bottom of
+ * >  the screen while in that area while its working on a lab, so you can scroll
+ * >  around and still watch the progress."
+ *
+ * The document is the scroll container here (nothing in the shell sets
+ * `overflow`; `.app` is `min-height: 100%` and grows), so `position: fixed` is
+ * measured against the viewport and the bar stays put however far the panel is
+ * scrolled — which is the whole request.
+ *
+ * ⚠️ It wraps the SHARED `RunStatus`, and only in the Lab. `RunStatus` is also
+ * mounted by `MatchView`, whose root is likewise `.lab` — so pinning
+ * `.run-status` itself would have silently pinned the Match view's bar too.
+ * The dock is the wrapper the Lab adds; the bar knows nothing about it.
+ */
+.lab-dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--lab-dock-z);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-strong);
+  /* Lift it off whatever scrolls beneath, the way `.action-bar` does. */
+  box-shadow: 0 -6px 16px rgb(0 0 0 / 28%);
+}
+
+/* The dock is `fixed`, so it is out of flow and would otherwise cover the last
+   row of the panel. The Lab reserves the room only while the dock is up. */
+.lab--docked {
+  padding-bottom: var(--lab-dock-reserve);
 }
 
 .lab-config {

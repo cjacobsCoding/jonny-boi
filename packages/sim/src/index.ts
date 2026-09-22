@@ -158,6 +158,7 @@ export { SWAP_IN_NOTHING, CUT_OUT_SEPARATOR, isCut, cutOutRefs } from './swap.js
 export type {
   TrimRoundKind,
   TrimCutSizeRow,
+  TrimSubsetCoverage,
   TrimOnImprovement,
   TrimOnNoImprovement,
   TrimSettings,
@@ -228,6 +229,10 @@ export {
   DEFAULT_MAX_CARDS_PER_CUT,
   trimKindForCutSize,
   trimCutSizeLadder,
+  TRIM_SEED_POLICY,
+  binomial,
+  nthCombination,
+  seedsFromRound,
 } from './trim.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE, copiesForScope, describeScope } from './config.js';

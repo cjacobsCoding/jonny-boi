@@ -31,13 +31,14 @@ import type { MatchupPilots } from './matchup.js';
 import { applySwap, type CardSwap } from './swap.js';
 import type { ArmHandle, SwapArm } from './paired-arms.js';
 import {
+  DEFAULT_MAX_CARDS_PER_CUT,
   DEFAULT_TRIM_BUDGET,
   TRIM_DEEPEN,
-  TRIM_ROUND_KINDS,
   TRIM_STOP_REASONS,
   TRIM_STOP_REASON_WORDING,
   deckSizeOf,
   deeperGamesPerCandidate,
+  trimCutSizeLadder,
   trimDeck,
   type TrimArmRunner,
   type TrimRoundPlan,
@@ -167,6 +168,18 @@ function depthRecorder(): { depths: number[]; armRunner: (base: Deck, round: Tri
   };
 }
 
+/**
+ * The rounds a session that never finds a winner will run before the kinds are
+ * spent — the LADDER, not the table it is drawn from.
+ *
+ * ⚠️ This used to read `DEFAULT_LADDER_ROUNDS`, which was the same number only
+ * by accident. §3.180 made the cut-size table longer than the ladder any one
+ * session walks (the ceiling is `maxCardsPerCut`, default two), so the table's
+ * length stopped being the number of rounds the moment a third row existed.
+ * Rule 11: print the denominator AND where it came from.
+ */
+const DEFAULT_LADDER_ROUNDS = trimCutSizeLadder(DEFAULT_MAX_CARDS_PER_CUT, 63, 60).length;
+
 describe('§3.179 acceptance 1 — an unsure session deepens instead of stopping after two rounds', () => {
   it('runs more than the two rounds the old ladder allowed', () => {
     const { armRunner } = depthRecorder();
@@ -177,7 +190,7 @@ describe('§3.179 acceptance 1 — an unsure session deepens instead of stopping
     });
     // The DISCRIMINATOR: before §3.179 this was exactly 2 — singles, pairs, stop.
     expect(result.rounds.length, 'the two-round ceiling is the bug being fixed').toBeGreaterThan(
-      TRIM_ROUND_KINDS.length,
+      DEFAULT_LADDER_ROUNDS,
     );
   });
 
@@ -188,7 +201,7 @@ describe('§3.179 acceptance 1 — an unsure session deepens instead of stopping
       settings: { targetSize: 60, onImprovement: 'auto', onNoImprovement: 'keep-looking' },
       armRunner,
     });
-    expect(depths.length).toBeGreaterThan(TRIM_ROUND_KINDS.length);
+    expect(depths.length).toBeGreaterThan(DEFAULT_LADDER_ROUNDS);
     const first = depths[0] as number;
     const deepest = Math.max(...depths);
     expect(first).toBe(sessionOptions.gamesPerCandidate);
@@ -264,7 +277,7 @@ describe('§3.179 acceptance 2 — a CONCLUSIVE round stops at once (the infinit
     // Singles, then pairs, then stop. Deepening a settled question is waste, and
     // without this branch the loop would deepen until the budget ran out on a
     // question it had already answered.
-    expect(result.rounds.length).toBe(TRIM_ROUND_KINDS.length);
+    expect(result.rounds.length).toBe(DEFAULT_LADDER_ROUNDS);
     expect(new Set(depths).size, 'a settled question must not be re-measured deeper').toBe(1);
     expect(result.gamesPerCandidate).toBe(conclusiveOptions.gamesPerCandidate);
   });

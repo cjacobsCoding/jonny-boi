@@ -293,6 +293,46 @@ export interface TrimPriorWeights {
   readonly perCopy: number;
 }
 
+/**
+ * HOW A k > 1 ROSTER IS ASSEMBLED — the combinatorics, stated rather than hidden
+ * (DESIGN §3.180).
+ *
+ * ⚠️ THIS IS THE DESIGN PROBLEM OF THE WHOLE FEATURE. A 63-card deck has ~35
+ * distinct cards: k = 1 is 35 candidates, k = 2 is C(35,2) = 595, k = 3 is
+ * 6,545. Enumerating them and running a paired A/B on each would spend the
+ * entire session budget on a table nobody can read — and §3.179 measured that
+ * spreading a budget that thin is *already* why every row read INCONCLUSIVE. So
+ * a k > 1 round is SEEDED, not enumerated, and the panel prints how much of the
+ * space it actually saw.
+ *
+ * The roster is split between two quotas, and the split is the interesting part:
+ *
+ *  - `exploitShare` of it comes from k-subsets of the best SINGLE cuts the
+ *    previous round measured. Cheap and usually right: a pair of cards that are
+ *    each nearly worth cutting is the likeliest pair worth cutting.
+ *  - the REST is a systematic, evenly-strided sweep of the whole k-subset space.
+ *
+ * ⚠️ AND THE SWEEP IS NOT OPTIONAL. Seeding only from the best singles would
+ * systematically MISS the case this feature exists for — two cards that are bad
+ * only TOGETHER, each of which looks fine alone and therefore never ranks near
+ * the top of a singles round. The sweep is what makes those reachable, and
+ * `trim.test.ts` proves it on a rigged deck where k = 1 finds neither card.
+ */
+export const TRIM_SEED_POLICY = Object.freeze({
+  /**
+   * Share of a k > 1 roster drawn from the best single cuts. The remainder is
+   * the systematic sweep. Six-tenths: enough that the likely answer is scouted
+   * first, not so much that the sweep stops being a real sample.
+   */
+  exploitShare: 0.6,
+  /**
+   * How many of the previous round's best single cuts are eligible as seeds.
+   * k-subsets are drawn from these, so it bounds the exploit pool rather than
+   * the roster: C(10,2) = 45 already exceeds any default cap.
+   */
+  bestSinglesConsidered: 10,
+});
+
 /** Bounds a round obeys. Both caps REPORT when they bite (as `capped` skips). */
 export interface TrimConfig {
   /**
@@ -302,18 +342,102 @@ export interface TrimConfig {
    */
   readonly maxCandidatesPerRound: number;
   /**
-   * Cap on nonland+land PAIRS in a widening round — the product of the two
-   * classes runs to a hundred and more, and each pair is a full arm.
+   * Ceiling on MULTI-CARD candidates in a widening round — each one is a full
+   * arm, and the space they are drawn from is combinatorial.
+   *
+   * ⚠️ Renamed from `maxPairCandidates` in §3.180. The old name stopped being
+   * true the moment a round could cut three cards, and a name that is a lie is
+   * worse than a name that is vague. Nothing outside this module read it.
    */
-  readonly maxPairCandidates: number;
+  readonly maxMultiCutCandidates: number;
   readonly prior: TrimPriorWeights;
 }
 
 export const DEFAULT_TRIM_CONFIG: TrimConfig = Object.freeze({
   maxCandidatesPerRound: 64,
-  maxPairCandidates: 24,
+  maxMultiCutCandidates: 24,
   prior: Object.freeze({ favouredType: 10, perCopy: 1 }),
 });
+
+/**
+ * HOW MUCH OF THE k-SUBSET SPACE A ROUND ACTUALLY TRIED — a count with its
+ * denominator AND the denominator's source (project rule 11).
+ *
+ * A bare "24 cuts tried" invites the reader to assume that was all of them. The
+ * honest line is *"24 of 595 two-card cuts tried"*, and `source` says where 595
+ * came from so nobody has to trust it.
+ */
+export interface TrimSubsetCoverage {
+  readonly cardsPerCut: number;
+  /** Candidates the round will actually play. */
+  readonly tried: number;
+  /** `C(distinct, k)` — every k-subset of the deck's distinct cards. */
+  readonly possible: number;
+  /** The deck's distinct-card count, which is the `n` of that binomial. */
+  readonly distinctCards: number;
+  /** The plural noun from the cut-size row: "two-card cuts". */
+  readonly noun: string;
+  /** The arithmetic in one line, printed verbatim by every surface. */
+  readonly source: string;
+}
+
+/**
+ * `C(n, k)` as an exact integer, or `Number.POSITIVE_INFINITY` if it would
+ * leave the safe-integer range.
+ *
+ * Multiplicative, dividing as it goes so the intermediate never exceeds the
+ * answer: the factorial form overflows at n = 171 while C(171,2) is 14,535.
+ * Reports rather than approximating when it genuinely cannot say (rule 2).
+ */
+export function binomial(n: number, k: number): number {
+  if (!Number.isInteger(n) || !Number.isInteger(k) || k < 0 || n < 0) return 0;
+  if (k > n) return 0;
+  const half = Math.min(k, n - k);
+  let result = 1;
+  for (let i = 1; i <= half; i += 1) {
+    result = (result * (n - half + i)) / i;
+    if (!Number.isFinite(result) || result > Number.MAX_SAFE_INTEGER) return Number.POSITIVE_INFINITY;
+  }
+  return Math.round(result);
+}
+
+/**
+ * The `index`-th k-subset of `n` items, in lexicographic order, as ascending
+ * item indices — the combinatorial number system, so the systematic sweep can
+ * sample the space evenly WITHOUT materialising it. C(100,4) is 3.9 million
+ * subsets; building them all to take twenty would be the same mistake at a
+ * different layer.
+ *
+ * Returns `undefined` for an index outside `C(n, k)`.
+ */
+/** Euclid, for choosing a sweep stride that visits every subset exactly once. */
+function greatestCommonDivisor(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y !== 0) [x, y] = [y, x % y];
+  return x;
+}
+
+export function nthCombination(n: number, k: number, index: number): number[] | undefined {
+  const total = binomial(n, k);
+  if (!Number.isInteger(index) || index < 0 || index >= total) return undefined;
+  const combination: number[] = [];
+  let remaining = index;
+  let item = 0;
+  for (let chosen = k; chosen > 0; chosen -= 1) {
+    // Walk the first element forward, subtracting the block of subsets that
+    // start with each candidate, until `remaining` falls inside one.
+    for (;;) {
+      const block = binomial(n - item - 1, chosen - 1);
+      if (remaining < block) break;
+      remaining -= block;
+      item += 1;
+    }
+    combination.push(item);
+    item += 1;
+  }
+  return combination;
+}
 
 /** The in-card label of every trim row: what a cut brings in. */
 export const TRIM_IN_NAME = 'nothing';
@@ -469,6 +593,16 @@ export interface TrimCandidate extends SwapCandidate {
   readonly roundKind: TrimRoundKind;
   /** The deck's size once this candidate is applied. */
   readonly sizeAfter: number;
+  /**
+   * The deck's land ratio once this candidate is applied (§3.180).
+   *
+   * Carried because a k-card cut's effect on the manabase is NOT k times a
+   * single cut's: a nonland+land pair leaves the ratio where it was, while two
+   * nonlands move it as far as two rounds of single cuts would. The prior reads
+   * this post-cut state, and the panel can print it, so the arithmetic is
+   * visible rather than implied.
+   */
+  readonly ratioAfter: LandRatio;
   /** The prior's terms, best-first, so the report can say why it was scouted where it was. */
   readonly priorReasons: readonly string[];
 }
@@ -485,6 +619,13 @@ export interface TrimCandidateOptions {
   readonly reading: LandCutReading;
   readonly rules?: DeckRules;
   readonly config?: TrimConfig;
+  /**
+   * The card ids of the previous round's best SINGLE cuts, best-first — the
+   * seeds a k > 1 round exploits (§3.180). Omitted on a first round, or when the
+   * previous round was itself k > 1: the prior's own order is then the seed
+   * order, so a k = 2 round still works with no history behind it.
+   */
+  readonly seeds?: readonly string[];
 }
 
 /** The distinct cards of a deck with their copy counts, in decklist order. */
@@ -508,12 +649,20 @@ export function describeCuts(cuts: readonly TrimCut[]): string {
 /**
  * Enumerate a round's removal candidates, in prior order.
  *
- * `singles`: every distinct card, cut one copy. `pairs`: every (nonland, land)
- * pair, cut one copy of each, capped by `maxPairCandidates` after the prior has
- * ordered them (the rest are reported `capped`). Legality is the truth, not a
- * copy of the size rule: the variant is BUILT (`applySwap`, the one funnel) and
- * `validateDeck` decides — a cut that would take the deck under `minDeckSize`
- * comes back `illegal`, never crashed on.
+ * `k = 1`: every distinct card, cut one copy — unchanged from §3.174 and pinned
+ * as unchanged by a test. `k > 1`: k-card subsets, EXACT while the whole space
+ * fits under the cap and SEEDED above it (`TRIM_SEED_POLICY`), with `coverage`
+ * saying which of those two happened and how much of the space was seen.
+ *
+ * ⚠️ WHAT §3.180 WIDENED, precisely. A `pairs` round used to enumerate the
+ * nonland × land CROSS PRODUCT — so two nonlands together, or two lands
+ * together, could not be tried at all, whatever the deck. Cutting the two cards
+ * that are weak only as a pair was therefore unreachable, which is the whole
+ * thing Caleb asked for. A k-subset is any k distinct cards.
+ *
+ * Legality is the truth, not a copy of the size rule: the variant is BUILT
+ * (`applySwap`, the one funnel) and `validateDeck` decides — a cut that would
+ * take the deck under `minDeckSize` comes back `illegal`, never crashed on.
  *
  * ⚠️ No basic-land floor, unlike Suggest's cut set. Suggest keeps eight of each
  * basic so a swap cannot gut a manabase; a trim's whole job includes cutting
@@ -524,7 +673,11 @@ export function generateTrimCandidates(
   base: Deck,
   pool: CardPool,
   options: TrimCandidateOptions,
-): { readonly candidates: readonly TrimCandidate[]; readonly skipped: readonly SkippedCandidate[] } {
+): {
+  readonly candidates: readonly TrimCandidate[];
+  readonly skipped: readonly SkippedCandidate[];
+  readonly coverage: TrimSubsetCoverage;
+} {
   const rules = options.rules ?? DEFAULT_DECK_RULES;
   const config = options.config ?? DEFAULT_TRIM_CONFIG;
   const size = deckSizeOf(base);
@@ -565,39 +718,154 @@ export function generateTrimCandidates(
       cuts,
       roundKind: options.kind,
       sizeAfter: size - CARDS_PER_CUT[options.kind],
+      // Read off the VARIANT that was just built, not arithmetic on the base:
+      // `applySwap` is the one funnel that decides what a cut actually removes,
+      // and a second calculation of the same thing is a second answer waiting to
+      // disagree with it (rule 12).
+      ratioAfter: landRatioOf(variant, pool),
       priorReasons: reasons,
     };
   };
 
   const skipped: SkippedCandidate[] = [];
   const candidates: TrimCandidate[] = [];
+  const seen = new Set<string>();
+  const cardsPerCut = CARDS_PER_CUT[options.kind];
+  const n = cards.length;
+  const possible = binomial(n, cardsPerCut);
 
-  if (options.kind === 'singles') {
-    for (const card of cards) {
-      const candidate = build([card], skipped);
-      if (candidate) candidates.push(candidate);
+  /**
+   * The parts of a subset in CANONICAL order: nonlands first, then lands, each
+   * in decklist order. Canonical so a subset has exactly one key however it was
+   * reached (the exploit pool and the sweep will reach the same subset by
+   * different routes), and nonland-first because that is the order §3.174's
+   * pairs were built in — "Craw Wurm + Forest" reads the way it always has.
+   */
+  const orderParts = (indices: readonly number[]): { readonly def: CardDefinition; readonly count: number }[] => {
+    const picked = indices.map((i) => cards[i]).filter((c): c is { readonly def: CardDefinition; count: number } => c !== undefined);
+    return [...picked.filter((c) => !isLandCard(c.def)), ...picked.filter((c) => isLandCard(c.def))];
+  };
+
+  /** Build the subset at these indices, once, deduplicated by candidate key. */
+  const take = (indices: readonly number[]): void => {
+    const parts = orderParts(indices);
+    if (parts.length !== cardsPerCut) return;
+    const key = candidateKey(parts.map((p) => p.def.id).join(CUT_OUT_SEPARATOR), SWAP_IN_NOTHING);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const candidate = build(parts, skipped);
+    if (candidate) candidates.push(candidate);
+  };
+
+  const cap =
+    cardsPerCut > 1
+      ? Math.min(config.maxMultiCutCandidates, config.maxCandidatesPerRound)
+      : config.maxCandidatesPerRound;
+
+  if (cardsPerCut <= 1) {
+    // k = 1 is unchanged, deliberately and verifiably: every distinct card in
+    // decklist order. `trim.test.ts` pins the whole candidate list against this,
+    // because "today's behaviour is untouched at k = 1" is a claim, not a hope.
+    for (let i = 0; i < n; i += 1) take([i]);
+  } else if (possible <= cap) {
+    // Small enough to be EXACT. A deck whose whole k-subset space fits under the
+    // cap is enumerated rather than sampled, so the coverage line can honestly
+    // read "9 of 9" instead of implying a sample where none was needed.
+    for (let index = 0; index < possible; index += 1) {
+      const combination = nthCombination(n, cardsPerCut, index);
+      if (combination) take(combination);
     }
   } else {
-    const nonlands = cards.filter((c) => !isLandCard(c.def));
-    const lands = cards.filter((c) => isLandCard(c.def));
-    for (const nonland of nonlands) {
-      for (const land of lands) {
-        const candidate = build([nonland, land], skipped);
-        if (candidate) candidates.push(candidate);
-      }
+    // SEEDED. Two quotas, both stated (`TRIM_SEED_POLICY`).
+    const exploitQuota = Math.round(cap * TRIM_SEED_POLICY.exploitShare);
+
+    // (1) EXPLOIT — k-subsets of the best single cuts. The seed order is the
+    // previous round's RANKING when there is one, which is ordered by observed
+    // delta: two cards that each measured mildly bad without clearing the bar
+    // are exactly the pair worth asking about together, and the prior alone
+    // would never have noticed them. With no history the prior's order stands.
+    const seedRank = new Map<string, number>();
+    (options.seeds ?? []).forEach((cardId, at) => {
+      if (!seedRank.has(cardId)) seedRank.set(cardId, at);
+    });
+    const singlePrior = (card: { readonly def: CardDefinition; readonly count: number }): number =>
+      priorOf([card], options.reading, config.prior, rules.maxCopiesNonBasic).score;
+    const seedOrder = [...Array(n).keys()].sort((a, b) => {
+      const cardA = cards[a];
+      const cardB = cards[b];
+      if (!cardA || !cardB) return 0;
+      const rankA = seedRank.get(cardA.def.id) ?? Number.POSITIVE_INFINITY;
+      const rankB = seedRank.get(cardB.def.id) ?? Number.POSITIVE_INFINITY;
+      if (rankA !== rankB) return rankA - rankB;
+      const priorDelta = singlePrior(cardB) - singlePrior(cardA);
+      if (priorDelta !== 0) return priorDelta;
+      return a - b;
+    });
+    const pool = seedOrder.slice(0, Math.min(TRIM_SEED_POLICY.bestSinglesConsidered, n));
+    const poolSubsets = binomial(pool.length, cardsPerCut);
+    for (let index = 0; index < poolSubsets && candidates.length < exploitQuota; index += 1) {
+      const combination = nthCombination(pool.length, cardsPerCut, index);
+      if (combination) take(combination.map((at) => pool[at] as number));
+    }
+
+    // (2) SWEEP — a strided walk of the WHOLE space, indexed in decklist order
+    // so it is independent of the prior and of the seeds.
+    //
+    // ⚠️ This is the quota that makes a pair of individually-innocent cards
+    // reachable at all. Without it the search could only ever confirm what the
+    // previous round already suspected, which is not a search.
+    //
+    // ⚠️ THE STRIDE IS COPRIME WITH THE SPACE, and that is not decoration.
+    // `index = i * stride mod possible` visits every subset exactly once when
+    // gcd(stride, possible) = 1, so the walk can keep going until the roster is
+    // actually FULL. A plain evenly-spaced sample cannot: it lands on subsets
+    // the exploit quota already took, and each collision silently cost a seat —
+    // a 24-seat round came back with 22 and nothing said why.
+    const sweepQuota = Math.max(1, cap - candidates.length);
+    let stride = Math.max(1, Math.floor(possible / sweepQuota));
+    while (stride < possible && greatestCommonDivisor(stride, possible) !== 1) stride += 1;
+    for (let i = 0; i < possible && candidates.length < cap; i += 1) {
+      const combination = nthCombination(n, cardsPerCut, (i * stride) % possible);
+      if (combination) take(combination);
     }
   }
 
   candidates.sort(comparePrior);
-  const cap = options.kind === 'pairs' ? Math.min(config.maxPairCandidates, config.maxCandidatesPerRound) : config.maxCandidatesPerRound;
   const kept = candidates.slice(0, cap);
   for (const dropped of candidates.slice(cap)) {
     skipped.push({ outName: dropped.outName, inName: TRIM_IN_NAME, reason: 'capped', details: dropped.priorReasons });
   }
-  return { candidates: kept, skipped };
+  const row = TRIM_CUT_SIZE_ROW_BY_KIND[options.kind];
+  const possibleText = Number.isFinite(possible) ? possible.toLocaleString('en-US') : 'more than can be counted';
+  const coverage: TrimSubsetCoverage = {
+    cardsPerCut,
+    tried: kept.length,
+    possible,
+    distinctCards: n,
+    noun: row.noun,
+    source:
+      `${kept.length.toLocaleString('en-US')} of ${possibleText} ${row.noun} tried` +
+      ` — C(${n}, ${cardsPerCut}) over the deck's ${n} distinct cards`,
+  };
+  return { candidates: kept, skipped, coverage };
 }
 
-/** The prior: the class the ratio favours, then copies held. Every term named. */
+/**
+ * The prior: the class the ratio favours, then copies held. Every term named.
+ *
+ * ⚠️ THE FAVOURED-TYPE BONUS IS AWARDED ONCE FOR THE SUBSET, NOT ONCE PER CARD
+ * (§3.180). Summing it per card would let a two-nonland cut outrank a one-nonland
+ * cut on nothing but arithmetic — twice the bonus for the same single fact about
+ * the manabase — and at k = 3 a three-nonland cut would outrank everything in
+ * sight. The mana prior answers one question about the whole cut.
+ *
+ * This is provably identical to the per-card sum for every case that existed
+ * before §3.180: at k = 1 the subset is one card, and §3.174's pairs were always
+ * exactly one nonland and one land, so exactly one part could ever match. The
+ * only thing that moves is the ORDER of the reasons for a pair when a land cut is
+ * due — the dominant term now comes first, which is what the field's own doc
+ * comment already promised.
+ */
 function priorOf(
   parts: readonly { readonly def: CardDefinition; readonly count: number }[],
   reading: LandCutReading,
@@ -607,12 +875,12 @@ function priorOf(
   let score = 0;
   const reasons: string[] = [];
   const favoursLand = reading.favoured === 'land';
+  if (parts.some(({ def }) => isLandCard(def) === favoursLand)) {
+    score += weights.favouredType;
+    reasons.push(favoursLand ? 'a land, and a land cut is due' : 'a nonland, and no land cut is due');
+  }
   for (const { def, count } of parts) {
-    const land = isLandCard(def);
-    if (land === favoursLand) {
-      score += weights.favouredType;
-      reasons.push(land ? 'a land, and a land cut is due' : 'a nonland, and no land cut is due');
-    }
+    void def;
     score += Math.min(count, copiesCap) * weights.perCopy;
     reasons.push(`${count} ${count === 1 ? 'copy' : 'copies'} in the deck`);
   }
@@ -651,6 +919,11 @@ export interface PrepareTrimRoundOptions {
   readonly deckRules?: DeckRules;
   readonly adaptiveConfig?: AdaptiveSearchConfig;
   readonly trimConfig?: TrimConfig;
+  /**
+   * Card ids of the previous round's best single cuts, best-first — the seeds a
+   * k > 1 round exploits (§3.180). Absent on a first round.
+   */
+  readonly seeds?: readonly string[];
 }
 
 /** Everything decided before a game is played. Plain data (it crosses `postMessage`). */
@@ -664,6 +937,8 @@ export interface TrimRoundPlan {
   readonly targetSize: number;
   readonly deckSize: number;
   readonly cardsPerCut: number;
+  /** How much of the k-subset space this round tried, with its denominator (§3.180). */
+  readonly coverage: TrimSubsetCoverage;
 }
 
 /**
@@ -700,6 +975,7 @@ export function prepareTrimRound(base: Deck, options: PrepareTrimRoundOptions): 
     reading,
     rules,
     ...(options.trimConfig ? { config: options.trimConfig } : {}),
+    ...(options.seeds ? { seeds: options.seeds } : {}),
   });
 
   const runSeed = options.round === 0 ? options.baseSeed : gameSeedFor(options.baseSeed, options.round);
@@ -731,6 +1007,7 @@ export function prepareTrimRound(base: Deck, options: PrepareTrimRoundOptions): 
     targetSize: options.targetSize,
     deckSize,
     cardsPerCut,
+    coverage: generated.coverage,
   };
 }
 
@@ -780,6 +1057,12 @@ export interface TrimRoundReport {
   readonly round: number;
   readonly roundKind: TrimRoundKind;
   readonly cardsPerCut: number;
+  /**
+   * How much of the k-subset space the round tried, with its denominator and
+   * that denominator's source (§3.180) — the panel prints it verbatim, so a
+   * sampled round can never be mistaken for an exhaustive one.
+   */
+  readonly coverage: TrimSubsetCoverage;
   /** The mana prior's reading, with its arithmetic. */
   readonly reading: LandCutReading;
   readonly verdict: TrimRoundVerdict;
@@ -930,6 +1213,7 @@ export function finishTrimRound(input: FinishTrimRoundInput): TrimRoundReport {
     round: round.round,
     roundKind: round.roundKind,
     cardsPerCut: round.cardsPerCut,
+    coverage: round.coverage,
     reading: round.reading,
     verdict: winner ? 'improved' : unsure ? 'unsure' : 'exhausted',
     rows,
@@ -1238,6 +1522,35 @@ export function deeperGamesPerCandidate(current: number): number | undefined {
 }
 
 /**
+ * The SEEDS a following k > 1 round should exploit: the card ids of this round's
+ * single-card cuts, in the order the round ranked them (§3.180).
+ *
+ * ⚠️ THE RANKING, NOT THE PRIOR, AND THAT IS THE POINT. `finishSuggestionRun`
+ * orders rows proved-better first and then by observed delta, so the top of this
+ * list is "the cards that measured worst to keep" — including the ones that
+ * measured mildly bad without clearing the bar. Those are precisely the cards
+ * whose PAIR is worth asking about, and the cheap prior cannot see them: it only
+ * knows card types and copy counts. Seeding from measurement is what lets a
+ * k = 2 round learn something a k = 1 round could not.
+ *
+ * Only single-card rows are seeds. A k > 1 row's cards were already measured as
+ * a group, and splitting it back into parts would attribute a joint result to
+ * each half — the exact conflation this feature exists to avoid.
+ *
+ * Exported because the Lab drives rounds one at a time over its worker pool and
+ * must seed them the same way the headless loop does.
+ */
+export function seedsFromRound(report: TrimRoundReport): readonly string[] {
+  const seeds: string[] = [];
+  for (const row of report.rows) {
+    if (row.cuts.length !== 1) continue;
+    const cut = row.cuts[0];
+    if (cut && !seeds.includes(cut.cardId)) seeds.push(cut.cardId);
+  }
+  return seeds;
+}
+
+/**
  * THE AUTO LOOP: round, apply the winner, shrink by one, round again — until the
  * target, until nothing helps, or until the budget runs out. Under `ask` it
  * returns after the first improving round with the winner unapplied. Nothing
@@ -1271,6 +1584,12 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
   let gamesPerCandidate = options.gamesPerCandidate;
   let games = 0;
   let seconds = 0;
+  /**
+   * What the last SINGLES round measured, carried forward so a widening round
+   * exploits it (§3.180). Reset when a cut lands, because the ranking was taken
+   * on a deck that no longer exists.
+   */
+  let seeds: readonly string[] = [];
 
   const spend = (): TrimSpend => ({ games, seconds, rounds: rounds.length });
   const stop = (stopped: TrimStopReason): TrimSessionResult => ({
@@ -1295,8 +1614,10 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
       roundKind: kind,
       targetSize: settings.targetSize,
       baseLandRatio,
+      ...(seeds.length > 0 ? { seeds } : {}),
     });
     rounds.push(report);
+    if (report.cardsPerCut === 1) seeds = seedsFromRound(report);
     games += report.notes.totalGamesRun;
     seconds += report.notes.elapsedSeconds ?? 0;
     options.onRound?.(report);
@@ -1311,6 +1632,9 @@ export function trimDeck(base: Deck, options: TrimSessionOptions): TrimSessionRe
       // previous impasse needed.
       kind = TRIM_FIRST_ROUND_KIND;
       gamesPerCandidate = options.gamesPerCandidate;
+      // The ranking that produced these seeds was measured on a deck that no
+      // longer exists, so it is not evidence about this one.
+      seeds = [];
       continue;
     }
 

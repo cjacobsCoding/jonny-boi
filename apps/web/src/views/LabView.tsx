@@ -11,6 +11,7 @@ import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
 import { validateHero } from '../lib/heroValidation.js';
 import type { SimWorkerApi } from '../lib/useSimWorker.js';
+import { LAB_TABS } from '../lib/useLabSelection.js';
 import type { LabSelection } from '../lib/useLabSelection.js';
 import {
   GAUNTLET_GAMES,
@@ -41,15 +42,9 @@ import { applyManabaseToDeck } from '../lib/lab/manabaseApply.js';
 import type { JointMove, ManabaseVariant } from '@jonny-boi/sim';
 import type { CardOption } from '../components/lab/panel-types.js';
 
-/** The Lab's sub-tabs — the things you can run against the gauntlet. */
-const LAB_TABS = [
-  { id: 'gauntlet', label: 'Gauntlet' },
-  { id: 'swap', label: 'A/B Swap Test' },
-  { id: 'suggest', label: 'Suggestions' },
-  { id: 'trim', label: 'Trim' },
-  { id: 'manabase', label: 'Manabase' },
-  { id: 'joint', label: 'Joint search' },
-] as const;
+// LAB_TABS moved to `lib/useLabSelection.ts` in §3.180 and is imported below:
+// it was duplicated there as a hand-written `LabTabId` union with nothing
+// pinning the two together, and a test now enumerates the one registry.
 
 /**
  * The Lab (DESIGN §3.7): pick one of your saved decks as the hero, choose which
@@ -181,8 +176,12 @@ export function LabView({
     onApplySwap,
   };
 
+  // §3.180 — while a job runs, the Lab reserves room at the foot of the page so
+  // the docked progress bar cannot sit on top of the last row of content.
+  const running = sim.status === 'running';
+
   return (
-    <div className="lab">
+    <div className={running ? 'lab lab--docked' : 'lab'}>
       <LabConfigBar
         heroCandidates={heroCandidates}
         heroId={hero?.id ?? null}
@@ -260,7 +259,28 @@ export function LabView({
         </p>
       )}
 
-      {sim.status === 'running' && <RunStatus progress={sim.progress} onCancel={sim.cancel} />}
+      {/*
+        §3.180 — THE DOCK. The bar itself is untouched and still has exactly one
+        owner; what changed is that the shell pins it to the foot of the viewport
+        so a long run stays watchable while you scroll the panel.
+
+        ⚠️ IT STAYS HERE IN THE TREE, and is NOT portalled to `document.body`.
+        The bug reporter's capture prunes the trailing run of below-the-fold
+        children per parent (`lib/bugreport/capture-policy.ts`), and a boxed,
+        in-viewport LAST child freezes that pruning — an 11-second capture, which
+        is a regression that has already been paid for once. In place, it is a
+        middle child of `.lab` followed by `.lab-panel`, so it anchors exactly as
+        it did before and `.lab-panel` stays prunable. Fixed positioning is
+        visual; the DOM position is load-bearing.
+
+        Absent, not empty, when nothing is running: that falls out of this same
+        guard rather than being a state the dock has to maintain.
+      */}
+      {running && (
+        <div className="lab-dock">
+          <RunStatus progress={sim.progress} onCancel={sim.cancel} />
+        </div>
+      )}
       {sim.status === 'error' && (
         <div className="lab-alert lab-alert--error" role="alert">
           <strong>The run failed:</strong> {sim.error}
